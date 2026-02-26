@@ -5,14 +5,19 @@ import { useEffect, useState } from "react";
 type Task = {
   id: string;
   title: string;
+  dueAt: string | null;
   completedAt: string | null;
   createdAt: string;
 };
 
+type Filter = "all" | "today" | "upcoming" | "overdue";
+
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
 
   async function refresh() {
     const res = await fetch("/api/tasks", { cache: "no-store" });
@@ -29,12 +34,21 @@ export default function Home() {
     const trimmed = title.trim();
     if (!trimmed) return;
 
+    const dueAt =
+      dueDate.trim() === ""
+        ? null
+        : new Date(
+            Number(dueDate.slice(0, 4)),
+            Number(dueDate.slice(5, 7)) - 1,
+            Number(dueDate.slice(8, 10))
+          ).toISOString();
+
     setLoading(true);
     try {
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed }),
+        body: JSON.stringify({ title: trimmed, dueAt }),
       });
 
       if (!res.ok) {
@@ -44,6 +58,7 @@ export default function Home() {
       }
 
       setTitle("");
+      setDueDate("");
       await refresh();
     } finally {
       setLoading(false);
@@ -66,18 +81,49 @@ export default function Home() {
 
   const open = tasks.filter((t) => !t.completedAt);
   const done = tasks.filter((t) => t.completedAt);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(todayStart.getDate() + 1);
+
+  function matchesFilter(task: Task) {
+    if (filter === "all") return true;
+    if (!task.dueAt) return false;
+    const dueLocal = new Date(task.dueAt);
+    dueLocal.setHours(0, 0, 0, 0);
+
+    if (filter === "today") {
+      return dueLocal >= todayStart && dueLocal < tomorrowStart;
+    }
+    if (filter === "overdue") {
+      return dueLocal < todayStart;
+    }
+    return dueLocal >= tomorrowStart;
+  }
+
+  const openFiltered = open.filter(matchesFilter);
+  const dateLabel = new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+  });
 
   return (
     <main className="mx-auto max-w-xl p-6">
       <h1 className="text-2xl font-semibold">Task Manager</h1>
       <p className="mt-1 text-sm opacity-70">Local tasks (SQLite + Prisma)</p>
 
-      <form onSubmit={addTask} className="mt-6 flex gap-2">
+      <form onSubmit={addTask} className="mt-6 flex flex-wrap gap-2">
         <input
           className="flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-white/20"
           placeholder="Add a task…"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+        />
+        <input
+          className="rounded-md border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-white/20"
+          type="date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
         />
         <button
           className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
@@ -88,11 +134,35 @@ export default function Home() {
       </form>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide opacity-70">
-          Open ({open.length})
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide opacity-70">
+            Open ({openFiltered.length})
+          </h2>
+          <div className="flex gap-2 text-sm">
+            {(["all", "today", "upcoming", "overdue"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={`rounded-md px-2 py-1 ${
+                  filter === key
+                    ? "bg-white text-black"
+                    : "border border-white/10 bg-white/5"
+                }`}
+              >
+                {key === "all"
+                  ? "All"
+                  : key === "today"
+                  ? "Today"
+                  : key === "upcoming"
+                  ? "Upcoming"
+                  : "Overdue"}
+              </button>
+            ))}
+          </div>
+        </div>
         <ul className="mt-3 space-y-2">
-          {open.map((t) => (
+          {openFiltered.map((t) => (
             <li
               key={t.id}
               className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2"
@@ -103,7 +173,14 @@ export default function Home() {
                   checked={false}
                   onChange={(e) => toggleComplete(t.id, e.target.checked)}
                 />
-                <span>{t.title}</span>
+                <span className="flex items-center gap-2">
+                  <span>{t.title}</span>
+                  {t.dueAt && (
+                    <span className="text-xs opacity-70">
+                      Due: {dateLabel.format(new Date(t.dueAt))}
+                    </span>
+                  )}
+                </span>
               </label>
               <button
                 className="text-sm opacity-70 hover:opacity-100"
@@ -114,7 +191,9 @@ export default function Home() {
               </button>
             </li>
           ))}
-          {open.length === 0 && <li className="opacity-60">No open tasks.</li>}
+          {openFiltered.length === 0 && (
+            <li className="opacity-60">No open tasks.</li>
+          )}
         </ul>
       </section>
 

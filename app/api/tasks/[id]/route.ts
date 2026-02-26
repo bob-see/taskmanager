@@ -8,17 +8,44 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const body = await req.json().catch(() => ({}));
   const completed =
     typeof body?.completed === "boolean" ? body.completed : undefined;
+  const dueAtInput = body?.dueAt;
+  let dueAt: Date | null | undefined = undefined;
 
-  if (completed === undefined) {
+  if (dueAtInput === null) {
+    dueAt = null;
+  } else if (dueAtInput === undefined) {
+    dueAt = undefined;
+  } else if (typeof dueAtInput === "string") {
+    const parsed = new Date(dueAtInput);
+    if (Number.isNaN(parsed.getTime())) {
+      return Response.json(
+        { error: "dueAt must be an ISO datetime string or null" },
+        { status: 400 }
+      );
+    }
+    dueAt = parsed;
+  } else {
     return Response.json(
-      { error: "Body must include { completed: true|false }" },
+      { error: "dueAt must be an ISO datetime string or null" },
+      { status: 400 }
+    );
+  }
+
+  if (completed === undefined && dueAt === undefined) {
+    return Response.json(
+      { error: "Body must include completed and/or dueAt" },
       { status: 400 }
     );
   }
 
   const task = await prisma.task.update({
     where: { id },
-    data: { completedAt: completed ? new Date() : null },
+    data: {
+      ...(completed !== undefined
+        ? { completedAt: completed ? new Date() : null }
+        : {}),
+      ...(dueAt !== undefined ? { dueAt } : {}),
+    },
   });
 
   return Response.json(task);
