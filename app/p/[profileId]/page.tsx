@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
+import { TrackerClient } from "@/app/p/[profileId]/tracker-client";
 
 type Props = {
   params: Promise<{ profileId: string }>;
@@ -11,20 +12,26 @@ export default async function ProfilePage({ params }: Props) {
 
   const profile = await prisma.profile.findUnique({
     where: { id: profileId },
+    select: { id: true, name: true },
   });
 
   if (!profile) return notFound();
 
   return (
-    <main className="mx-auto max-w-xl p-6">
-      <Link className="text-sm opacity-70 hover:opacity-100" href="/">
-        ← Back to profiles
-      </Link>
+    <main className="mx-auto max-w-5xl p-6">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link className="text-sm opacity-70 hover:opacity-100" href="/">
+            ← Back to profiles
+          </Link>
+          <h1 className="mt-3 text-2xl font-semibold">{profile.name}</h1>
+          <p className="mt-1 text-sm opacity-70">
+            Tasks are scoped to this profile.
+          </p>
+        </div>
+      </div>
 
-      <h1 className="mt-4 text-2xl font-semibold">{profile.name}</h1>
-      <p className="mt-2 text-sm opacity-70">
-        Profile page placeholder (tasks UI comes in PR2).
-      </p>
+      <TrackerClient profileId={profile.id} profileName={profile.name} />
     </main>
   );
 }
