@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import {
   ensureProfile,
+  ensureProject,
   parseDateInput,
   parseOptionalTextInput,
 } from "@/app/api/p/tasks-shared";
@@ -74,6 +75,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if (body?.projectId !== undefined) {
     const projectId = parseOptionalTextInput(body.projectId, "projectId");
     if (projectId.error) return projectId.error;
+    if (projectId.value) {
+      const project = await ensureProject(profileId, projectId.value);
+      if (!project) {
+        return Response.json({ error: "Project not found" }, { status: 404 });
+      }
+    }
     data.projectId = projectId.value ?? null;
   }
 

@@ -36,7 +36,8 @@ export function parseDateInput(
   let parsed: Date;
 
   if (DATE_ONLY_RE.test(trimmed)) {
-    parsed = new Date(`${trimmed}T12:00:00.000Z`);
+    const [year, month, day] = trimmed.split("-").map(Number);
+    parsed = new Date(year, month - 1, day);
   } else {
     parsed = new Date(trimmed);
   }
@@ -85,4 +86,13 @@ export async function ensureProfile(profileId: string) {
   });
 
   return profile;
+}
+
+export async function ensureProject(profileId: string, projectId: string) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, profileId },
+    select: { id: true },
+  });
+
+  return project;
 }

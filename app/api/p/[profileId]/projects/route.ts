@@ -1,7 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import {
   ensureProfile,
-  ensureProject,
   parseDateInput,
   parseOptionalTextInput,
 } from "@/app/api/p/tasks-shared";
@@ -18,12 +17,12 @@ export async function GET(_req: Request, ctx: Ctx) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  const tasks = await prisma.task.findMany({
+  const projects = await prisma.project.findMany({
     where: { profileId },
-    orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ createdAt: "desc" }],
   });
 
-  return Response.json(tasks);
+  return Response.json(projects);
 }
 
 export async function POST(req: Request, ctx: Ctx) {
@@ -35,16 +34,14 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const title = typeof body?.title === "string" ? body.title.trim() : "";
-  if (!title) {
-    return Response.json({ error: "Title is required" }, { status: 400 });
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+
+  if (!name) {
+    return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const startDate = parseDateInput(body?.startDate, "startDate");
+  const startDate = parseDateInput(body?.startDate ?? null, "startDate");
   if (startDate.error) return startDate.error;
-  if (!startDate.value) {
-    return Response.json({ error: "startDate is required" }, { status: 400 });
-  }
 
   const dueAt = parseDateInput(body?.dueAt, "dueAt");
   if (dueAt.error) return dueAt.error;
@@ -52,29 +49,18 @@ export async function POST(req: Request, ctx: Ctx) {
   const category = parseOptionalTextInput(body?.category, "category");
   if (category.error) return category.error;
 
-  const notes = parseOptionalTextInput(body?.notes, "notes");
-  if (notes.error) return notes.error;
+  const defaultStartDate = new Date();
+  defaultStartDate.setHours(0, 0, 0, 0);
 
-  const projectId = parseOptionalTextInput(body?.projectId, "projectId");
-  if (projectId.error) return projectId.error;
-  if (projectId.value) {
-    const project = await ensureProject(profileId, projectId.value);
-    if (!project) {
-      return Response.json({ error: "Project not found" }, { status: 404 });
-    }
-  }
-
-  const task = await prisma.task.create({
+  const project = await prisma.project.create({
     data: {
-      title,
-      startDate: startDate.value,
+      name,
       profileId,
+      startDate: startDate.value ?? defaultStartDate,
       ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
       ...(category.value !== undefined ? { category: category.value } : {}),
-      ...(notes.value !== undefined ? { notes: notes.value } : {}),
-      ...(projectId.value !== undefined ? { projectId: projectId.value } : {}),
     },
   });
 
-  return Response.json(task, { status: 201 });
+  return Response.json(project, { status: 201 });
 }
