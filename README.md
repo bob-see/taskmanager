@@ -1,10 +1,3 @@
-Awesome — here’s a clean, polished full README you can copy-paste and replace your existing one with.
-It keeps your release history, adds structure, and reads like a real product repo rather than a scaffold.
-
-⸻
-
-:::writing{variant=“standard” id=“readme_full”}
-
 Taskmanager
 
 A profile-based task and project tracker designed to help manage work across multiple contexts (e.g. Personal, Work, DREAM).
@@ -173,6 +166,52 @@ Scope
 	•	No API changes
 
 ⸻
+
+🚀 PR4 — Projects, Task Editing & Profile Search
+
+Summary
+PR4 introduces Projects as a first-class feature in Day view, adds a full Edit Task modal, and upgrades search to work across a profile’s timeline (Active / Upcoming / Complete), with better UX for clearing and archived visibility.
+
+What’s Included
+
+📁 Projects
+	•	Create projects even with no tasks (projects show immediately)
+	•	Collapse/expand project sections (persists after reload)
+	•	Archive projects (hidden by default; visible with “Show archived”)
+	•	Archived projects display with distinct styling
+
+📝 Task Editing
+	•	Edit Task modal supports: title, start date, due date, category, notes, project assignment
+	•	New task modal includes calendar date pickers for dates
+	•	Tasks can be assigned to a project at creation time and display under that project
+
+📊 Progress
+	•	Project-level progress bars (separate from overall/day progress)
+
+🔎 Search (Profile-scoped, time-aware)
+	•	Search scans tasks across time within the current profile (not just the selected day)
+	•	Results grouped into: Active / Upcoming / Complete
+	•	Clear “×” button appears when searching; Esc clears as well
+	•	“Include archived” shows archived results with an Archived badge + archived styling
+
+Notes
+	•	Prisma schema + migration included for project fields (run npx prisma migrate dev after pulling).
+____
+
+
+PR5 — Recurring Tasks & Completion Date Tracking
+
+Summary
+PR5 adds profile-scoped recurring tasks, records when tasks were completed with a dedicated `completedOn` field, and updates Done filtering to use completion dates accurately for reporting.
+
+What’s Included
+	•	Task recurrence settings for daily, weekly, and monthly schedules
+	•	Automatic next-occurrence creation when a recurring task is marked done
+	•	`completedOn` tracking for reliable Done time ranges and future reporting
+	•	Tracker UI updates for creating and editing repeat rules
+	•	Done filters now use completion date ranges: Today / This Week / This Month / All
+____
+
 
 🗺️ Roadmap
 

@@ -2,6 +2,11 @@ import { prisma } from "@/app/lib/prisma";
 import {
   ensureProfile,
   ensureProject,
+  getRecurringSeriesId,
+  normalizeRepeatSettings,
+  parseOptionalBooleanInput,
+  parseOptionalIntInput,
+  parseOptionalRepeatPatternInput,
   parseDateInput,
   parseOptionalTextInput,
 } from "@/app/api/p/tasks-shared";
@@ -20,7 +25,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const tasks = await prisma.task.findMany({
     where: { profileId },
-    orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ completedOn: "asc" }, { createdAt: "desc" }],
   });
 
   return Response.json(tasks);
@@ -64,16 +69,76 @@ export async function POST(req: Request, ctx: Ctx) {
     }
   }
 
-  const task = await prisma.task.create({
-    data: {
-      title,
-      startDate: startDate.value,
-      profileId,
-      ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
-      ...(category.value !== undefined ? { category: category.value } : {}),
-      ...(notes.value !== undefined ? { notes: notes.value } : {}),
-      ...(projectId.value !== undefined ? { projectId: projectId.value } : {}),
-    },
+  const repeatEnabled = parseOptionalBooleanInput(
+    body?.repeatEnabled,
+    "repeatEnabled"
+  );
+  if (repeatEnabled.error) return repeatEnabled.error;
+
+  const repeatPattern = parseOptionalRepeatPatternInput(
+    body?.repeatPattern,
+    "repeatPattern"
+  );
+  if (repeatPattern.error) return repeatPattern.error;
+
+  const repeatDays = parseOptionalIntInput(
+    body?.repeatDays,
+    "repeatDays",
+    1,
+    127
+  );
+  if (repeatDays.error) return repeatDays.error;
+
+  const repeatWeeklyDay = parseOptionalIntInput(
+    body?.repeatWeeklyDay,
+    "repeatWeeklyDay",
+    1,
+    7
+  );
+  if (repeatWeeklyDay.error) return repeatWeeklyDay.error;
+
+  const repeatMonthlyDay = parseOptionalIntInput(
+    body?.repeatMonthlyDay,
+    "repeatMonthlyDay",
+    1,
+    31
+  );
+  if (repeatMonthlyDay.error) return repeatMonthlyDay.error;
+
+  const normalizedRepeat = normalizeRepeatSettings({
+    repeatEnabled: repeatEnabled.value ?? false,
+    repeatPattern: repeatPattern.value ?? null,
+    repeatDays: repeatDays.value ?? null,
+    repeatWeeklyDay: repeatWeeklyDay.value ?? null,
+    repeatMonthlyDay: repeatMonthlyDay.value ?? null,
+    referenceDate: startDate.value,
+  });
+  if (normalizedRepeat.error) return normalizedRepeat.error;
+
+  const task = await prisma.$transaction(async (tx) => {
+    const createdTask = await tx.task.create({
+      data: {
+        title,
+        startDate: startDate.value,
+        profileId,
+        ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
+        ...(category.value !== undefined ? { category: category.value } : {}),
+        ...(notes.value !== undefined ? { notes: notes.value } : {}),
+        ...(projectId.value !== undefined ? { projectId: projectId.value } : {}),
+        ...normalizedRepeat.value,
+      },
+    });
+
+    if (!normalizedRepeat.value?.repeatEnabled) {
+      return createdTask;
+    }
+
+    return tx.task.update({
+      where: { id: createdTask.id },
+      data: {
+        recurrenceSeriesId: getRecurringSeriesId(createdTask),
+      },
+    });
   });
 
   return Response.json(task, { status: 201 });

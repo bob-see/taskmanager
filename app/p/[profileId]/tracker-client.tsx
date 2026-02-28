@@ -14,9 +14,15 @@ type Task = {
   startDate: string;
   dueAt: string | null;
   completedAt: string | null;
+  completedOn: string | null;
   category: string | null;
   notes: string | null;
   projectId: string | null;
+  repeatEnabled: boolean;
+  repeatPattern: RepeatPattern | null;
+  repeatDays: number | null;
+  repeatWeeklyDay: number | null;
+  repeatMonthlyDay: number | null;
   createdAt: string;
 };
 
@@ -36,7 +42,17 @@ type TrackerClientProps = {
   profileName: string;
 };
 
-type TaskFormState = {
+type RepeatPattern = "daily" | "weekly" | "monthly";
+
+type RepeatFormState = {
+  repeatEnabled: boolean;
+  repeatPattern: RepeatPattern;
+  repeatDays: number;
+  repeatWeeklyDay: number;
+  repeatMonthlyDay: number;
+};
+
+type TaskFormState = RepeatFormState & {
   title: string;
   startDate: string;
   dueAt: string;
@@ -51,7 +67,7 @@ type ProjectFormState = {
   category: string;
 };
 
-type EditTaskFormState = {
+type EditTaskFormState = RepeatFormState & {
   title: string;
   startDate: string;
   dueAt: string;
@@ -101,6 +117,13 @@ const DONE_RANGE_OPTIONS: Array<{ value: DoneRange; label: string }> = [
 ];
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_TOGGLE_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+const REPEAT_PATTERN_OPTIONS: Array<{ value: RepeatPattern; label: string }> = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+const ALL_REPEAT_DAYS_MASK = 0b1111111;
 
 function dateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -116,6 +139,38 @@ function todayInputValue() {
 function parseDateOnly(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year, month - 1, day);
+}
+
+function getWeekdayNumber(value: string) {
+  const weekday = parseDateOnly(value).getDay();
+  return weekday === 0 ? 7 : weekday;
+}
+
+function getDayOfMonth(value: string) {
+  return parseDateOnly(value).getDate();
+}
+
+function getRepeatDayBit(weekday: number) {
+  return 1 << (weekday - 1);
+}
+
+function formatRepeatDays(repeatDays: number) {
+  if (repeatDays === ALL_REPEAT_DAYS_MASK) {
+    return "every day";
+  }
+
+  const weekdaysMask =
+    getRepeatDayBit(1) |
+    getRepeatDayBit(2) |
+    getRepeatDayBit(3) |
+    getRepeatDayBit(4) |
+    getRepeatDayBit(5);
+
+  if (repeatDays === weekdaysMask) {
+    return "weekdays";
+  }
+
+  return WEEKDAY_LABELS.filter((_, index) => repeatDays & (1 << index)).join(", ");
 }
 
 function addDays(date: Date, amount: number) {
@@ -137,6 +192,36 @@ function addMonthsKeepingDay(date: Date, amount: number) {
 
 function toDateOnly(value: string | null) {
   return value ? dateInputValue(new Date(value)) : "";
+}
+
+function isSameDateValue(value: string | null, dateValue: string) {
+  return toDateOnly(value) === dateValue;
+}
+
+function createRepeatDefaults(dateValue: string): RepeatFormState {
+  const repeatWeeklyDay = getWeekdayNumber(dateValue);
+
+  return {
+    repeatEnabled: false,
+    repeatPattern: "daily",
+    repeatDays: ALL_REPEAT_DAYS_MASK,
+    repeatWeeklyDay,
+    repeatMonthlyDay: getDayOfMonth(dateValue),
+  };
+}
+
+function getRepeatSummary(task: Task) {
+  if (!task.repeatEnabled || !task.repeatPattern) return null;
+
+  if (task.repeatPattern === "daily") {
+    return `Repeats ${formatRepeatDays(task.repeatDays ?? ALL_REPEAT_DAYS_MASK)}`;
+  }
+
+  if (task.repeatPattern === "weekly") {
+    return `Repeats weekly on ${WEEKDAY_LABELS[(task.repeatWeeklyDay ?? 1) - 1]}`;
+  }
+
+  return `Repeats monthly on day ${task.repeatMonthlyDay ?? 1}`;
 }
 
 function formatLongDate(value: string) {
@@ -180,16 +265,20 @@ function isTaskActiveOnDate(task: Task, dateValue: string) {
   return toDateOnly(task.startDate) <= dateValue;
 }
 
+function isTaskCompleted(task: Task) {
+  return Boolean(task.completedAt);
+}
+
 function isOpenActiveOnDate(task: Task, dateValue: string) {
-  return !task.completedAt && isTaskActiveOnDate(task, dateValue);
+  return !isTaskCompleted(task) && isTaskActiveOnDate(task, dateValue);
 }
 
 function isOpenTaskNewOnDate(task: Task, dateValue: string) {
-  return !task.completedAt && toDateOnly(task.startDate) === dateValue;
+  return !isTaskCompleted(task) && toDateOnly(task.startDate) === dateValue;
 }
 
 function isOpenTaskDueOnDate(task: Task, dateValue: string) {
-  return !task.completedAt && toDateOnly(task.dueAt) === dateValue;
+  return !isTaskCompleted(task) && toDateOnly(task.dueAt) === dateValue;
 }
 
 function buildCalendarDays(tasks: Task[], start: Date, end: Date, month: number) {
@@ -212,12 +301,18 @@ function buildCalendarDays(tasks: Task[], start: Date, end: Date, month: number)
   return days;
 }
 
-function matchesTaskSearch(task: Task, query: string) {
+function matchesTaskSearch(
+  task: Task,
+  query: string,
+  projectById: Map<string, Project>
+) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
 
-  return [task.title, task.category ?? "", task.notes ?? ""].some((value) =>
-    value.toLowerCase().includes(normalized)
+  const projectName = task.projectId ? projectById.get(task.projectId)?.name ?? "" : "";
+
+  return [task.title, task.category ?? "", task.notes ?? "", projectName].some(
+    (value) => value.toLowerCase().includes(normalized)
   );
 }
 
@@ -228,6 +323,33 @@ function isTaskInArchivedProject(
   if (!task.projectId) return false;
 
   return projectById.get(task.projectId)?.archived ?? false;
+}
+
+function isTaskVisibleForProgress(
+  task: Task,
+  projectById: Map<string, Project>,
+  showArchived: boolean
+) {
+  return showArchived || !isTaskInArchivedProject(task, projectById);
+}
+
+function isTaskVisibleForSearch(
+  task: Task,
+  projectById: Map<string, Project>,
+  includeArchived: boolean
+) {
+  return includeArchived || !isTaskInArchivedProject(task, projectById);
+}
+
+function isTaskCompletedOnDate(task: Task, dateValue: string) {
+  return isTaskCompleted(task) && isSameDateValue(task.completedOn, dateValue);
+}
+
+function countsTowardDayProgress(task: Task, dateValue: string) {
+  return (
+    isTaskActiveOnDate(task, dateValue) &&
+    (!isTaskCompleted(task) || isTaskCompletedOnDate(task, dateValue))
+  );
 }
 
 function openDateInputPicker(input: HTMLInputElement) {
@@ -262,15 +384,186 @@ function createEmptyProjectForm(): ProjectFormState {
   };
 }
 
+function createEmptyTaskForm(dateValue = todayInputValue()): TaskFormState {
+  return {
+    title: "",
+    startDate: dateValue,
+    dueAt: "",
+    category: "",
+    projectId: "",
+    ...createRepeatDefaults(dateValue),
+  };
+}
+
 function createEditTaskForm(task: Task): EditTaskFormState {
+  const startDate = toDateOnly(task.startDate) || todayInputValue();
+  const repeatWeeklyDay = task.repeatWeeklyDay ?? getWeekdayNumber(startDate);
+
   return {
     title: task.title,
-    startDate: toDateOnly(task.startDate) || todayInputValue(),
+    startDate,
     dueAt: toDateOnly(task.dueAt),
     category: task.category ?? "",
     notes: task.notes ?? "",
     projectId: task.projectId ?? "",
+    repeatEnabled: task.repeatEnabled,
+    repeatPattern: task.repeatPattern ?? "daily",
+    repeatDays:
+      task.repeatDays ??
+      (task.repeatPattern === "weekly"
+        ? getRepeatDayBit(repeatWeeklyDay)
+        : ALL_REPEAT_DAYS_MASK),
+    repeatWeeklyDay,
+    repeatMonthlyDay: task.repeatMonthlyDay ?? getDayOfMonth(startDate),
   };
+}
+
+function RepeatFields<T extends RepeatFormState>({
+  form,
+  onChange,
+  defaultDateValue,
+}: {
+  form: T;
+  onChange: (updater: (prev: T) => T) => void;
+  defaultDateValue: string;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border border-white/10 p-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={form.repeatEnabled}
+          onChange={(e) =>
+            onChange((prev) => {
+              const repeatWeeklyDay = getWeekdayNumber(defaultDateValue);
+
+              return {
+                ...prev,
+                repeatEnabled: e.target.checked,
+                repeatDays:
+                  prev.repeatPattern === "weekly"
+                    ? getRepeatDayBit(repeatWeeklyDay)
+                    : ALL_REPEAT_DAYS_MASK,
+                repeatWeeklyDay,
+                repeatMonthlyDay: getDayOfMonth(defaultDateValue),
+              };
+            })
+          }
+        />
+        <span>Repeat</span>
+      </label>
+
+      {form.repeatEnabled && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            <div className="opacity-70">Pattern</div>
+            <select
+              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              value={form.repeatPattern}
+              onChange={(e) => {
+                const repeatPattern = e.target.value as RepeatPattern;
+                const repeatWeeklyDay = getWeekdayNumber(defaultDateValue);
+
+                onChange((prev) => ({
+                  ...prev,
+                  repeatPattern,
+                  repeatDays:
+                    repeatPattern === "daily"
+                      ? ALL_REPEAT_DAYS_MASK
+                      : repeatPattern === "weekly"
+                        ? getRepeatDayBit(repeatWeeklyDay)
+                        : prev.repeatDays,
+                  repeatWeeklyDay,
+                  repeatMonthlyDay: getDayOfMonth(defaultDateValue),
+                }));
+              }}
+            >
+              {REPEAT_PATTERN_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="text-black">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {(form.repeatPattern === "daily" || form.repeatPattern === "weekly") && (
+            <div className="space-y-1 text-sm md:col-span-2">
+              <div className="opacity-70">
+                {form.repeatPattern === "daily" ? "Repeat days" : "Weekday"}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {DAY_TOGGLE_LABELS.map((label, index) => {
+                  const weekday = index + 1;
+                  const bit = getRepeatDayBit(weekday);
+                  const selected = (form.repeatDays & bit) !== 0;
+
+                  return (
+                    <button
+                      key={`${label}-${weekday}`}
+                      className={`h-9 w-9 rounded-full border text-sm ${
+                        selected
+                          ? "border-white bg-white text-black"
+                          : "border-white/15 bg-transparent text-white/75"
+                      }`}
+                      type="button"
+                      onClick={() =>
+                        onChange((prev) => {
+                          if (prev.repeatPattern === "weekly") {
+                            return {
+                              ...prev,
+                              repeatDays: bit,
+                              repeatWeeklyDay: weekday,
+                            };
+                          }
+
+                          const nextRepeatDays = selected
+                            ? prev.repeatDays & ~bit
+                            : prev.repeatDays | bit;
+
+                          if (nextRepeatDays === 0) {
+                            return prev;
+                          }
+
+                          return {
+                            ...prev,
+                            repeatDays: nextRepeatDays,
+                          };
+                        })
+                      }
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {form.repeatPattern === "monthly" && (
+            <label className="space-y-1 text-sm">
+              <div className="opacity-70">Day of month</div>
+              <select
+                className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                value={form.repeatMonthlyDay}
+                onChange={(e) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    repeatMonthlyDay: Number(e.target.value),
+                  }))
+                }
+              >
+                {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                  <option key={day} value={day} className="text-black">
+                    {day}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Modal({
@@ -309,6 +602,7 @@ function TaskRow({
   task,
   projectName,
   projectArchived = false,
+  completionPending = false,
   editingTitleTaskId,
   editingTitleValue,
   onStartTitleEdit,
@@ -322,6 +616,7 @@ function TaskRow({
   task: Task;
   projectName?: string;
   projectArchived?: boolean;
+  completionPending?: boolean;
   editingTitleTaskId: string | null;
   editingTitleValue: string;
   onStartTitleEdit: (task: Task) => void;
@@ -333,6 +628,7 @@ function TaskRow({
   onDelete: (taskId: string) => void;
 }) {
   const isEditing = editingTitleTaskId === task.id;
+  const repeatSummary = getRepeatSummary(task);
 
   return (
     <div
@@ -369,7 +665,7 @@ function TaskRow({
               type="button"
               onClick={() => onStartTitleEdit(task)}
             >
-              <span className={task.completedAt ? "line-through opacity-70" : ""}>
+              <span className={isTaskCompleted(task) ? "line-through opacity-70" : ""}>
                 {task.title}
               </span>
             </button>
@@ -395,9 +691,14 @@ function TaskRow({
                 Project {projectName}
               </span>
             )}
-            {task.completedAt && (
+            {repeatSummary && (
               <span className="rounded-full border border-white/10 px-2 py-1">
-                Done {toDateOnly(task.completedAt)}
+                {repeatSummary}
+              </span>
+            )}
+            {task.completedOn && (
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                Done {toDateOnly(task.completedOn)}
               </span>
             )}
           </div>
@@ -414,10 +715,11 @@ function TaskRow({
           <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-1 text-sm">
             <input
               type="checkbox"
-              checked={Boolean(task.completedAt)}
+              checked={isTaskCompleted(task)}
+              disabled={completionPending}
               onChange={(e) => onToggleCompleted(task, e.target.checked)}
             />
-            <span>{task.completedAt ? "Done" : "Open"}</span>
+            <span>{isTaskCompleted(task) ? "Done" : "Open"}</span>
           </label>
           <button
             className="rounded-md border border-white/10 px-3 py-1 text-sm"
@@ -429,6 +731,48 @@ function TaskRow({
         </div>
       </div>
     </div>
+  );
+}
+
+function ProjectSearchRow({
+  project,
+  onClick,
+}: {
+  project: Project;
+  onClick: (project: Project) => void;
+}) {
+  const subtitle = [
+    project.category ? `Category ${project.category}` : null,
+    `Start ${toDateOnly(project.startDate)}`,
+    project.dueAt ? `Due ${toDateOnly(project.dueAt)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+  return (
+    <button
+      className={`w-full rounded-xl border p-3 text-left transition-colors hover:bg-white/10 ${
+        project.archived
+          ? "border-amber-300/20 bg-amber-200/5"
+          : "border-white/10 bg-black/10"
+      }`}
+      type="button"
+      onClick={() => onClick(project)}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold">{project.name}</div>
+            {project.archived && (
+              <span className="rounded-full border border-amber-200/20 bg-amber-100/10 px-2 py-0.5 text-xs text-amber-100/90">
+                Archived
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-xs opacity-60">{subtitle || "No project metadata"}</div>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -453,15 +797,10 @@ export function TrackerClient({
   const [newProjectSaving, setNewProjectSaving] = useState(false);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [editTaskSaving, setEditTaskSaving] = useState(false);
+  const [completionPendingTaskIds, setCompletionPendingTaskIds] = useState<string[]>([]);
   const [editingTitleTaskId, setEditingTitleTaskId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState("");
-  const [form, setForm] = useState<TaskFormState>({
-    title: "",
-    startDate: todayInputValue(),
-    dueAt: "",
-    category: "",
-    projectId: "",
-  });
+  const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
   const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
     createEmptyProjectForm
   );
@@ -514,13 +853,7 @@ export function TrackerClient({
   }, [profileId]);
 
   useEffect(() => {
-    setForm({
-      title: "",
-      startDate: todayInputValue(),
-      dueAt: "",
-      category: "",
-      projectId: "",
-    });
+    setForm(createEmptyTaskForm());
     setNewProjectForm(createEmptyProjectForm());
     setEditTaskForm(null);
     setEditTaskId(null);
@@ -547,15 +880,40 @@ export function TrackerClient({
   const monthStartValue = dateInputValue(monthStart);
   const monthEndValue = dateInputValue(monthEnd);
 
-  const progressTotal = tasks.filter((task) => isTaskActiveOnDate(task, selectedDay)).length;
-  const progressCompleted = tasks.filter(
-    (task) => task.completedAt && isTaskActiveOnDate(task, selectedDay)
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const searchActive = normalizedSearchQuery.length > 0;
+  const visibleProjects = projects.filter((project) => showArchived || !project.archived);
+  const assignableProjects = projects.filter(
+    (project) => showArchived || !project.archived
+  );
+  const matchingActiveProjects = searchActive
+    ? projects.filter(
+        (project) =>
+          !project.archived && project.name.toLowerCase().includes(normalizedSearchQuery)
+      )
+    : [];
+  const matchingArchivedProjects = searchActive
+    ? projects.filter(
+        (project) =>
+          project.archived && project.name.toLowerCase().includes(normalizedSearchQuery)
+      )
+    : [];
+
+  const progressTasks = tasks.filter((task) =>
+    isTaskVisibleForProgress(task, projectById, showArchived)
+  );
+  const progressTotal = progressTasks.filter((task) =>
+    countsTowardDayProgress(task, selectedDay)
+  ).length;
+  const progressCompleted = progressTasks.filter((task) =>
+    isTaskCompletedOnDate(task, selectedDay)
   ).length;
   const progressPercent =
     progressTotal === 0 ? 0 : Math.round((progressCompleted / progressTotal) * 100);
 
   const openTasks = tasks.filter((task) => {
-    if (task.completedAt) return false;
+    if (isTaskCompleted(task)) return false;
 
     const startDate = toDateOnly(task.startDate);
     const dueDate = toDateOnly(task.dueAt);
@@ -566,7 +924,7 @@ export function TrackerClient({
       case "today":
         return startDate === selectedDay || dueDate === selectedDay;
       case "upcoming":
-        return dueDate !== "" && dueDate > selectedDay;
+        return startDate > selectedDay || (dueDate !== "" && dueDate > selectedDay);
       case "overdue":
         return dueDate !== "" && dueDate < selectedDay;
       default:
@@ -575,9 +933,9 @@ export function TrackerClient({
   });
 
   const doneTasks = tasks.filter((task) => {
-    if (!task.completedAt) return false;
+    if (!task.completedOn) return false;
 
-    const completedDate = toDateOnly(task.completedAt);
+    const completedDate = toDateOnly(task.completedOn);
 
     switch (doneRange) {
       case "today":
@@ -593,13 +951,6 @@ export function TrackerClient({
     }
   });
 
-  const projectById = new Map(projects.map((project) => [project.id, project]));
-  const searchActive = searchQuery.trim().length > 0;
-  const visibleProjects = projects.filter((project) => showArchived || !project.archived);
-  const assignableProjects = projects.filter(
-    (project) => showArchived || !project.archived
-  );
-
   function isTaskVisibleInDayView(task: Task) {
     if (!task.projectId) return true;
 
@@ -608,36 +959,36 @@ export function TrackerClient({
   }
 
   const dayOpenTasks = openTasks.filter(
-    (task) => isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery)
+    (task) =>
+      isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
   const dayDoneTasks = doneTasks.filter(
-    (task) => isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery)
+    (task) =>
+      isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
   const searchResults = tasks.filter((task) => {
-    if (!matchesTaskSearch(task, searchQuery)) return false;
-    if (showArchived) return true;
-
-    return !isTaskInArchivedProject(task, projectById);
+    if (!matchesTaskSearch(task, searchQuery, projectById)) return false;
+    return isTaskVisibleForSearch(task, projectById, showArchived);
   });
   const searchSections: SearchSection[] = [
     {
       key: "active",
       label: "Active",
       tasks: searchResults.filter(
-        (task) => !task.completedAt && toDateOnly(task.startDate) <= selectedDay
+        (task) => !isTaskCompleted(task) && toDateOnly(task.startDate) <= selectedDay
       ),
     },
     {
       key: "upcoming",
       label: "Upcoming",
       tasks: searchResults.filter(
-        (task) => !task.completedAt && toDateOnly(task.startDate) > selectedDay
+        (task) => !isTaskCompleted(task) && toDateOnly(task.startDate) > selectedDay
       ),
     },
     {
       key: "complete",
       label: "Complete",
-      tasks: searchResults.filter((task) => Boolean(task.completedAt)),
+      tasks: searchResults.filter((task) => isTaskCompleted(task)),
     },
   ];
   const searchResultCount = searchSections.reduce(
@@ -647,6 +998,43 @@ export function TrackerClient({
 
   function clearSearch() {
     setSearchQuery("");
+  }
+
+  function scrollToProjectSection(projectId: string) {
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`project-${projectId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function focusProjectFromSearch(project: Project) {
+    setViewMode("day");
+    setSearchQuery("");
+
+    if (project.collapsed) {
+      setProjects((prev) =>
+        prev.map((item) =>
+          item.id === project.id ? { ...item, collapsed: false } : item
+        )
+      );
+      scrollToProjectSection(project.id);
+
+      try {
+        await updateProject(project.id, { collapsed: false });
+      } catch (err) {
+        setProjects((prev) =>
+          prev.map((item) =>
+            item.id === project.id ? { ...item, collapsed: true } : item
+          )
+        );
+        setError(err instanceof Error ? err.message : "Could not update project");
+      }
+
+      return;
+    }
+
+    scrollToProjectSection(project.id);
   }
 
   const weekDays = buildCalendarDays(tasks, weekStart, weekEnd, selectedDate.getMonth());
@@ -666,13 +1054,12 @@ export function TrackerClient({
       openTasks: dayOpenTasks.filter((task) => task.projectId === project.id),
       doneTasks: dayDoneTasks.filter((task) => task.projectId === project.id),
       progressTotal: tasks.filter(
-        (task) => task.projectId === project.id && isTaskActiveOnDate(task, selectedDay)
+        (task) => task.projectId === project.id && countsTowardDayProgress(task, selectedDay)
       ).length,
       progressCompleted: tasks.filter(
         (task) =>
           task.projectId === project.id &&
-          Boolean(task.completedAt) &&
-          isTaskActiveOnDate(task, selectedDay)
+          isTaskCompletedOnDate(task, selectedDay)
       ).length,
     })),
     {
@@ -727,6 +1114,21 @@ export function TrackerClient({
           dueAt: form.dueAt || null,
           category: form.category || null,
           projectId: form.projectId || null,
+          repeatEnabled: form.repeatEnabled,
+          repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
+          repeatDays:
+            form.repeatEnabled &&
+            (form.repeatPattern === "daily" || form.repeatPattern === "weekly")
+              ? form.repeatDays
+              : null,
+          repeatWeeklyDay:
+            form.repeatEnabled && form.repeatPattern === "weekly"
+              ? form.repeatWeeklyDay
+              : null,
+          repeatMonthlyDay:
+            form.repeatEnabled && form.repeatPattern === "monthly"
+              ? form.repeatMonthlyDay
+              : null,
         }),
       });
 
@@ -737,13 +1139,7 @@ export function TrackerClient({
 
       const task = (await res.json()) as Task;
       setTasks((prev) => [task, ...prev]);
-      setForm({
-        title: "",
-        startDate: todayInputValue(),
-        dueAt: "",
-        category: "",
-        projectId: "",
-      });
+      setForm(createEmptyTaskForm(selectedDay));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -801,9 +1197,37 @@ export function TrackerClient({
       throw new Error(responseBody?.error ?? "Could not update task");
     }
 
-    const task = (await res.json()) as Task;
-    setTasks((prev) => prev.map((item) => (item.id === task.id ? task : item)));
+    const payload = (await res.json()) as Task | { task: Task; createdTask?: Task | null };
+    const task = "task" in payload ? payload.task : payload;
+    const createdTask = "task" in payload ? payload.createdTask ?? null : null;
+
+    setTasks((prev) => {
+      const replaced = prev.map((item) => (item.id === task.id ? task : item));
+
+      if (!createdTask) {
+        return replaced;
+      }
+
+      const withoutCreated = replaced.filter((item) => item.id !== createdTask.id);
+      return [createdTask, ...withoutCreated];
+    });
+
     return task;
+  }
+
+  async function toggleTaskCompleted(taskId: string, completed: boolean) {
+    setCompletionPendingTaskIds((prev) =>
+      prev.includes(taskId) ? prev : [...prev, taskId]
+    );
+
+    try {
+      await updateTask(taskId, {
+        completed,
+        completedOn: completed ? selectedDay : null,
+      });
+    } finally {
+      setCompletionPendingTaskIds((prev) => prev.filter((id) => id !== taskId));
+    }
   }
 
   async function updateProject(projectId: string, body: Record<string, unknown>) {
@@ -898,6 +1322,22 @@ export function TrackerClient({
         category: editTaskForm.category || null,
         notes: editTaskForm.notes || null,
         projectId: editTaskForm.projectId || null,
+        repeatEnabled: editTaskForm.repeatEnabled,
+        repeatPattern: editTaskForm.repeatEnabled ? editTaskForm.repeatPattern : null,
+        repeatDays:
+          editTaskForm.repeatEnabled &&
+          (editTaskForm.repeatPattern === "daily" ||
+            editTaskForm.repeatPattern === "weekly")
+            ? editTaskForm.repeatDays
+            : null,
+        repeatWeeklyDay:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPattern === "weekly"
+            ? editTaskForm.repeatWeeklyDay
+            : null,
+        repeatMonthlyDay:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPattern === "monthly"
+            ? editTaskForm.repeatMonthlyDay
+            : null,
       });
       closeTaskEditor();
     } catch (err) {
@@ -1009,62 +1449,70 @@ export function TrackerClient({
 
         <form
           onSubmit={createTask}
-          className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr_auto]"
+          className="space-y-3"
         >
-          <input
-            className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-            placeholder="+ Task"
-            value={form.title}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, title: e.target.value }))
-            }
-          />
-          <DateInput
-            className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-            value={form.startDate}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, startDate: e.target.value }))
-            }
-          />
-          <DateInput
-            className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-            value={form.dueAt}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, dueAt: e.target.value }))
-            }
-          />
-          <input
-            className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-            placeholder="Category"
-            value={form.category}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, category: e.target.value }))
-            }
-          />
-          <select
-            className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-            value={form.projectId}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, projectId: e.target.value }))
-            }
-          >
-            <option value="" className="text-black">
-              Unassigned
-            </option>
-            {newTaskProjectOptions.map((project) => (
-              <option key={project.id} value={project.id} className="text-black">
-                {project.name}
-                {project.archived ? " (Archived)" : ""}
+          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr_auto]">
+            <input
+              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              placeholder="+ Task"
+              value={form.title}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, title: e.target.value }))
+              }
+            />
+            <DateInput
+              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              value={form.startDate}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, startDate: e.target.value }))
+              }
+            />
+            <DateInput
+              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              value={form.dueAt}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, dueAt: e.target.value }))
+              }
+            />
+            <input
+              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              placeholder="Category"
+              value={form.category}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, category: e.target.value }))
+              }
+            />
+            <select
+              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              value={form.projectId}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, projectId: e.target.value }))
+              }
+            >
+              <option value="" className="text-black">
+                Unassigned
               </option>
-            ))}
-          </select>
-          <button
-            className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
-            disabled={saving}
-            type="submit"
-          >
-            Save
-          </button>
+              {newTaskProjectOptions.map((project) => (
+                <option key={project.id} value={project.id} className="text-black">
+                  {project.name}
+                  {project.archived ? " (Archived)" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              disabled={saving}
+              type="submit"
+            >
+              Save
+            </button>
+          </div>
+
+          <RepeatFields
+            form={form}
+            defaultDateValue={form.startDate}
+            onChange={(updater) => setForm((prev) => updater(prev))}
+          />
         </form>
       </section>
 
@@ -1087,6 +1535,7 @@ export function TrackerClient({
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-white/10">
             <div
+              key={selectedDay}
               className="h-full rounded-full bg-white transition-[width]"
               style={{ width: `${progressPercent}%` }}
             />
@@ -1305,6 +1754,68 @@ export function TrackerClient({
             <div className="text-sm opacity-60">Loading tasks…</div>
           ) : searchActive ? (
             <div className="space-y-4">
+              <section className="rounded-xl border border-white/10 bg-black/10 p-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold">Projects</h3>
+                    <div className="text-sm opacity-60">
+                      {matchingActiveProjects.length +
+                        (showArchived ? matchingArchivedProjects.length : 0)}{" "}
+                      result
+                      {matchingActiveProjects.length +
+                        (showArchived ? matchingArchivedProjects.length : 0) ===
+                      1
+                        ? ""
+                        : "s"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <div className="mb-2 text-sm font-medium opacity-80">Active Projects</div>
+                    {matchingActiveProjects.length === 0 ? (
+                      <div className="text-sm opacity-50">No matching active projects.</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {matchingActiveProjects.map((project) => (
+                          <ProjectSearchRow
+                            key={project.id}
+                            project={project}
+                            onClick={(nextProject) => void focusProjectFromSearch(nextProject)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {showArchived && (
+                    <div>
+                      <div className="mb-2 text-sm font-medium opacity-80">
+                        Archived Projects
+                      </div>
+                      {matchingArchivedProjects.length === 0 ? (
+                        <div className="text-sm opacity-50">
+                          No matching archived projects.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {matchingArchivedProjects.map((project) => (
+                            <ProjectSearchRow
+                              key={project.id}
+                              project={project}
+                              onClick={(nextProject) =>
+                                void focusProjectFromSearch(nextProject)
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {searchSections.map((section) => (
                 <section
                   key={section.key}
@@ -1338,6 +1849,7 @@ export function TrackerClient({
                               ? projectById.get(task.projectId)?.archived ?? false
                               : false
                           }
+                          completionPending={completionPendingTaskIds.includes(task.id)}
                           editingTitleTaskId={editingTitleTaskId}
                           editingTitleValue={editingTitleValue}
                           onStartTitleEdit={startTitleEdit}
@@ -1346,7 +1858,7 @@ export function TrackerClient({
                           onSaveTitleEdit={() => void saveTitleEdit()}
                           onOpenEditModal={openTaskEditor}
                           onToggleCompleted={(nextTask, completed) =>
-                            void updateTask(nextTask.id, { completed }).catch(
+                            void toggleTaskCompleted(nextTask.id, completed).catch(
                               (err: unknown) =>
                                 setError(
                                   err instanceof Error
@@ -1391,6 +1903,7 @@ export function TrackerClient({
                 return (
                   <section
                     key={section.key}
+                    id={section.project ? `project-${section.project.id}` : undefined}
                     className={`rounded-xl border p-4 ${
                       section.project?.archived
                         ? "border-amber-300/20 bg-amber-200/5"
@@ -1473,6 +1986,9 @@ export function TrackerClient({
                                 <TaskRow
                                   key={task.id}
                                   task={task}
+                                  completionPending={completionPendingTaskIds.includes(
+                                    task.id
+                                  )}
                                   editingTitleTaskId={editingTitleTaskId}
                                   editingTitleValue={editingTitleValue}
                                   onStartTitleEdit={startTitleEdit}
@@ -1481,7 +1997,7 @@ export function TrackerClient({
                                   onSaveTitleEdit={() => void saveTitleEdit()}
                                   onOpenEditModal={openTaskEditor}
                                   onToggleCompleted={(nextTask, completed) =>
-                                    void updateTask(nextTask.id, { completed }).catch(
+                                    void toggleTaskCompleted(nextTask.id, completed).catch(
                                       (err: unknown) =>
                                         setError(
                                           err instanceof Error
@@ -1515,6 +2031,9 @@ export function TrackerClient({
                                 <TaskRow
                                   key={task.id}
                                   task={task}
+                                  completionPending={completionPendingTaskIds.includes(
+                                    task.id
+                                  )}
                                   editingTitleTaskId={editingTitleTaskId}
                                   editingTitleValue={editingTitleValue}
                                   onStartTitleEdit={startTitleEdit}
@@ -1523,7 +2042,7 @@ export function TrackerClient({
                                   onSaveTitleEdit={() => void saveTitleEdit()}
                                   onOpenEditModal={openTaskEditor}
                                   onToggleCompleted={(nextTask, completed) =>
-                                    void updateTask(nextTask.id, { completed }).catch(
+                                    void toggleTaskCompleted(nextTask.id, completed).catch(
                                       (err: unknown) =>
                                         setError(
                                           err instanceof Error
@@ -1618,8 +2137,9 @@ export function TrackerClient({
                           <input
                             type="checkbox"
                             checked={false}
+                            disabled={completionPendingTaskIds.includes(task.id)}
                             onChange={() =>
-                              void updateTask(task.id, { completed: true }).catch(
+                              void toggleTaskCompleted(task.id, true).catch(
                                 (err: unknown) =>
                                   setError(
                                     err instanceof Error
@@ -1691,7 +2211,7 @@ export function TrackerClient({
                       <th className="pb-2 pr-4 font-medium">Category</th>
                       <th className="pb-2 pr-4 font-medium">Due</th>
                       <th className="pb-2 pr-4 font-medium">Start</th>
-                      <th className="pb-2 pr-4 font-medium">Done At</th>
+                      <th className="pb-2 pr-4 font-medium">Done On</th>
                       <th className="pb-2 font-medium">Delete</th>
                     </tr>
                   </thead>
@@ -1702,14 +2222,15 @@ export function TrackerClient({
                         <td className="py-3 pr-4">{task.category ?? "—"}</td>
                         <td className="py-3 pr-4">{toDateOnly(task.dueAt) || "—"}</td>
                         <td className="py-3 pr-4">{toDateOnly(task.startDate)}</td>
-                        <td className="py-3 pr-4">{toDateOnly(task.completedAt)}</td>
+                        <td className="py-3 pr-4">{toDateOnly(task.completedOn)}</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
                               checked
+                              disabled={completionPendingTaskIds.includes(task.id)}
                               onChange={() =>
-                                void updateTask(task.id, { completed: false }).catch(
+                                void toggleTaskCompleted(task.id, false).catch(
                                   (err: unknown) =>
                                     setError(
                                       err instanceof Error
@@ -1879,6 +2400,13 @@ export function TrackerClient({
                 ))}
               </select>
             </label>
+            <RepeatFields
+              form={editTaskForm}
+              defaultDateValue={editTaskForm.startDate}
+              onChange={(updater) =>
+                setEditTaskForm((prev) => (prev ? updater(prev) : prev))
+              }
+            />
             <button
               className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
               disabled={editTaskSaving}
