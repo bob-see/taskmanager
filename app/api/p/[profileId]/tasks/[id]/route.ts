@@ -351,15 +351,147 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 export async function DELETE(_req: Request, ctx: Ctx) {
   const { profileId, id } = await ctx.params;
+  const { searchParams } = new URL(_req.url);
+  const mode = searchParams.get("mode") ?? "this";
 
   const profile = await ensureProfile(profileId);
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  const deleted = await prisma.task.deleteMany({
+  if (!["this", "future", "series"].includes(mode)) {
+    return Response.json(
+      { error: "mode must be one of: this, future, series" },
+      { status: 400 }
+    );
+  }
+
+  const task = await prisma.task.findFirst({
     where: { id, profileId },
+    select: {
+      id: true,
+      profileId: true,
+      title: true,
+      startDate: true,
+      dueAt: true,
+      category: true,
+      notes: true,
+      projectId: true,
+      recurrenceSeriesId: true,
+      repeatEnabled: true,
+      repeatPattern: true,
+      repeatDays: true,
+      repeatWeeklyDay: true,
+      repeatMonthlyDay: true,
+    },
   });
+
+  if (!task) {
+    return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  let deleted;
+
+  if (mode === "this" || !task.recurrenceSeriesId) {
+    if (
+      mode === "this" &&
+      task.recurrenceSeriesId &&
+      task.repeatEnabled &&
+      task.repeatPattern
+    ) {
+      deleted = await prisma.$transaction(async (tx) => {
+        const deletedTask = await tx.task.deleteMany({
+          where: { id, profileId },
+        });
+
+        if (deletedTask.count === 0) {
+          return deletedTask;
+        }
+
+        const futureOccurrence = await tx.task.findFirst({
+          where: {
+            profileId,
+            recurrenceSeriesId: task.recurrenceSeriesId,
+            startDate: { gt: task.startDate },
+          },
+          select: { id: true },
+        });
+
+        if (futureOccurrence) {
+          return deletedTask;
+        }
+
+        const nextStartDate = nextOccurrenceDate({
+          baseDate: task.startDate,
+          recurrenceType: task.repeatPattern,
+          repeatDays: task.repeatDays,
+          weeklyDay: task.repeatWeeklyDay,
+          monthlyDay: task.repeatMonthlyDay,
+        });
+
+        const existingNextOccurrence = await tx.task.findFirst({
+          where: {
+            profileId,
+            recurrenceSeriesId: task.recurrenceSeriesId,
+            startDate: nextStartDate,
+          },
+          select: { id: true },
+        });
+
+        if (!existingNextOccurrence) {
+          try {
+            await tx.task.create({
+              data: {
+                title: task.title,
+                notes: task.notes,
+                dueAt: null,
+                category: task.category,
+                startDate: nextStartDate,
+                profileId,
+                projectId: task.projectId,
+                recurrenceSeriesId: task.recurrenceSeriesId,
+                repeatEnabled: task.repeatEnabled,
+                repeatPattern: task.repeatPattern,
+                repeatDays: task.repeatDays,
+                repeatWeeklyDay: task.repeatWeeklyDay,
+                repeatMonthlyDay: task.repeatMonthlyDay,
+              },
+            });
+          } catch (error) {
+            if (
+              !(
+                error instanceof Prisma.PrismaClientKnownRequestError &&
+                error.code === "P2002"
+              )
+            ) {
+              throw error;
+            }
+          }
+        }
+
+        return deletedTask;
+      });
+    } else {
+      deleted = await prisma.task.deleteMany({
+        where: { id, profileId },
+      });
+    }
+  } else if (mode === "future") {
+    deleted = await prisma.task.deleteMany({
+      where: {
+        profileId,
+        recurrenceSeriesId: task.recurrenceSeriesId,
+        startDate: { gte: task.startDate },
+      },
+    });
+  } else {
+    deleted = await prisma.task.deleteMany({
+      where: {
+        profileId,
+        recurrenceSeriesId: task.recurrenceSeriesId,
+      },
+    });
+  }
 
   if (deleted.count === 0) {
     return Response.json({ error: "Task not found" }, { status: 404 });

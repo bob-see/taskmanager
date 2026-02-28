@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Profile = {
@@ -18,6 +18,7 @@ type Task = {
   category: string | null;
   notes: string | null;
   projectId: string | null;
+  recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | null;
   repeatDays: number | null;
@@ -79,6 +80,7 @@ type EditTaskFormState = RepeatFormState & {
 type ViewMode = "day" | "week" | "month";
 type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
 type DoneRange = "today" | "week" | "month" | "all";
+type DeleteMode = "this" | "future" | "series";
 
 type CalendarDay = {
   key: string;
@@ -339,6 +341,47 @@ function isTaskVisibleForSearch(
   includeArchived: boolean
 ) {
   return includeArchived || !isTaskInArchivedProject(task, projectById);
+}
+
+function filterTasksByArchivedVisibility(
+  tasks: Task[],
+  projectById: Map<string, Project>,
+  includeArchived: boolean
+) {
+  return tasks.filter((task) =>
+    isTaskVisibleForSearch(task, projectById, includeArchived)
+  );
+}
+
+async function loadTrackerData(profileId: string) {
+  const [profilesRes, tasksRes, projectsRes] = await Promise.all([
+    fetch("/api/profiles", { cache: "no-store" }),
+    fetch(`/api/p/${profileId}/tasks`, { cache: "no-store" }),
+    fetch(`/api/p/${profileId}/projects`, { cache: "no-store" }),
+  ]);
+
+  if (!profilesRes.ok) {
+    const body = await profilesRes.json().catch(() => ({}));
+    throw new Error(body?.error ?? "Could not load profiles");
+  }
+
+  if (!tasksRes.ok) {
+    const body = await tasksRes.json().catch(() => ({}));
+    throw new Error(body?.error ?? "Could not load tasks");
+  }
+
+  if (!projectsRes.ok) {
+    const body = await projectsRes.json().catch(() => ({}));
+    throw new Error(body?.error ?? "Could not load projects");
+  }
+
+  const [profilesData, tasksData, projectsData] = (await Promise.all([
+    profilesRes.json(),
+    tasksRes.json(),
+    projectsRes.json(),
+  ])) as [Profile[], Task[], Project[]];
+
+  return { profilesData, tasksData, projectsData };
 }
 
 function isTaskCompletedOnDate(task: Task, dateValue: string) {
@@ -625,7 +668,7 @@ function TaskRow({
   onSaveTitleEdit: () => void;
   onOpenEditModal: (task: Task) => void;
   onToggleCompleted: (task: Task, completed: boolean) => void;
-  onDelete: (taskId: string) => void;
+  onDelete: (task: Task) => void;
 }) {
   const isEditing = editingTitleTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
@@ -724,7 +767,7 @@ function TaskRow({
           <button
             className="rounded-md border border-white/10 px-3 py-1 text-sm"
             type="button"
-            onClick={() => onDelete(task.id)}
+            onClick={() => onDelete(task)}
           >
             Delete
           </button>
@@ -797,47 +840,24 @@ export function TrackerClient({
   const [newProjectSaving, setNewProjectSaving] = useState(false);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [editTaskSaving, setEditTaskSaving] = useState(false);
+  const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
   const [completionPendingTaskIds, setCompletionPendingTaskIds] = useState<string[]>([]);
   const [editingTitleTaskId, setEditingTitleTaskId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState("");
+  const [deleteTaskModalTask, setDeleteTaskModalTask] = useState<Task | null>(null);
+  const [deleteTaskMode, setDeleteTaskMode] = useState<DeleteMode>("this");
   const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
   const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
     createEmptyProjectForm
   );
   const [editTaskForm, setEditTaskForm] = useState<EditTaskFormState | null>(null);
 
-  const refreshData = useEffectEvent(async () => {
+  async function refreshData() {
     setLoading(true);
     setError(null);
 
     try {
-      const [profilesRes, tasksRes, projectsRes] = await Promise.all([
-        fetch("/api/profiles", { cache: "no-store" }),
-        fetch(`/api/p/${profileId}/tasks`, { cache: "no-store" }),
-        fetch(`/api/p/${profileId}/projects`, { cache: "no-store" }),
-      ]);
-
-      if (!profilesRes.ok) {
-        const body = await profilesRes.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Could not load profiles");
-      }
-
-      if (!tasksRes.ok) {
-        const body = await tasksRes.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Could not load tasks");
-      }
-
-      if (!projectsRes.ok) {
-        const body = await projectsRes.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Could not load projects");
-      }
-
-      const [profilesData, tasksData, projectsData] = (await Promise.all([
-        profilesRes.json(),
-        tasksRes.json(),
-        projectsRes.json(),
-      ])) as [Profile[], Task[], Project[]];
-
+      const { profilesData, tasksData, projectsData } = await loadTrackerData(profileId);
       setProfiles(profilesData);
       setTasks(tasksData);
       setProjects(projectsData);
@@ -846,10 +866,36 @@ export function TrackerClient({
     } finally {
       setLoading(false);
     }
-  });
+  }
 
   useEffect(() => {
-    void refreshData();
+    let cancelled = false;
+
+    async function initialLoad() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const { profilesData, tasksData, projectsData } = await loadTrackerData(profileId);
+        if (cancelled) return;
+        setProfiles(profilesData);
+        setTasks(tasksData);
+        setProjects(projectsData);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not load tracker data");
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void initialLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, [profileId]);
 
   useEffect(() => {
@@ -866,6 +912,8 @@ export function TrackerClient({
     setSearchQuery("");
     setShowArchived(false);
     setNewProjectOpen(false);
+    setDeleteTaskModalTask(null);
+    setDeleteTaskMode("this");
   }, [profileId]);
 
   const currentProfileName =
@@ -900,7 +948,8 @@ export function TrackerClient({
       )
     : [];
 
-  const progressTasks = tasks.filter((task) =>
+  const visibleTasks = filterTasksByArchivedVisibility(tasks, projectById, showArchived);
+  const progressTasks = visibleTasks.filter((task) =>
     isTaskVisibleForProgress(task, projectById, showArchived)
   );
   const progressTotal = progressTasks.filter((task) =>
@@ -912,7 +961,7 @@ export function TrackerClient({
   const progressPercent =
     progressTotal === 0 ? 0 : Math.round((progressCompleted / progressTotal) * 100);
 
-  const openTasks = tasks.filter((task) => {
+  const openTasks = visibleTasks.filter((task) => {
     if (isTaskCompleted(task)) return false;
 
     const startDate = toDateOnly(task.startDate);
@@ -932,7 +981,7 @@ export function TrackerClient({
     }
   });
 
-  const doneTasks = tasks.filter((task) => {
+  const doneTasks = visibleTasks.filter((task) => {
     if (!task.completedOn) return false;
 
     const completedDate = toDateOnly(task.completedOn);
@@ -966,10 +1015,9 @@ export function TrackerClient({
     (task) =>
       isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
-  const searchResults = tasks.filter((task) => {
-    if (!matchesTaskSearch(task, searchQuery, projectById)) return false;
-    return isTaskVisibleForSearch(task, projectById, showArchived);
-  });
+  const searchResults = visibleTasks.filter((task) =>
+    matchesTaskSearch(task, searchQuery, projectById)
+  );
   const searchSections: SearchSection[] = [
     {
       key: "active",
@@ -1037,9 +1085,14 @@ export function TrackerClient({
     scrollToProjectSection(project.id);
   }
 
-  const weekDays = buildCalendarDays(tasks, weekStart, weekEnd, selectedDate.getMonth());
+  const weekDays = buildCalendarDays(
+    visibleTasks,
+    weekStart,
+    weekEnd,
+    selectedDate.getMonth()
+  );
   const monthDays = buildCalendarDays(
-    tasks,
+    visibleTasks,
     getStartOfMonthGrid(selectedDate),
     getEndOfMonthGrid(selectedDate),
     selectedDate.getMonth()
@@ -1053,10 +1106,10 @@ export function TrackerClient({
       collapsed: project.collapsed,
       openTasks: dayOpenTasks.filter((task) => task.projectId === project.id),
       doneTasks: dayDoneTasks.filter((task) => task.projectId === project.id),
-      progressTotal: tasks.filter(
+      progressTotal: progressTasks.filter(
         (task) => task.projectId === project.id && countsTowardDayProgress(task, selectedDay)
       ).length,
-      progressCompleted: tasks.filter(
+      progressCompleted: progressTasks.filter(
         (task) =>
           task.projectId === project.id &&
           isTaskCompletedOnDate(task, selectedDay)
@@ -1249,19 +1302,42 @@ export function TrackerClient({
     return project;
   }
 
-  async function deleteTask(taskId: string) {
+  async function deleteTask(task: Task, mode: DeleteMode) {
     setError(null);
+    setDeleteTaskSaving(true);
+    const scrollY = window.scrollY;
 
-    const res = await fetch(`/api/p/${profileId}/tasks/${taskId}`, {
-      method: "DELETE",
-    });
+    try {
+      const res = await fetch(`/api/p/${profileId}/tasks/${task.id}?mode=${mode}`, {
+        method: "DELETE",
+      });
 
-    if (!res.ok) {
-      const responseBody = await res.json().catch(() => ({}));
-      throw new Error(responseBody?.error ?? "Could not delete task");
+      if (!res.ok) {
+        const responseBody = await res.json().catch(() => ({}));
+        throw new Error(responseBody?.error ?? "Could not delete task");
+      }
+
+      await refreshData();
+      setDeleteTaskModalTask(null);
+      setDeleteTaskMode("this");
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY });
+      });
+    } finally {
+      setDeleteTaskSaving(false);
+    }
+  }
+
+  function requestDeleteTask(task: Task) {
+    if (!task.recurrenceSeriesId) {
+      void deleteTask(task, "this").catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Could not delete task")
+      );
+      return;
     }
 
-    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    setDeleteTaskModalTask(task);
+    setDeleteTaskMode("this");
   }
 
   function startTitleEdit(task: Task) {
@@ -1867,15 +1943,7 @@ export function TrackerClient({
                                 )
                             )
                           }
-                          onDelete={(taskId) =>
-                            void deleteTask(taskId).catch((err: unknown) =>
-                              setError(
-                                err instanceof Error
-                                  ? err.message
-                                  : "Could not delete task"
-                              )
-                            )
-                          }
+                          onDelete={requestDeleteTask}
                         />
                       ))}
                     </div>
@@ -2006,15 +2074,7 @@ export function TrackerClient({
                                         )
                                     )
                                   }
-                                  onDelete={(taskId) =>
-                                    void deleteTask(taskId).catch((err: unknown) =>
-                                      setError(
-                                        err instanceof Error
-                                          ? err.message
-                                          : "Could not delete task"
-                                      )
-                                    )
-                                  }
+                                  onDelete={requestDeleteTask}
                                 />
                               ))}
                             </div>
@@ -2051,15 +2111,7 @@ export function TrackerClient({
                                         )
                                     )
                                   }
-                                  onDelete={(taskId) =>
-                                    void deleteTask(taskId).catch((err: unknown) =>
-                                      setError(
-                                        err instanceof Error
-                                          ? err.message
-                                          : "Could not delete task"
-                                      )
-                                    )
-                                  }
+                                  onDelete={requestDeleteTask}
                                 />
                               ))}
                             </div>
@@ -2078,6 +2130,25 @@ export function TrackerClient({
         </section>
       ) : (
         <div className="space-y-6">
+          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">View Options</h2>
+                <div className="text-sm opacity-70">
+                  Calendar indicators and task lists use the same archived filter.
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  checked={showArchived}
+                  type="checkbox"
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                />
+                <span>Show archived</span>
+              </label>
+            </div>
+          </section>
+
           <section className="rounded-md border border-white/10 bg-white/5 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Open</h2>
@@ -2154,15 +2225,7 @@ export function TrackerClient({
                           <button
                             className="rounded-md border border-white/10 px-3 py-1"
                             type="button"
-                            onClick={() =>
-                              void deleteTask(task.id).catch((err: unknown) =>
-                                setError(
-                                  err instanceof Error
-                                    ? err.message
-                                    : "Could not delete task"
-                                )
-                              )
-                            }
+                            onClick={() => requestDeleteTask(task)}
                           >
                             Delete
                           </button>
@@ -2243,15 +2306,7 @@ export function TrackerClient({
                             <button
                               className="rounded-md border border-white/10 px-3 py-1"
                               type="button"
-                              onClick={() =>
-                                void deleteTask(task.id).catch((err: unknown) =>
-                                  setError(
-                                    err instanceof Error
-                                      ? err.message
-                                      : "Could not delete task"
-                                  )
-                                )
-                              }
+                              onClick={() => requestDeleteTask(task)}
                             >
                               Delete
                             </button>
@@ -2266,6 +2321,94 @@ export function TrackerClient({
           </section>
         </div>
       )}
+
+      <Modal
+        open={Boolean(deleteTaskModalTask)}
+        title="Delete recurring task"
+        onClose={() => {
+          if (deleteTaskSaving) return;
+          setDeleteTaskModalTask(null);
+          setDeleteTaskMode("this");
+        }}
+      >
+        {deleteTaskModalTask && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void deleteTask(deleteTaskModalTask, deleteTaskMode).catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : "Could not delete task")
+              );
+            }}
+          >
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+                <input
+                  checked={deleteTaskMode === "this"}
+                  disabled={deleteTaskSaving}
+                  name="delete-mode"
+                  type="radio"
+                  value="this"
+                  onChange={() => setDeleteTaskMode("this")}
+                />
+                <div>
+                  <div className="font-medium">This task only</div>
+                </div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+                <input
+                  checked={deleteTaskMode === "future"}
+                  disabled={deleteTaskSaving}
+                  name="delete-mode"
+                  type="radio"
+                  value="future"
+                  onChange={() => setDeleteTaskMode("future")}
+                />
+                <div>
+                  <div className="font-medium">This and future tasks</div>
+                </div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                <input
+                  checked={deleteTaskMode === "series"}
+                  disabled={deleteTaskSaving}
+                  name="delete-mode"
+                  type="radio"
+                  value="series"
+                  onChange={() => setDeleteTaskMode("series")}
+                />
+                <div>
+                  <div className="font-medium text-red-200">Entire series</div>
+                </div>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-md border border-white/10 px-4 py-2 text-sm"
+                disabled={deleteTaskSaving}
+                type="button"
+                onClick={() => {
+                  setDeleteTaskModalTask(null);
+                  setDeleteTaskMode("this");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className={`rounded-md px-4 py-2 text-sm disabled:opacity-50 ${
+                  deleteTaskMode === "series"
+                    ? "bg-red-500 text-white"
+                    : "bg-white text-black"
+                }`}
+                disabled={deleteTaskSaving}
+                type="submit"
+              >
+                Delete
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <Modal
         open={newProjectOpen}

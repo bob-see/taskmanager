@@ -199,17 +199,110 @@ Notes
 ____
 
 
-PR5 — Recurring Tasks & Completion Date Tracking
+🚀 PR5 — Recurrence, Day-Accurate Progress, and Search Improvements
 
 Summary
-PR5 adds profile-scoped recurring tasks, records when tasks were completed with a dedicated `completedOn` field, and updates Done filtering to use completion dates accurately for reporting.
+PR5 adds recurring tasks (daily/weekly/monthly) with weekday selection, prevents recurrence duplication, improves day-specific progress tracking, and upgrades search to include project names and project results (active + archived).
 
 What’s Included
-	•	Task recurrence settings for daily, weekly, and monthly schedules
-	•	Automatic next-occurrence creation when a recurring task is marked done
-	•	`completedOn` tracking for reliable Done time ranges and future reporting
-	•	Tracker UI updates for creating and editing repeat rules
-	•	Done filters now use completion date ranges: Today / This Week / This Month / All
+
+🔁 Recurring Tasks
+	•	Repeat checkbox with Daily / Weekly / Monthly
+	•	Daily repeats support Mon–Sun day toggles (e.g. Mon–Fri)
+	•	Completing a recurring task automatically creates the next occurrence
+	•	Recurrence is deduped (no duplicates when toggling done/undone)
+	•	Tasks are linked by recurrenceSeriesId and protected by a uniqueness rule
+
+📊 Progress Bar (Day-Accurate)
+	•	Progress now resets per day
+	•	Completed count is based on tasks completed on that selected day
+	•	Total excludes tasks completed on earlier days (so “0/2” behaves as expected)
+
+🗓 Filters
+	•	Upcoming now includes tasks with future start dates (not just due dates)
+
+🔎 Search Enhancements
+	•	Search matches project names as well as task fields
+	•	Search shows Projects sections:
+	•	Active Projects
+	•	Archived Projects (only when “Include archived” is enabled)
+	•	Clicking a project result clears search and focuses that project (expand + scroll)
+
+Migration Notes
+	•	PR5 includes migrations for recurring task fields, repeat-days support, and recurrence series dedupe.
+	•	After pulling: run npx prisma migrate dev.
+
+_____
+
+🚀 PR6 — Recurring Task Controls & Archived Visibility
+
+Summary
+PR6 improves control and predictability when working with recurring tasks and archived projects.
+It introduces flexible delete behaviour for recurring series and ensures archived items behave consistently across calendar and task views.
+
+⸻
+
+What’s Included
+
+🗑️ Recurring Delete Options
+
+When deleting a task that belongs to a recurring series, a modal now allows:
+	•	This task only → removes only the selected occurrence
+	•	This and future tasks → removes the selected occurrence and all upcoming ones
+	•	Entire series → removes every occurrence (past, present, future)
+
+Non-recurring tasks still delete instantly without a modal.
+
+⸻
+
+🔁 Recurrence Continuity
+
+Deleting “this task only” no longer breaks the recurrence chain.
+
+If no later occurrence exists, the system automatically generates the next valid occurrence so the series continues as expected.
+
+Example:
+A Mon–Fri daily task deleted on Wednesday will still appear on Thursday.
+
+⸻
+
+🗂 Archived Visibility Consistency
+
+Archived project tasks are now filtered consistently across the app.
+
+By default, tasks under archived projects are excluded from:
+	•	Calendar indicators (day/week/month)
+	•	Progress calculations
+	•	Task lists
+
+Enabling Show archived includes them again with archived styling.
+
+⸻
+
+Behaviour Improvements
+	•	Calendar, week, and month views now use a single shared “visible task” set
+	•	Progress counts reflect only currently visible tasks
+	•	Search results respect archived filtering rules
+	•	Recurring series remain stable regardless of delete actions
+
+⸻
+
+Scope
+	•	No Prisma schema changes
+	•	API logic updated for delete modes
+	•	UI modal added for recurring deletes
+	•	Filtering logic unified across calendar + lists
+
+⸻
+
+🧭 Next Milestone — PR7: Insights & Reporting
+
+PR7 will build on the improved task data to introduce productivity insights, including:
+	•	Weekly and monthly completion summaries
+	•	Progress trends over time
+	•	Project and category performance breakdowns
+	•	Foundations for exportable reports
+
 ____
 
 
