@@ -15,4 +15,35 @@ model Task {
   completedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  startDate   DateTime @default(now())
+  category    String?
+  profileId   String   @default("default")
+  projectId   String?
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([profileId, startDate])
+  @@index([profileId, dueAt])
+  @@index([projectId])
+}
+
+model Profile {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tasks     Task[]
+  projects  Project[]
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  profileId String
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  tasks   Task[]
 }
