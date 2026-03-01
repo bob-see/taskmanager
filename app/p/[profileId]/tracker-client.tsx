@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useId,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -570,19 +569,100 @@ function DateInput(props: ComponentPropsWithoutRef<"input">) {
 
 function CategoryCombobox({
   suggestions,
+  value,
+  onChange,
+  onFocus,
+  onClick,
+  onBlur,
+  className,
+  disabled,
   ...props
-}: ComponentPropsWithoutRef<"input"> & { suggestions: string[] }) {
-  const listId = useId();
+}: Omit<ComponentPropsWithoutRef<"input">, "value" | "onChange"> & {
+  suggestions: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const normalizedValue = value.trim().toLocaleLowerCase();
+  const filteredSuggestions = suggestions.filter((suggestion) =>
+    normalizedValue === ""
+      ? true
+      : suggestion.toLocaleLowerCase().includes(normalizedValue)
+  );
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [open]);
 
   return (
-    <>
-      <input {...props} list={listId} />
-      <datalist id={listId}>
-        {suggestions.map((suggestion) => (
-          <option key={suggestion} value={suggestion} />
-        ))}
-      </datalist>
-    </>
+    <div className="relative" ref={rootRef}>
+      <div className="flex items-center gap-2">
+        <input
+          {...props}
+          className={className}
+          disabled={disabled}
+          value={value}
+          onBlur={onBlur}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
+          }}
+          onClick={(event) => {
+            if (!disabled) {
+              setOpen(true);
+            }
+            onClick?.(event);
+          }}
+          onFocus={(event) => {
+            if (!disabled) {
+              setOpen(true);
+            }
+            onFocus?.(event);
+          }}
+        />
+        <button
+          aria-expanded={open}
+          aria-label="Show category options"
+          className="rounded-md border border-white/10 px-2 py-1 text-xs"
+          disabled={disabled}
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+        >
+          ▾
+        </button>
+      </div>
+
+      {open && filteredSuggestions.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-md border border-white/10 bg-neutral-950 py-1 shadow-2xl">
+          {filteredSuggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+              type="button"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(suggestion);
+                setOpen(false);
+              }}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -933,7 +1013,7 @@ function TaskRow({
                   placeholder="Category"
                   suggestions={categorySuggestions}
                   value={editingCategoryValue}
-                  onChange={(e) => onChangeCategoryEdit(e.target.value)}
+                  onChange={onChangeCategoryEdit}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -1584,6 +1664,14 @@ export function TrackerClient({
   );
   const selectedTasks = tasks.filter((task) => selectedTaskIds.includes(task.id));
   const hasRecurringSelection = selectedTasks.some((task) => Boolean(task.recurrenceSeriesId));
+  const visibleSelectedCount = visibleDayTaskIds.filter((taskId) =>
+    selectedTaskIds.includes(taskId)
+  ).length;
+  const allVisibleSelected =
+    visibleDayTaskIds.length > 0 && visibleSelectedCount === visibleDayTaskIds.length;
+  const partiallyVisibleSelected =
+    visibleSelectedCount > 0 && visibleSelectedCount < visibleDayTaskIds.length;
+  const selectAllShownCheckboxRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (viewMode !== "day") {
@@ -1593,21 +1681,22 @@ export function TrackerClient({
   }, [viewMode]);
 
   useEffect(() => {
-  setSelectedTaskIds((prev) => {
-    const next = prev.filter((taskId) =>
-      visibleDayTaskIds.includes(taskId)
-    );
+    setSelectedTaskIds((prev) => {
+      const next = prev.filter((taskId) => visibleDayTaskIds.includes(taskId));
 
-    if (
-      next.length === prev.length &&
-      next.every((id, i) => id === prev[i])
-    ) {
-      return prev;
-    }
+      if (next.length === prev.length && next.every((id, i) => id === prev[i])) {
+        return prev;
+      }
 
-    return next;
-  });
-}, [visibleDayTaskIds]);
+      return next;
+    });
+  }, [visibleDayTaskIds]);
+
+  useEffect(() => {
+    if (!selectAllShownCheckboxRef.current) return;
+
+    selectAllShownCheckboxRef.current.indeterminate = partiallyVisibleSelected;
+  }, [partiallyVisibleSelected]);
 
   const editTask = editTaskId ? tasks.find((task) => task.id === editTaskId) ?? null : null;
   const projectOptions = projects.filter(
@@ -1906,6 +1995,10 @@ export function TrackerClient({
     });
   }
 
+  function toggleSelectAllShown() {
+    setSelectedTaskIds(allVisibleSelected ? [] : visibleDayTaskIds);
+  }
+
   async function executeBulkAction(input: {
     action: BulkAction;
     taskIds: string[];
@@ -2164,9 +2257,7 @@ export function TrackerClient({
               placeholder="Category"
               suggestions={categorySuggestions}
               value={form.category}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, category: e.target.value }))
-              }
+              onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
             />
             <select
               className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
@@ -2551,10 +2642,21 @@ export function TrackerClient({
           {selectMode && (
             <div className="mb-4 rounded-xl border border-white/10 bg-black/10 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm opacity-70">
-                  {selectedTaskIds.length === 0
-                    ? "Select tasks to apply bulk actions."
-                    : `${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} selected.`}
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm">
+                    <input
+                      ref={selectAllShownCheckboxRef}
+                      checked={allVisibleSelected}
+                      type="checkbox"
+                      onChange={toggleSelectAllShown}
+                    />
+                    <span>Select all shown</span>
+                  </label>
+                  <div className="text-sm opacity-70">
+                    {selectedTaskIds.length === 0
+                      ? "Select tasks to apply bulk actions."
+                      : `${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} selected.`}
+                  </div>
                 </div>
                 {selectedTaskIds.length > 0 && (
                   <div className="flex flex-wrap gap-2">
@@ -3367,7 +3469,7 @@ export function TrackerClient({
             placeholder="Category"
             suggestions={categorySuggestions}
             value={bulkCategoryValue}
-            onChange={(e) => setBulkCategoryValue(e.target.value)}
+            onChange={setBulkCategoryValue}
           />
           <button
             className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
@@ -3609,10 +3711,8 @@ export function TrackerClient({
               placeholder="Category"
               suggestions={categorySuggestions}
               value={editTaskForm.category}
-              onChange={(e) =>
-                setEditTaskForm((prev) =>
-                  prev ? { ...prev, category: e.target.value } : prev
-                )
+              onChange={(value) =>
+                setEditTaskForm((prev) => (prev ? { ...prev, category: value } : prev))
               }
             />
             <textarea
