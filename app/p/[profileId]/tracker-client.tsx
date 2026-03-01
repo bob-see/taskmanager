@@ -1690,6 +1690,41 @@ export function TrackerClient({
   ).length;
   const progressPercent =
     progressTotal === 0 ? 0 : Math.round((progressCompleted / progressTotal) * 100);
+  const projectProgressRows = [
+    ...visibleProjects.map((project) => {
+      const totalCount = progressTasks.filter(
+        (task) => task.projectId === project.id && countsTowardDayProgress(task, selectedDay)
+      ).length;
+      const doneCount = progressTasks.filter(
+        (task) => task.projectId === project.id && isTaskCompletedOnDate(task, selectedDay)
+      ).length;
+
+      return {
+        key: project.id,
+        label: project.name,
+        doneCount,
+        totalCount,
+        archived: project.archived,
+      };
+    }),
+    {
+      key: "unassigned",
+      label: "Unassigned",
+      doneCount: progressTasks.filter(
+        (task) => !task.projectId && isTaskCompletedOnDate(task, selectedDay)
+      ).length,
+      totalCount: progressTasks.filter(
+        (task) => !task.projectId && countsTowardDayProgress(task, selectedDay)
+      ).length,
+      archived: false,
+    },
+  ]
+    .map((row) => ({
+      ...row,
+      progressPercent:
+        row.totalCount === 0 ? 0 : Math.round((row.doneCount / row.totalCount) * 100),
+    }))
+    .filter((row) => row.totalCount > 0);
 
   const projectedOpenTasks = projectOpenTasksForView(
     visibleTasks,
@@ -2607,6 +2642,40 @@ export function TrackerClient({
               className="h-full rounded-full bg-white transition-[width]"
               style={{ width: `${progressPercent}%` }}
             />
+          </div>
+          <div className="mt-4">
+            <h3 className="text-sm font-medium opacity-80">Project Progress (Today)</h3>
+            {projectProgressRows.length === 0 ? (
+              <div className="mt-3 text-sm opacity-60">No project tasks for this day.</div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {projectProgressRows.map((row) => (
+                  <div key={row.key} className="space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{row.label}</span>
+                        {row.archived && (
+                          <span className="rounded-full border border-amber-200/20 bg-amber-100/10 px-2 py-0.5 text-xs text-amber-100/90">
+                            Archived
+                          </span>
+                        )}
+                      </div>
+                      <span className="opacity-70">
+                        {row.doneCount} / {row.totalCount}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className={`h-full rounded-full transition-[width] ${
+                          row.archived ? "bg-amber-100/70" : "bg-white"
+                        }`}
+                        style={{ width: `${row.progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}

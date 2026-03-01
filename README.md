@@ -1,11 +1,3 @@
-Great call — this is the perfect moment to clean-slate it so the README actually reflects what you’ve built (which is now far beyond a starter Next.js app).
-
-Below is a fully rewritten README you can paste straight into README.md (replace everything). It keeps your release notes style but adds a clear overview, setup, and roadmap.
-
-⸻
-
-:::writing{variant=“standard” id=“readme_full_001”}
-
 Task Manager
 
 A profile-based productivity tracker designed to manage real-world workflows across multiple contexts (e.g. Work, Personal, Projects).
@@ -265,6 +257,60 @@ Added
 	•	Consistent combobox interactions
 
 ⸻
+
+🚀 PR10 — Quick Add + Snooze/Reschedule (Day view)
+
+Summary
+
+PR10 makes the Day view much faster to use by introducing a Quick Add input for rapid task entry and Snooze/Reschedule controls (single task + bulk) to push work forward without editing each task manually.
+
+This milestone focuses on speed and flow — getting tasks in and moving them around becomes a “type → enter → keep going” experience.
+
+What’s Included
+
+⚡ Quick Add (Day view)
+A new Quick Add bar sits at the top of the Day tasks panel (above the Open filters).
+
+Supports inline tokens (order independent):
+	•	#category → sets the task category
+	•	@project → assigns the task to an existing project (matched by name)
+	•	^due:tomorrow or ^due:YYYY-MM-DD → sets due date
+
+Behaviour:
+	•	Creates the task for the selected day in the current profile
+	•	Strips recognised control tokens from the saved title
+	•	Clears after save and keeps focus for rapid entry
+
+Example:
+	•	Call plumber #DREAM @Admin ^due:tomorrow
+
+🕒 Snooze / Reschedule (startDate only)
+Adds “Snooze” actions that adjust startDate (not due date), available in:
+
+Single-task controls
+	•	Tomorrow
+	•	Next business day (skips Sat/Sun)
+	•	Next week (+7 days)
+	•	Pick date…
+
+Bulk toolbar
+	•	Same Snooze options apply to multiple selected tasks at once
+
+🔒 Recurrence-safe behaviour
+	•	Snoozing recurring tasks applies to the current occurrence only
+	•	No series rewrite, no duplication, and tasks continue on their normal repeat cycle
+
+Why This Matters
+
+PR10 dramatically reduces friction in day-to-day usage:
+	•	Adding tasks becomes instant
+	•	Rescheduling is effortless
+	•	Workflows stay clean without opening modals constantly
+
+It sets up the next phase (PR11) to focus on project progress visibility rather than mechanics.
+
+____
+
 
 🗺️ ROADMAP
 
