@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import Image from "next/image";
 import {
   useEffect,
   useRef,
@@ -59,6 +61,7 @@ type Project = {
 };
 
 type TrackerClientProps = {
+  pageMode: "tracker" | "reporting";
   profileId: string;
   profileName: string;
 };
@@ -177,6 +180,34 @@ const SNOOZE_PRESET_OPTIONS: Array<{ value: SnoozePreset; label: string }> = [
   { value: "next-business-day", label: "Next business day" },
   { value: "next-week", label: "Next week (+7 days)" },
 ];
+const cardClass = "tm-card rounded-[12px] border shadow-sm";
+const sectionCardClass = `${cardClass} p-4`;
+const inputClass =
+  "tm-input h-10 rounded-[10px] border px-3 text-sm outline-none transition-colors";
+const buttonClass =
+  "tm-button inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm";
+const primaryButtonClass =
+  "tm-button-primary inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm";
+const compactButtonClass =
+  "tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2.5 text-sm";
+const chipClass = "tm-chip rounded-full border px-2 py-0.5";
+const smallChipClass = "tm-chip rounded-full border px-2 py-0.5 text-xs";
+const tabSetClass = "tm-tabset inline-flex rounded-md border p-1 text-sm";
+const tabClass = "tm-tab rounded px-3 py-1";
+const activeTabClass = "tm-tab-active rounded px-3 py-1";
+const segmentedTabSetClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
+const segmentedTabClass = "tm-tab rounded-full px-3 py-1.5";
+const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
+const progressTrackClass = "tm-progress-track overflow-hidden rounded-full";
+const progressFillClass = "tm-progress-fill rounded-full transition-[width]";
+const modalChoiceClass = "tm-choice flex cursor-pointer items-start gap-3 rounded-lg border p-3";
+const commandBarClass =
+  "sticky top-0 z-40 -mx-4 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-bg)]/95 px-4 py-2 backdrop-blur md:-mx-6 md:px-6";
+const matrixHeaderCellClass =
+  "sticky top-0 z-10 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]";
+const matrixCellClass = "px-3 py-2.5 align-top";
+const iconButtonClass =
+  "tm-button inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-sm";
 
 function dateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -747,7 +778,7 @@ function CategoryCombobox({
         <button
           aria-expanded={open}
           aria-label="Show category options"
-          className="rounded-md border border-white/10 px-2 py-1 text-xs"
+          className="tm-button rounded-md border px-2 py-1 text-xs"
           disabled={disabled}
           type="button"
           onClick={() => setOpen((prev) => !prev)}
@@ -757,11 +788,11 @@ function CategoryCombobox({
       </div>
 
       {open && filteredSuggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-52 min-w-full overflow-auto rounded-md border border-white/10 bg-neutral-950 py-1 shadow-2xl">
+        <div className="tm-menu absolute left-0 right-0 top-full z-40 mt-1 max-h-52 min-w-full overflow-auto rounded-md border py-1 shadow-2xl">
           {filteredSuggestions.map((suggestion) => (
             <button
               key={suggestion}
-              className="block w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+              className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
               type="button"
               onMouseDown={(event) => {
                 event.preventDefault();
@@ -811,7 +842,7 @@ function SnoozeMenu({
     <div className="relative" ref={rootRef}>
       <button
         aria-expanded={open}
-        className="rounded-md border border-white/10 px-3 py-1 text-sm disabled:opacity-50"
+        className={`${buttonClass} px-3 py-1 disabled:opacity-50`}
         disabled={disabled}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -820,11 +851,11 @@ function SnoozeMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-2 min-w-48 overflow-hidden rounded-lg border border-white/10 bg-neutral-950 shadow-2xl">
+        <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-48 overflow-hidden rounded-lg border shadow-2xl">
           {SNOOZE_PRESET_OPTIONS.map((option) => (
             <button
               key={option.value}
-              className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+              className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
               type="button"
               onClick={() => {
                 setOpen(false);
@@ -835,7 +866,7 @@ function SnoozeMenu({
             </button>
           ))}
           <button
-            className="block w-full border-t border-white/10 px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+            className="block w-full border-t border-[color:var(--tm-border)] px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
             type="button"
             onClick={() => {
               setOpen(false);
@@ -907,7 +938,7 @@ function RepeatFields<T extends RepeatFormState>({
   defaultDateValue: string;
 }) {
   return (
-    <div className="space-y-3 rounded-md border border-white/10 p-3">
+    <div className={`${cardClass} space-y-3 p-3`}>
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -935,9 +966,9 @@ function RepeatFields<T extends RepeatFormState>({
       {form.repeatEnabled && (
         <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
-            <div className="opacity-70">Pattern</div>
+            <div className="tm-muted">Pattern</div>
             <select
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               value={form.repeatPattern}
               onChange={(e) => {
                 const repeatPattern = e.target.value as RepeatPattern;
@@ -967,7 +998,7 @@ function RepeatFields<T extends RepeatFormState>({
 
           {(form.repeatPattern === "daily" || form.repeatPattern === "weekly") && (
             <div className="space-y-1 text-sm md:col-span-2">
-              <div className="opacity-70">
+              <div className="tm-muted">
                 {form.repeatPattern === "daily" ? "Repeat days" : "Weekday"}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -980,9 +1011,7 @@ function RepeatFields<T extends RepeatFormState>({
                     <button
                       key={`${label}-${weekday}`}
                       className={`h-9 w-9 rounded-full border text-sm ${
-                        selected
-                          ? "border-white bg-white text-black"
-                          : "border-white/15 bg-transparent text-white/75"
+                        selected ? "tm-button-primary" : "tm-button"
                       }`}
                       type="button"
                       onClick={() =>
@@ -1020,9 +1049,9 @@ function RepeatFields<T extends RepeatFormState>({
 
           {form.repeatPattern === "monthly" && (
             <label className="space-y-1 text-sm">
-              <div className="opacity-70">Day of month</div>
+              <div className="tm-muted">Day of month</div>
               <select
-                className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                className={`w-full ${inputClass}`}
                 value={form.repeatMonthlyDay}
                 onChange={(e) =>
                   onChange((prev) => ({
@@ -1059,12 +1088,12 @@ function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-white/10 bg-neutral-950 p-5 shadow-2xl">
+    <div className="tm-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className={`${cardClass} w-full max-w-lg p-5 shadow-2xl`}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
-            className="rounded-md border border-white/10 px-3 py-1 text-sm"
+            className={buttonClass}
             type="button"
             onClick={onClose}
           >
@@ -1140,15 +1169,15 @@ function TaskRow({
 
   return (
     <div
-      className={`rounded-lg border p-3 ${
+      className={`rounded-md border p-2.5 ${
         projectArchived
           ? "border-amber-300/20 bg-amber-200/5"
-          : "border-white/10 bg-black/10"
+          : "tm-card"
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2.5">
         {selectMode && (
-          <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm">
+          <label className="tm-choice flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs">
             <input
               type="checkbox"
               checked={selected}
@@ -1161,7 +1190,7 @@ function TaskRow({
           {isEditing ? (
             <input
               autoFocus
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass} py-1.5`}
               value={editingTitleValue}
               onBlur={onCancelTitleEdit}
               onChange={(e) => onChangeTitleEdit(e.target.value)}
@@ -1179,7 +1208,7 @@ function TaskRow({
             />
           ) : (
             <button
-              className="min-w-0 text-left text-base font-medium hover:opacity-80"
+              className="min-w-0 text-left text-sm font-medium hover:opacity-80"
               type="button"
               onClick={() => onStartTitleEdit(task)}
             >
@@ -1188,24 +1217,24 @@ function TaskRow({
               </span>
             </button>
           )}
-          {task.notes && <p className="mt-2 text-sm opacity-70">{task.notes}</p>}
-          <div className="mt-3 flex flex-wrap gap-2 text-xs opacity-70">
+          {task.notes && <p className="tm-muted mt-1.5 text-xs">{task.notes}</p>}
+          <div className="tm-muted mt-2 flex flex-wrap gap-1.5 text-[11px]">
             {projectArchived && (
-              <span className="rounded-full border border-amber-200/20 bg-amber-100/10 px-2 py-1 text-amber-100/90">
+              <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
                 Archived
               </span>
             )}
-            <span className="rounded-full border border-white/10 px-2 py-1">
+            <span className={chipClass}>
               Start {toDateOnly(task.startDate)}
             </span>
-            <span className="rounded-full border border-white/10 px-2 py-1">
+            <span className={chipClass}>
               Due {toDateOnly(task.dueAt) || "—"}
             </span>
             {isEditingCategory ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 px-2 py-1">
+              <div className="tm-chip flex flex-wrap items-center gap-2 rounded-full border px-2 py-0.5">
                 <CategoryCombobox
                   autoFocus
-                  className="min-w-40 bg-transparent outline-none"
+                  className="min-w-32 bg-transparent outline-none"
                   placeholder="Category"
                   suggestions={categorySuggestions}
                   value={editingCategoryValue}
@@ -1223,14 +1252,14 @@ function TaskRow({
                   }}
                 />
                 <button
-                  className="rounded-md border border-white/10 px-2 py-0.5"
+                  className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
                   type="button"
                   onClick={onSaveCategoryEdit}
                 >
                   Save
                 </button>
                 <button
-                  className="rounded-md border border-white/10 px-2 py-0.5"
+                  className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
                   type="button"
                   onClick={onCancelCategoryEdit}
                 >
@@ -1239,7 +1268,7 @@ function TaskRow({
               </div>
             ) : (
               <button
-                className="rounded-full border border-white/10 px-2 py-1 text-left transition-colors hover:bg-white/10"
+                className="tm-chip rounded-full border px-2 py-0.5 text-left transition-colors hover:bg-white/70"
                 type="button"
                 onClick={() => onStartCategoryEdit(task)}
               >
@@ -1247,39 +1276,40 @@ function TaskRow({
               </button>
             )}
             {projectName && (
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className={chipClass}>
                 Project {projectName}
               </span>
             )}
             {repeatSummary && (
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className={chipClass}>
                 {repeatSummary}
               </span>
             )}
             {task.completedOn && (
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className={chipClass}>
                 Done {toDateOnly(task.completedOn)}
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {showSnoozeAction && (
             <SnoozeMenu
+              label="Snooze"
               disabled={snoozeDisabled}
               onPickDate={() => onPickSnoozeDate(task)}
               onSelectPreset={(preset) => onSnoozePreset(task, preset)}
             />
           )}
           <button
-            className="rounded-md border border-white/10 px-3 py-1 text-sm"
+            className={compactButtonClass}
             type="button"
             onClick={() => onOpenEditModal(task)}
           >
             Edit
           </button>
-          <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-1 text-sm">
+          <label className="tm-choice flex items-center gap-2 rounded-md border px-2.5 py-1">
             <input
               type="checkbox"
               checked={isTaskCompleted(task)}
@@ -1289,7 +1319,7 @@ function TaskRow({
             <span>{isTaskCompleted(task) ? "Done" : "Open"}</span>
           </label>
           <button
-            className="rounded-md border border-white/10 px-3 py-1 text-sm"
+            className={compactButtonClass}
             type="button"
             onClick={() => onDelete(task)}
           >
@@ -1318,10 +1348,10 @@ function ProjectSearchRow({
 
   return (
     <button
-      className={`w-full rounded-xl border p-3 text-left transition-colors hover:bg-white/10 ${
+      className={`w-full rounded-xl border p-3 text-left transition-colors hover:bg-white/70 ${
         project.archived
           ? "border-amber-300/20 bg-amber-200/5"
-          : "border-white/10 bg-black/10"
+          : "tm-card"
       }`}
       type="button"
       onClick={() => onClick(project)}
@@ -1331,12 +1361,12 @@ function ProjectSearchRow({
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-sm font-semibold">{project.name}</div>
             {project.archived && (
-              <span className="rounded-full border border-amber-200/20 bg-amber-100/10 px-2 py-0.5 text-xs text-amber-100/90">
+              <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
                 Archived
               </span>
             )}
           </div>
-          <div className="mt-1 text-xs opacity-60">{subtitle || "No project metadata"}</div>
+          <div className="tm-muted mt-1 text-xs">{subtitle || "No project metadata"}</div>
         </div>
       </div>
     </button>
@@ -1351,8 +1381,8 @@ function InsightMetric({
   value: string | number;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
-      <div className="text-xs uppercase tracking-wide opacity-50">{label}</div>
+    <div className={`${cardClass} rounded-lg px-3 py-2`}>
+      <div className="tm-muted text-xs uppercase tracking-wide">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
     </div>
   );
@@ -1366,8 +1396,8 @@ function BreakdownList({
   items: Array<{ label: string; count: number }>;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/10 p-4">
-      <div className="mb-3 text-sm font-medium opacity-80">{title}</div>
+    <div className={sectionCardClass}>
+      <div className="mb-3 text-sm font-medium">{title}</div>
       {items.length === 0 ? (
         <div className="text-sm opacity-50">No completed tasks in this period.</div>
       ) : (
@@ -1377,8 +1407,8 @@ function BreakdownList({
               key={`${title}-${item.label}`}
               className="flex items-center justify-between gap-3 text-sm"
             >
-              <span className="truncate opacity-80">{item.label}</span>
-              <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs">
+              <span className="truncate">{item.label}</span>
+              <span className={smallChipClass}>
                 {item.count}
               </span>
             </div>
@@ -1390,6 +1420,7 @@ function BreakdownList({
 }
 
 export function TrackerClient({
+  pageMode,
   profileId,
   profileName,
 }: TrackerClientProps) {
@@ -1874,6 +1905,12 @@ export function TrackerClient({
       ? `${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`
       : formatMonthTitle(selectedDate);
   const showStartChipInTables = viewMode === "week" || viewMode === "month";
+  const selectedRangeLabel =
+    viewMode === "day"
+      ? formatLongDate(selectedDay)
+      : viewMode === "week"
+        ? `${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`
+        : formatMonthTitle(selectedDate);
 
   const groupedSections = [
     ...visibleProjects.map((project) => ({
@@ -1954,6 +1991,7 @@ export function TrackerClient({
       !project.archived || showArchived || project.id === (editTask?.projectId ?? "")
   );
   const newTaskProjectOptions = assignableProjects;
+  const isReportingPage = pageMode === "reporting";
 
   function shiftSelectedDay(direction: -1 | 1) {
     const nextDate =
@@ -2461,172 +2499,356 @@ export function TrackerClient({
     }
   }
 
-  return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 p-4">
-        <div>
-          <div className="text-sm opacity-70">Current profile</div>
-          <div className="text-lg font-semibold">{currentProfileName}</div>
+  if (isReportingPage) {
+    return (
+      <section className="space-y-4 text-[color:var(--tm-text)]">
+        <div className={commandBarClass}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Link
+                className="inline-flex h-10 items-center gap-3 rounded-[10px] px-2 text-sm transition-opacity hover:opacity-100"
+                href="/"
+              >
+                <Image
+                  src="/logo.png"
+                  alt="TaskManager"
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 rounded-md"
+                />
+                <span className="tm-muted">← Back to profiles</span>
+              </Link>
+              <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
+                {currentProfileName}
+              </span>
+              <div className={tabSetClass}>
+                <Link className={tabClass} href={`/p/${profileId}`}>
+                  Tracker
+                </Link>
+                <Link className={activeTabClass} href={`/p/${profileId}/reporting`}>
+                  Reporting
+                </Link>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className={segmentedTabSetClass}>
+                {VIEW_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={
+                      viewMode === option.value
+                        ? segmentedActiveTabClass
+                        : segmentedTabClass
+                    }
+                    type="button"
+                    onClick={() => setViewMode(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <DateInput
+                className={`${inputClass} min-w-[11rem]`}
+                value={selectedDay}
+                onChange={(e) => setSelectedDay(e.target.value)}
+              />
+              <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(-1)}>
+                Prev
+              </button>
+              <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(1)}>
+                Next
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="tm-muted">Profile</span>
+                <select
+                  className={`${inputClass} min-w-[11rem]`}
+                  value={profileId}
+                  onChange={(e) => router.push(`/p/${e.target.value}/reporting`)}
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id} className="text-black">
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="tm-muted">Average</span>
+                <select
+                  className={`${inputClass} min-w-[11rem]`}
+                  value={averageBasis}
+                  onChange={(e) => setAverageBasis(e.target.value as AverageBasis)}
+                >
+                  {AVERAGE_BASIS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="text-black">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="tm-choice flex h-10 items-center gap-2 rounded-[10px] border px-3 text-sm">
+                <input
+                  checked={showArchived}
+                  type="checkbox"
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                />
+                <span>Show archived</span>
+              </label>
+            </div>
+          </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
-          <span className="opacity-70">Switch profile</span>
-          <select
-            className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-            value={profileId}
-            onChange={(e) => router.push(`/p/${e.target.value}`)}
-          >
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id} className="text-black">
-                {profile.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+        {error && (
+          <div className="rounded-md border border-red-300/60 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-md border border-white/10 bg-white/5 p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <span className="opacity-70">View</span>
-            <select
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as ViewMode)}
+        <section className={sectionCardClass}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="tm-muted text-xs font-semibold uppercase tracking-[0.18em]">
+                Reporting
+              </div>
+              <h1 className="mt-1 text-2xl font-semibold">Reporting</h1>
+              <div className="tm-muted mt-1 text-sm">Metrics, charts, and summaries.</div>
+            </div>
+            <div className="tm-muted text-sm">{selectedRangeLabel}</div>
+          </div>
+        </section>
+
+        {viewMode === "day" && (
+          <section className={sectionCardClass}>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Day Progress</h2>
+                <div className="tm-muted text-sm">{formatLongDate(selectedDay)}</div>
+              </div>
+              <div className="tm-muted text-sm">
+                {progressCompleted} / {progressTotal} completed
+              </div>
+            </div>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <InsightMetric label="Completed Today" value={dayInsights.completedToday} />
+              <InsightMetric label="Created Today" value={dayInsights.createdToday} />
+              <InsightMetric label="Open Today" value={dayInsights.openToday} />
+              <InsightMetric label="Rolled Over" value={dayInsights.rolledOver} />
+            </div>
+            <div className={`${progressTrackClass} h-3`}>
+              <div
+                key={selectedDay}
+                className={`h-full ${progressFillClass}`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </section>
+        )}
+
+        {viewMode === "week" && (
+          <>
+            <section className={sectionCardClass}>
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Week Summary</h2>
+                  <div className="tm-muted text-sm">
+                    {formatLongDate(weekStartValue)} to {formatLongDate(weekEndValue)}
+                  </div>
+                </div>
+                <div className="tm-muted text-right text-sm">Week starts Monday</div>
+              </div>
+              <div className="tm-muted mb-4 text-sm">
+                Avg/day basis:{" "}
+                {averageBasis === "calendar-days"
+                  ? `${weekInsights.basisDays} calendar days`
+                  : `${weekInsights.basisDays} work week days`}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <InsightMetric label="Completed This Week" value={weekInsights.completedCount} />
+                <InsightMetric label="Avg / Day" value={weekInsights.avgPerDay.toFixed(1)} />
+                <InsightMetric
+                  label="Best Day"
+                  value={`${weekInsights.bestDay.date.toLocaleDateString(undefined, {
+                    weekday: "short",
+                  })} (${weekInsights.bestDay.count})`}
+                />
+                <InsightMetric label="Backlog" value={weekInsights.backlogCount} />
+              </div>
+            </section>
+            <section className="grid gap-4 xl:grid-cols-2">
+              <BreakdownList title="Top Projects" items={weekBreakdowns.topProjects} />
+              <BreakdownList title="Top Categories" items={weekBreakdowns.topCategories} />
+            </section>
+          </>
+        )}
+
+        {viewMode === "month" && (
+          <>
+            <section className={sectionCardClass}>
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Month Summary</h2>
+                  <div className="tm-muted text-sm">{formatMonthTitle(selectedDate)}</div>
+                </div>
+                <div className="tm-muted text-right text-sm">Week starts Monday</div>
+              </div>
+              <div className="tm-muted mb-4 text-sm">
+                Avg/day basis:{" "}
+                {averageBasis === "calendar-days"
+                  ? `${monthInsights.basisDays} calendar days`
+                  : `${monthInsights.basisDays} work week days`}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <InsightMetric label="Completed This Month" value={monthInsights.completedCount} />
+                <InsightMetric label="Avg / Day" value={monthInsights.avgPerDay.toFixed(1)} />
+                <InsightMetric
+                  label="Best Week"
+                  value={`${monthInsights.bestWeek.start.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}-${monthInsights.bestWeek.end.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })} (${monthInsights.bestWeek.count})`}
+                />
+                <InsightMetric
+                  label="Backlog Snapshot"
+                  value={monthInsights.backlogSnapshotCount}
+                />
+              </div>
+            </section>
+            <section className="grid gap-4 xl:grid-cols-2">
+              <BreakdownList title="Top Projects" items={monthBreakdowns.topProjects} />
+              <BreakdownList title="Top Categories" items={monthBreakdowns.topCategories} />
+            </section>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-4 text-[color:var(--tm-text)]">
+      <div className={commandBarClass}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Link
+              className="inline-flex h-10 items-center gap-3 rounded-[10px] px-2 text-sm transition-opacity hover:opacity-100"
+              href="/"
             >
-              {VIEW_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value} className="text-black">
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              <Image
+                src="/logo.png"
+                alt="TaskManager"
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-md"
+              />
+              <span className="tm-muted">← Back to profiles</span>
+            </Link>
+            <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
+              {currentProfileName}
+            </span>
+            <div className={tabSetClass}>
+              <Link className={activeTabClass} href={`/p/${profileId}`}>
+                Tracker
+              </Link>
+              <Link className={tabClass} href={`/p/${profileId}/reporting`}>
+                Reporting
+              </Link>
+            </div>
+          </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <span className="opacity-70">Selected day</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={segmentedTabSetClass}>
+              {VIEW_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={
+                    viewMode === option.value
+                      ? segmentedActiveTabClass
+                      : segmentedTabClass
+                  }
+                  type="button"
+                  onClick={() => setViewMode(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             <DateInput
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`${inputClass} min-w-[11rem]`}
               value={selectedDay}
               onChange={(e) => setSelectedDay(e.target.value)}
             />
-          </label>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="rounded-md border border-white/10 px-3 py-2 text-sm"
-            type="button"
-            onClick={() => shiftSelectedDay(-1)}
-          >
-            Prev
-          </button>
-          <button
-            className="rounded-md border border-white/10 px-3 py-2 text-sm"
-            type="button"
-            onClick={() => shiftSelectedDay(1)}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <section className="rounded-md border border-white/10 bg-white/5 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Add Task</h2>
-            <div className="text-sm opacity-70">Quick capture for the current profile.</div>
-          </div>
-          <button
-            className="rounded-md border border-white/10 px-3 py-2 text-sm"
-            type="button"
-            onClick={() => setNewProjectOpen(true)}
-          >
-            + Project
-          </button>
-        </div>
-
-        <form
-          onSubmit={createTask}
-          className="space-y-3"
-        >
-          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr_auto]">
-            <input
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-              placeholder="+ Task"
-              value={form.title}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, title: e.target.value }))
-              }
-            />
-            <DateInput
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-              value={form.startDate}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, startDate: e.target.value }))
-              }
-            />
-            <DateInput
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-              value={form.dueAt}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, dueAt: e.target.value }))
-              }
-            />
-            <CategoryCombobox
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-              placeholder="Category"
-              suggestions={categorySuggestions}
-              value={form.category}
-              onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
-            />
-            <select
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
-              value={form.projectId}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, projectId: e.target.value }))
-              }
-            >
-              <option value="" className="text-black">
-                Unassigned
-              </option>
-              {newTaskProjectOptions.map((project) => (
-                <option key={project.id} value={project.id} className="text-black">
-                  {project.name}
-                  {project.archived ? " (Archived)" : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
-              disabled={saving}
-              type="submit"
-            >
-              Save
+            <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(-1)}>
+              Prev
+            </button>
+            <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(1)}>
+              Next
             </button>
           </div>
 
-          <RepeatFields
-            form={form}
-            defaultDateValue={form.startDate}
-            onChange={(updater) => setForm((prev) => updater(prev))}
-          />
-        </form>
-      </section>
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+            <div className="relative min-w-[18rem] max-w-[32rem] flex-1">
+              <input
+                className={`w-full ${inputClass} pr-9`}
+                placeholder="Search title, category, notes"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && searchQuery.trim()) {
+                    e.preventDefault();
+                    clearSearch();
+                  }
+                }}
+              />
+              {searchQuery.trim() && (
+                <button
+                  aria-label="Clear search"
+                  className="tm-muted absolute right-2 top-1/2 -translate-y-1/2 rounded-sm px-1 text-sm transition-opacity hover:opacity-100"
+                  type="button"
+                  onClick={clearSearch}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <label className="tm-choice flex h-10 items-center gap-2 rounded-[10px] border px-3 text-sm">
+              <input
+                checked={showArchived}
+                type="checkbox"
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              <span>{searchActive ? "Include archived" : "Show archived"}</span>
+            </label>
+            <button
+              className={primaryButtonClass}
+              type="button"
+              onClick={() => quickAddInputRef.current?.focus()}
+            >
+              + Task
+            </button>
+          </div>
+        </div>
+      </div>
 
       {error && (
-        <div className="rounded-md border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+        <div className="rounded-md border border-red-300/60 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {viewMode === "day" && (
-        <section className="rounded-md border border-white/10 bg-white/5 p-4">
+      {pageMode === "reporting" && viewMode === "day" && (
+        <section className={sectionCardClass}>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Day Progress</h2>
-              <div className="text-sm opacity-70">{formatLongDate(selectedDay)}</div>
+              <div className="tm-muted text-sm">{formatLongDate(selectedDay)}</div>
             </div>
-            <div className="text-sm opacity-70">
+            <div className="tm-muted text-sm">
               {progressCompleted} / {progressTotal} completed
             </div>
           </div>
@@ -2636,15 +2858,15 @@ export function TrackerClient({
             <InsightMetric label="Open Today" value={dayInsights.openToday} />
             <InsightMetric label="Rolled Over" value={dayInsights.rolledOver} />
           </div>
-          <div className="h-3 overflow-hidden rounded-full bg-white/10">
+          <div className={`${progressTrackClass} h-3`}>
             <div
               key={selectedDay}
-              className="h-full rounded-full bg-white transition-[width]"
+              className={`h-full ${progressFillClass}`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
           <div className="mt-4">
-            <h3 className="text-sm font-medium opacity-80">Project Progress (Today)</h3>
+            <h3 className="text-sm font-medium">Project Progress (Today)</h3>
             {projectProgressRows.length === 0 ? (
               <div className="mt-3 text-sm opacity-60">No project tasks for this day.</div>
             ) : (
@@ -2655,19 +2877,19 @@ export function TrackerClient({
                       <div className="flex flex-wrap items-center gap-2">
                         <span>{row.label}</span>
                         {row.archived && (
-                          <span className="rounded-full border border-amber-200/20 bg-amber-100/10 px-2 py-0.5 text-xs text-amber-100/90">
+                          <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
                             Archived
                           </span>
                         )}
                       </div>
-                      <span className="opacity-70">
+                      <span className="tm-muted">
                         {row.doneCount} / {row.totalCount}
                       </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div className={`${progressTrackClass} h-2`}>
                       <div
                         className={`h-full rounded-full transition-[width] ${
-                          row.archived ? "bg-amber-100/70" : "bg-white"
+                          row.archived ? "bg-amber-500/60" : "tm-progress-fill"
                         }`}
                         style={{ width: `${row.progressPercent}%` }}
                       />
@@ -2680,19 +2902,19 @@ export function TrackerClient({
         </section>
       )}
 
-      {viewMode === "week" && (
+      {pageMode === "reporting" && viewMode === "week" && (
         <div className="space-y-4">
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+          <section className={sectionCardClass}>
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">Week Summary</h2>
-                <div className="text-sm opacity-70">
+                <div className="tm-muted text-sm">
                   {formatLongDate(weekStartValue)} to {formatLongDate(weekEndValue)}
                 </div>
               </div>
-              <div className="text-right text-sm opacity-70">Week starts Monday</div>
+              <div className="tm-muted text-right text-sm">Week starts Monday</div>
             </div>
-            <div className="mb-4 text-sm opacity-70">
+            <div className="tm-muted mb-4 text-sm">
               Avg/day basis:{" "}
               {averageBasis === "calendar-days"
                 ? `${weekInsights.basisDays} calendar days`
@@ -2722,17 +2944,17 @@ export function TrackerClient({
             <BreakdownList title="Top Categories" items={weekBreakdowns.topCategories} />
           </section>
 
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+          <section className={sectionCardClass}>
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">Week</h2>
-                <div className="text-sm opacity-70">
+                <div className="tm-muted text-sm">
                   {formatLongDate(weekStartValue)} to {formatLongDate(weekEndValue)}
                 </div>
               </div>
-              <div className="text-right text-sm opacity-70">
+              <div className="tm-muted text-right text-sm">
                 <div>Week starts Monday</div>
-                <div className="text-xs opacity-70">
+                <div className="text-xs">
                   Legend: X active • +Y new • Z due
                 </div>
               </div>
@@ -2742,30 +2964,30 @@ export function TrackerClient({
                 {weekDays.map((day, index) => (
                   <button
                     key={day.key}
-                    className={`rounded-md border bg-black/10 p-3 text-left hover:bg-white/10 ${
+                    className={`tm-button rounded-md border p-3 text-left hover:bg-white/70 ${
                       day.openNewCount > 0
                         ? "border-emerald-300/40"
                         : day.openDueCount > 0
                           ? "border-amber-300/40"
-                          : "border-white/10"
+                          : ""
                     }`}
                     type="button"
                     onClick={() => jumpToDay(day.dateValue)}
                   >
-                    <div className="text-xs uppercase tracking-wide opacity-60">
+                    <div className="tm-muted text-xs uppercase tracking-wide">
                       {WEEKDAY_LABELS[index]}
                     </div>
                     <div className="mt-2 text-lg font-semibold">{day.date.getDate()}</div>
-                    <div className="mt-3 text-sm opacity-70">
+                    <div className="tm-muted mt-3 text-sm">
                       {day.openActiveCount} active
                     </div>
                     {day.openNewCount > 0 && (
-                      <div className="mt-1 inline-flex rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
+                      <div className="mt-1 inline-flex rounded-full border border-emerald-300/40 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
                         +{day.openNewCount} new
                       </div>
                     )}
                     {day.openDueCount > 0 && (
-                      <div className="mt-1 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
+                      <div className="mt-1 inline-flex rounded-full border border-amber-300/40 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
                         {day.openDueCount} due
                       </div>
                     )}
@@ -2777,17 +2999,17 @@ export function TrackerClient({
         </div>
       )}
 
-      {viewMode === "month" && (
+      {pageMode === "reporting" && viewMode === "month" && (
         <div className="space-y-4">
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+          <section className={sectionCardClass}>
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">Month Summary</h2>
-                <div className="text-sm opacity-70">{formatMonthTitle(selectedDate)}</div>
+                <div className="tm-muted text-sm">{formatMonthTitle(selectedDate)}</div>
               </div>
-              <div className="text-right text-sm opacity-70">Week starts Monday</div>
+              <div className="tm-muted text-right text-sm">Week starts Monday</div>
             </div>
-            <div className="mb-4 text-sm opacity-70">
+            <div className="tm-muted mb-4 text-sm">
               Avg/day basis:{" "}
               {averageBasis === "calendar-days"
                 ? `${monthInsights.basisDays} calendar days`
@@ -2824,15 +3046,15 @@ export function TrackerClient({
             <BreakdownList title="Top Categories" items={monthBreakdowns.topCategories} />
           </section>
 
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+          <section className={sectionCardClass}>
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">Month</h2>
-                <div className="text-sm opacity-70">{formatMonthTitle(selectedDate)}</div>
+                <div className="tm-muted text-sm">{formatMonthTitle(selectedDate)}</div>
               </div>
-              <div className="text-right text-sm opacity-70">
+              <div className="tm-muted text-right text-sm">
                 <div>Week starts Monday</div>
-                <div className="text-xs opacity-70">
+                <div className="text-xs">
                   Legend: X active • +Y new • Z due
                 </div>
               </div>
@@ -2842,7 +3064,7 @@ export function TrackerClient({
                 {WEEKDAY_LABELS.map((label) => (
                   <div
                     key={label}
-                    className="px-2 text-xs uppercase tracking-wide opacity-60"
+                    className="tm-muted px-2 text-xs uppercase tracking-wide"
                   >
                     {label}
                   </div>
@@ -2852,27 +3074,27 @@ export function TrackerClient({
                 {monthDays.map((day) => (
                   <button
                     key={day.key}
-                    className={`min-h-24 rounded-md border p-3 text-left hover:bg-white/10 ${
+                    className={`rounded-md border p-3 text-left hover:bg-white/70 ${
                       day.openNewCount > 0
                         ? "border-emerald-300/40"
                         : day.openDueCount > 0
                           ? "border-amber-300/40"
-                          : "border-white/10"
-                    } ${day.isCurrentMonth ? "bg-black/10" : "bg-black/5 opacity-50"}`}
+                          : "border-[color:var(--tm-border)]"
+                    } ${day.isCurrentMonth ? "tm-card" : "bg-white/40 opacity-60"}`}
                     type="button"
                     onClick={() => jumpToDay(day.dateValue)}
                   >
                     <div className="text-sm font-semibold">{day.date.getDate()}</div>
-                    <div className="mt-3 text-sm opacity-70">
+                    <div className="tm-muted mt-3 text-sm">
                       {day.openActiveCount} active
                     </div>
                     {day.openNewCount > 0 && (
-                      <div className="mt-1 inline-flex rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
+                      <div className="mt-1 inline-flex rounded-full border border-emerald-300/40 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
                         +{day.openNewCount} new
                       </div>
                     )}
                     {day.openDueCount > 0 && (
-                      <div className="mt-1 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
+                      <div className="mt-1 inline-flex rounded-full border border-amber-300/40 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
                         {day.openDueCount} due
                       </div>
                     )}
@@ -2885,55 +3107,20 @@ export function TrackerClient({
       )}
 
       {viewMode === "day" ? (
-        <section className="rounded-md border border-white/10 bg-white/5 p-4">
+        <section className={sectionCardClass}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Tasks</h2>
-              <div className="text-sm opacity-70">
+              <div className="tm-muted text-sm">
                 {searchActive
                   ? `Profile-wide search anchored to ${formatLongDate(selectedDay)}`
                   : `Grouped by project for ${formatLongDate(selectedDay)}`}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                <span className="opacity-70">Search</span>
-                <div className="relative">
-                  <input
-                    className="rounded-md border border-white/10 bg-transparent px-3 py-2 pr-9 outline-none"
-                    placeholder="Title, category, notes"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape" && searchQuery.trim()) {
-                        e.preventDefault();
-                        clearSearch();
-                      }
-                    }}
-                  />
-                  {searchQuery.trim() && (
-                    <button
-                      aria-label="Clear search"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm px-1 text-sm opacity-70 transition-opacity hover:opacity-100"
-                      type="button"
-                      onClick={clearSearch}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  checked={showArchived}
-                  type="checkbox"
-                  onChange={(e) => setShowArchived(e.target.checked)}
-                />
-                <span>{searchActive ? "Include archived" : "Show archived"}</span>
-              </label>
               <button
                 className={`rounded-md border px-3 py-2 text-sm ${
-                  selectMode ? "border-white bg-white text-black" : "border-white/10"
+                  selectMode ? "tm-button-primary" : "tm-button"
                 }`}
                 type="button"
                 onClick={() => {
@@ -2960,7 +3147,7 @@ export function TrackerClient({
           >
             <input
               ref={quickAddInputRef}
-              className="w-full rounded-md border border-white/10 bg-black/10 px-3 py-2 text-sm outline-none transition-colors placeholder:text-white/40 focus:border-white/30"
+              className={`w-full ${inputClass} text-sm transition-colors`}
               disabled={quickAddSaving}
               placeholder="Quick add... (Enter to add)"
               value={quickAddValue}
@@ -2969,7 +3156,7 @@ export function TrackerClient({
           </form>
 
           {searchActive ? (
-            <div className="mb-4 text-sm opacity-70">
+            <div className="tm-muted mb-4 text-sm">
               Found {searchResultCount} matching task
               {searchResultCount === 1 ? "" : "s"} across this profile.
             </div>
@@ -2980,9 +3167,7 @@ export function TrackerClient({
                   <button
                     key={option.value}
                     className={`rounded-md border px-3 py-1 text-sm ${
-                      openFilter === option.value
-                        ? "border-white bg-white text-black"
-                        : "border-white/10"
+                      openFilter === option.value ? "tm-button-primary" : "tm-button"
                     }`}
                     type="button"
                     onClick={() => setOpenFilter(option.value)}
@@ -2991,7 +3176,7 @@ export function TrackerClient({
                   </button>
                 ))}
                 <select
-                  className="rounded-md border border-white/10 bg-transparent px-3 py-1 text-sm outline-none"
+                  className={`${inputClass} py-1 text-sm`}
                   value={doneRange}
                   onChange={(e) => setDoneRange(e.target.value as DoneRange)}
                 >
@@ -3003,23 +3188,21 @@ export function TrackerClient({
                 </select>
               </div>
 
-              <div className="mb-4 text-sm opacity-70">
+              <div className="tm-muted mb-4 text-sm">
                 Showing {dayOpenTasks.length} open and {dayDoneTasks.length} done task
                 {(dayOpenTasks.length + dayDoneTasks.length) === 1 ? "" : "s"}.
               </div>
             </>
           )}
 
-          {selectMode && (
-            <div className="mb-4 rounded-xl border border-white/10 bg-black/10 p-3">
+          {selectMode && selectedTaskIds.length > 0 && (
+            <div className={`${cardClass} mb-4 p-3`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-col gap-2">
-                  <div className="text-sm opacity-70">
-                    {selectedTaskIds.length === 0
-                      ? "Select tasks to apply bulk actions."
-                      : `${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} selected.`}
+                  <div className="tm-muted text-sm">
+                    {selectedTaskIds.length} selected
                   </div>
-                  <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm">
+                  <label className="tm-choice flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs">
                     <input
                       ref={selectAllShownCheckboxRef}
                       checked={allVisibleSelected}
@@ -3035,7 +3218,7 @@ export function TrackerClient({
                   )}
                 </div>
                 {selectedTaskIds.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 text-xs">
                     <SnoozeMenu
                       disabled={bulkSaving}
                       label="Snooze selected"
@@ -3045,7 +3228,7 @@ export function TrackerClient({
                       onSelectPreset={snoozeSelectedTasks}
                     />
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving || hasRecurringSelection}
                       type="button"
                       onClick={() =>
@@ -3058,7 +3241,7 @@ export function TrackerClient({
                       Mark done
                     </button>
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving || hasRecurringSelection}
                       type="button"
                       onClick={() => requestBulkAction({ action: "mark-open" })}
@@ -3066,7 +3249,7 @@ export function TrackerClient({
                       Mark open
                     </button>
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving}
                       type="button"
                       onClick={() => {
@@ -3074,10 +3257,10 @@ export function TrackerClient({
                         setBulkProjectModalOpen(true);
                       }}
                     >
-                      Move to project
+                      Move
                     </button>
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving}
                       type="button"
                       onClick={() => {
@@ -3088,7 +3271,7 @@ export function TrackerClient({
                       Set category
                     </button>
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving}
                       type="button"
                       onClick={() => {
@@ -3096,10 +3279,10 @@ export function TrackerClient({
                         setBulkDateModal("startDate");
                       }}
                     >
-                      Set start date
+                      Set start
                     </button>
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving}
                       type="button"
                       onClick={() => {
@@ -3107,18 +3290,18 @@ export function TrackerClient({
                         setBulkDateModal("dueAt");
                       }}
                     >
-                      Set due date
+                      Set due
                     </button>
                     <button
-                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      className={compactButtonClass}
                       disabled={bulkSaving}
                       type="button"
                       onClick={() => requestBulkAction({ action: "clear-due-date" })}
                     >
-                      Clear due date
+                      Clear due
                     </button>
                     <button
-                      className="rounded-md border border-red-500/30 px-3 py-1 text-sm text-red-200"
+                      className="tm-button-danger rounded-md border px-2.5 py-1"
                       disabled={bulkSaving}
                       type="button"
                       onClick={() => requestBulkAction({ action: "delete" })}
@@ -3135,11 +3318,11 @@ export function TrackerClient({
             <div className="text-sm opacity-60">Loading tasks…</div>
           ) : searchActive ? (
             <div className="space-y-4">
-              <section className="rounded-xl border border-white/10 bg-black/10 p-4">
+              <section className={sectionCardClass}>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-semibold">Projects</h3>
-                    <div className="text-sm opacity-60">
+                    <div className="tm-muted text-sm">
                       {matchingActiveProjects.length +
                         (showArchived ? matchingArchivedProjects.length : 0)}{" "}
                       result
@@ -3154,7 +3337,7 @@ export function TrackerClient({
 
                 <div className="space-y-4">
                   <div>
-                    <div className="mb-2 text-sm font-medium opacity-80">Active Projects</div>
+                    <div className="mb-2 text-sm font-medium">Active Projects</div>
                     {matchingActiveProjects.length === 0 ? (
                       <div className="text-sm opacity-50">No matching active projects.</div>
                     ) : (
@@ -3172,7 +3355,7 @@ export function TrackerClient({
 
                   {showArchived && (
                     <div>
-                      <div className="mb-2 text-sm font-medium opacity-80">
+                      <div className="mb-2 text-sm font-medium">
                         Archived Projects
                       </div>
                       {matchingArchivedProjects.length === 0 ? (
@@ -3200,12 +3383,12 @@ export function TrackerClient({
               {searchSections.map((section) => (
                 <section
                   key={section.key}
-                  className="rounded-xl border border-white/10 bg-black/10 p-4"
+                  className={sectionCardClass}
                 >
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-base font-semibold">{section.label}</h3>
-                      <div className="text-sm opacity-60">
+                      <div className="tm-muted text-sm">
                         {section.tasks.length} result
                         {section.tasks.length === 1 ? "" : "s"}
                       </div>
@@ -3294,7 +3477,7 @@ export function TrackerClient({
                     className={`rounded-xl border p-4 ${
                       section.project?.archived
                         ? "border-amber-300/20 bg-amber-200/5"
-                        : "border-white/10 bg-black/10"
+                        : "tm-card"
                     }`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3302,27 +3485,27 @@ export function TrackerClient({
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-semibold">{section.label}</h3>
                           {section.project?.archived && (
-                            <span className="rounded-full border border-amber-200/20 bg-amber-100/10 px-2 py-0.5 text-xs text-amber-100/90">
+                            <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
                               Archived
                             </span>
                           )}
-                          <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs opacity-70">
+                          <span className={`${smallChipClass} opacity-100`}>
                             {section.openTasks.length} open / {section.doneTasks.length} done
                           </span>
                         </div>
-                        <div className="mt-1 text-sm opacity-60">{subtitle}</div>
+                        <div className="tm-muted mt-1 text-sm">{subtitle}</div>
                         {section.project && (
                           <div className="mt-3 max-w-md">
-                            <div className="mb-2 flex items-center justify-between text-xs opacity-70">
+                            <div className="tm-muted mb-2 flex items-center justify-between text-xs">
                               <span>Day progress</span>
                               <span>
                                 {section.progressCompleted} / {section.progressTotal}
                               </span>
                             </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                            <div className={`${progressTrackClass} h-2`}>
                               <div
                                 className={`h-full rounded-full transition-[width] ${
-                                  section.project.archived ? "bg-amber-100/70" : "bg-white"
+                                  section.project.archived ? "bg-amber-500/60" : "tm-progress-fill"
                                 }`}
                                 style={{
                                   width:
@@ -3343,14 +3526,14 @@ export function TrackerClient({
                         {section.project && (
                           <>
                             <button
-                              className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                              className={buttonClass}
                               type="button"
                               onClick={() => void toggleProjectCollapsed(section.project)}
                             >
                               {section.project.collapsed ? "Expand" : "Collapse"}
                             </button>
                             <button
-                              className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                              className={buttonClass}
                               type="button"
                               onClick={() => void toggleProjectArchived(section.project)}
                             >
@@ -3476,20 +3659,28 @@ export function TrackerClient({
           )}
         </section>
       ) : (
-        <div className="space-y-6">
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-4">
+          <section className={sectionCardClass}>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--tm-border)] pb-4">
               <div>
-                <h2 className="text-lg font-semibold">View Options</h2>
-                <div className="text-sm opacity-70">
-                  Calendar indicators and task lists use the same archived filter.
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-lg font-semibold">Open</h2>
+                  <span className="tm-muted text-sm">
+                    {openTasks.length} task{openTasks.length === 1 ? "" : "s"} for{" "}
+                    {nonDayOpenListLabel}
+                  </span>
                 </div>
+                {openFilter === "today" && (
+                  <div className="tm-muted mt-1 text-xs">
+                    Today includes tasks that start today or are due today.
+                  </div>
+                )}
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <label className="flex items-center gap-2 text-sm">
-                  <span className="opacity-70">Average basis</span>
+                  <span className="tm-muted">Average basis</span>
                   <select
-                    className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                    className={`${inputClass} min-w-[10rem]`}
                     value={averageBasis}
                     onChange={(e) => setAverageBasis(e.target.value as AverageBasis)}
                   >
@@ -3500,86 +3691,74 @@ export function TrackerClient({
                     ))}
                   </select>
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    checked={showArchived}
-                    type="checkbox"
-                    onChange={(e) => setShowArchived(e.target.checked)}
-                  />
-                  <span>Show archived</span>
-                </label>
+                <div className={segmentedTabSetClass}>
+                  {OPEN_FILTER_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      className={
+                        openFilter === option.value
+                          ? segmentedActiveTabClass
+                          : segmentedTabClass
+                      }
+                      type="button"
+                      onClick={() => setOpenFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </section>
-
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">Open</h2>
-              <div className="flex flex-wrap gap-2">
-                {OPEN_FILTER_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`rounded-md border px-3 py-1 text-sm ${
-                      openFilter === option.value
-                        ? "border-white bg-white text-black"
-                        : "border-white/10"
-                    }`}
-                    type="button"
-                    onClick={() => setOpenFilter(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-3 text-sm opacity-70">
-              Showing {openTasks.length} task{openTasks.length === 1 ? "" : "s"} for{" "}
-              {nonDayOpenListLabel}
-            </div>
-            {openFilter === "today" && (
-              <div className="mb-3 text-xs opacity-60">
-                Today includes tasks that start today or are due today.
-              </div>
-            )}
 
             {loading ? (
               <div className="text-sm opacity-60">Loading tasks…</div>
             ) : openTasks.length === 0 ? (
               <div className="text-sm opacity-60">No matching open tasks.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left opacity-70">
+              <div className="relative max-h-[520px] overflow-y-auto overflow-x-auto">
+                <table className="min-w-full table-fixed border-separate border-spacing-0 text-sm">
+                  <thead>
                     <tr>
-                      <th className="pb-2 pr-4 font-medium">Task</th>
-                      <th className="pb-2 pr-4 font-medium">Project</th>
-                      <th className="pb-2 pr-4 font-medium">Category</th>
-                      <th className="pb-2 pr-4 font-medium">Due</th>
-                      <th className="pb-2 pr-4 font-medium">Start</th>
-                      <th className="pb-2 pr-4 font-medium">Done</th>
-                      <th className="pb-2 font-medium">Delete</th>
+                      <th className={`${matrixHeaderCellClass} w-[40%]`}>Task</th>
+                      <th className={`${matrixHeaderCellClass} w-[14%]`}>Project</th>
+                      <th className={`${matrixHeaderCellClass} w-[14%]`}>Category</th>
+                      <th className={`${matrixHeaderCellClass} w-[120px]`}>Due</th>
+                      <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
+                      <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Done</th>
+                      <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Delete</th>
                     </tr>
                   </thead>
                   <tbody>
                     {openTasks.map((task) => (
-                      <tr key={task.id} className="border-t border-white/10">
-                        <td className="py-3 pr-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span>{task.title}</span>
-                            {showStartChipInTables && (
-                              <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs opacity-70">
-                                Start: {formatShortDate(toDateOnly(task.startDate))}
-                              </span>
-                            )}
+                      <tr key={task.id} className="tm-table-row border-t align-top">
+                        <td className={matrixCellClass}>
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold">{task.title}</div>
+                            <div className="tm-muted mt-1 flex flex-wrap gap-1.5 text-[11px]">
+                              {showStartChipInTables && (
+                                <span className={smallChipClass}>
+                                  Start {formatShortDate(toDateOnly(task.startDate))}
+                                </span>
+                              )}
+                              {task.projectId && projectById.get(task.projectId)?.archived && (
+                                <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
+                                  Archived
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
-                        <td className="py-3 pr-4">{getTaskProjectLabel(task, projectById)}</td>
-                        <td className="py-3 pr-4">{task.category ?? "—"}</td>
-                        <td className="py-3 pr-4">{toDateOnly(task.dueAt) || "—"}</td>
-                        <td className="py-3 pr-4">{toDateOnly(task.startDate)}</td>
-                        <td className="py-3 pr-4">
+                        <td className={`${matrixCellClass} tm-muted`}>
+                          {getTaskProjectLabel(task, projectById)}
+                        </td>
+                        <td className={`${matrixCellClass} tm-muted`}>
+                          {task.category ?? "—"}
+                        </td>
+                        <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
+                        <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
+                        <td className={`${matrixCellClass} text-center`}>
                           <input
+                            aria-label={`Mark ${task.title} done`}
                             type="checkbox"
                             checked={false}
                             disabled={completionPendingTaskIds.includes(task.id)}
@@ -3595,13 +3774,14 @@ export function TrackerClient({
                             }
                           />
                         </td>
-                        <td className="py-3">
+                        <td className={`${matrixCellClass} text-center`}>
                           <button
-                            className="rounded-md border border-white/10 px-3 py-1"
+                            aria-label={`Delete ${task.title}`}
+                            className={iconButtonClass}
                             type="button"
                             onClick={() => requestDeleteTask(task)}
                           >
-                            Delete
+                            ×
                           </button>
                         </td>
                       </tr>
@@ -3612,68 +3792,87 @@ export function TrackerClient({
             )}
           </section>
 
-          <section className="rounded-md border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">Done</h2>
-              <label className="flex items-center gap-2 text-sm">
-                <span className="opacity-70">Range</span>
+          <details
+            open
+            className="rounded-[12px] border border-[color:var(--tm-border)] bg-[rgba(246,240,230,0.68)] p-4"
+          >
+            <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 text-sm">
+              <span className="flex items-center gap-3">
+                <span className="text-base font-medium text-[color:var(--tm-text)]">Done</span>
+                <span className="tm-muted">
+                  {doneTasks.length} completed task{doneTasks.length === 1 ? "" : "s"}
+                </span>
+              </span>
+              <label
+                className="flex items-center gap-2 text-sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span className="tm-muted">Range</span>
                 <select
-                  className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                  className={`${inputClass} min-w-[10rem]`}
                   value={doneRange}
                   onChange={(e) => setDoneRange(e.target.value as DoneRange)}
                 >
                   {DONE_RANGE_OPTIONS.map((option) => (
-                    <option
-                      key={option.value}
-                      value={option.value}
-                      className="text-black"
-                    >
+                    <option key={option.value} value={option.value} className="text-black">
                       {option.label}
                     </option>
                   ))}
                 </select>
               </label>
-            </div>
+            </summary>
 
-            {loading ? (
-              <div className="text-sm opacity-60">Loading tasks…</div>
-            ) : doneTasks.length === 0 ? (
-              <div className="text-sm opacity-60">No completed tasks in this range.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left opacity-70">
-                    <tr>
-                      <th className="pb-2 pr-4 font-medium">Task</th>
-                      <th className="pb-2 pr-4 font-medium">Project</th>
-                      <th className="pb-2 pr-4 font-medium">Category</th>
-                      <th className="pb-2 pr-4 font-medium">Due</th>
-                      <th className="pb-2 pr-4 font-medium">Start</th>
-                      <th className="pb-2 pr-4 font-medium">Done On</th>
-                      <th className="pb-2 font-medium">Delete</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {doneTasks.map((task) => (
-                      <tr key={task.id} className="border-t border-white/10 opacity-80">
-                        <td className="py-3 pr-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span>{task.title}</span>
-                            {showStartChipInTables && (
-                              <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs opacity-70">
-                                Start: {formatShortDate(toDateOnly(task.startDate))}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4">{getTaskProjectLabel(task, projectById)}</td>
-                        <td className="py-3 pr-4">{task.category ?? "—"}</td>
-                        <td className="py-3 pr-4">{toDateOnly(task.dueAt) || "—"}</td>
-                        <td className="py-3 pr-4">{toDateOnly(task.startDate)}</td>
-                        <td className="py-3 pr-4">{toDateOnly(task.completedOn)}</td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
+            <div className="mt-4">
+              {loading ? (
+                <div className="text-sm opacity-60">Loading tasks…</div>
+              ) : doneTasks.length === 0 ? (
+                <div className="text-sm opacity-60">No completed tasks in this range.</div>
+              ) : (
+                <div className="relative max-h-[520px] overflow-y-auto overflow-x-auto">
+                  <table className="min-w-full table-fixed border-separate border-spacing-0 text-sm">
+                    <thead>
+                      <tr>
+                        <th className={`${matrixHeaderCellClass} w-[36%]`}>Task</th>
+                        <th className={`${matrixHeaderCellClass} w-[14%]`}>Project</th>
+                        <th className={`${matrixHeaderCellClass} w-[14%]`}>Category</th>
+                        <th className={`${matrixHeaderCellClass} w-[120px]`}>Due</th>
+                        <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
+                        <th className={`${matrixHeaderCellClass} w-[120px]`}>Done on</th>
+                        <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>
+                          Open
+                        </th>
+                        <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>
+                          Delete
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {doneTasks.map((task) => (
+                        <tr key={task.id} className="tm-table-row border-t align-top opacity-80">
+                          <td className={matrixCellClass}>
+                            <div className="min-w-0">
+                              <div className="truncate font-medium">{task.title}</div>
+                              <div className="tm-muted mt-1 flex flex-wrap gap-1.5 text-[11px]">
+                                {showStartChipInTables && (
+                                  <span className={smallChipClass}>
+                                    Start {formatShortDate(toDateOnly(task.startDate))}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className={`${matrixCellClass} tm-muted`}>
+                            {getTaskProjectLabel(task, projectById)}
+                          </td>
+                          <td className={`${matrixCellClass} tm-muted`}>
+                            {task.category ?? "—"}
+                          </td>
+                          <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
+                          <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
+                          <td className={matrixCellClass}>{toDateOnly(task.completedOn)}</td>
+                          <td className={`${matrixCellClass} text-center`}>
                             <input
+                              aria-label={`Mark ${task.title} open`}
                               type="checkbox"
                               checked
                               disabled={completionPendingTaskIds.includes(task.id)}
@@ -3688,24 +3887,106 @@ export function TrackerClient({
                                 )
                               }
                             />
+                          </td>
+                          <td className={`${matrixCellClass} text-center`}>
                             <button
-                              className="rounded-md border border-white/10 px-3 py-1"
+                              aria-label={`Delete ${task.title}`}
+                              className={iconButtonClass}
                               type="button"
                               onClick={() => requestDeleteTask(task)}
                             >
-                              Delete
+                              ×
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </details>
+
         </div>
       )}
+
+      <details className="rounded-[12px] border border-[color:var(--tm-border)] px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium">Advanced add task</summary>
+        <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="tm-muted text-sm">Expanded task fields and repeat settings.</div>
+          <button
+            className={buttonClass}
+            type="button"
+            onClick={() => setNewProjectOpen(true)}
+          >
+            + Project
+          </button>
+        </div>
+
+        <form onSubmit={createTask} className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr_auto]">
+            <input
+              className={inputClass}
+              placeholder="+ Task"
+              value={form.title}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, title: e.target.value }))
+              }
+            />
+            <DateInput
+              className={inputClass}
+              value={form.startDate}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, startDate: e.target.value }))
+              }
+            />
+            <DateInput
+              className={inputClass}
+              value={form.dueAt}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, dueAt: e.target.value }))
+              }
+            />
+            <CategoryCombobox
+              className={inputClass}
+              placeholder="Category"
+              suggestions={categorySuggestions}
+              value={form.category}
+              onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
+            />
+            <select
+              className={inputClass}
+              value={form.projectId}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, projectId: e.target.value }))
+              }
+            >
+              <option value="" className="text-black">
+                Unassigned
+              </option>
+              {newTaskProjectOptions.map((project) => (
+                <option key={project.id} value={project.id} className="text-black">
+                  {project.name}
+                  {project.archived ? " (Archived)" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
+              disabled={saving}
+              type="submit"
+            >
+              Save
+            </button>
+          </div>
+
+          <RepeatFields
+            form={form}
+            defaultDateValue={form.startDate}
+            onChange={(updater) => setForm((prev) => updater(prev))}
+          />
+        </form>
+      </details>
 
       <Modal
         open={Boolean(bulkScopeAction)}
@@ -3729,11 +4010,11 @@ export function TrackerClient({
               );
             }}
           >
-            <div className="text-sm opacity-70">
+            <div className="tm-muted text-sm">
               Recurring tasks are selected. Choose how broadly this action should apply.
             </div>
             <div className="space-y-2">
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+              <label className={modalChoiceClass}>
                 <input
                   checked={bulkActionScope === "this"}
                   disabled={bulkSaving}
@@ -3744,7 +4025,7 @@ export function TrackerClient({
                 />
                 <div className="font-medium">This task only</div>
               </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+              <label className={modalChoiceClass}>
                 <input
                   checked={bulkActionScope === "future"}
                   disabled={bulkSaving}
@@ -3755,7 +4036,7 @@ export function TrackerClient({
                 />
                 <div className="font-medium">This and future</div>
               </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-300/50 bg-red-50 p-3">
                 <input
                   checked={bulkActionScope === "series"}
                   disabled={bulkSaving}
@@ -3764,12 +4045,12 @@ export function TrackerClient({
                   value="series"
                   onChange={() => setBulkActionScope("series")}
                 />
-                <div className="font-medium text-red-200">Entire series</div>
+                <div className="font-medium text-red-700">Entire series</div>
               </label>
             </div>
             <div className="flex justify-end gap-2">
               <button
-                className="rounded-md border border-white/10 px-4 py-2 text-sm"
+                className={buttonClass}
                 disabled={bulkSaving}
                 type="button"
                 onClick={() => {
@@ -3780,7 +4061,7 @@ export function TrackerClient({
                 Cancel
               </button>
               <button
-                className="rounded-md bg-white px-4 py-2 text-sm text-black disabled:opacity-50"
+                className={`${primaryButtonClass} px-4 disabled:opacity-50`}
                 disabled={bulkSaving}
                 type="submit"
               >
@@ -3817,13 +4098,13 @@ export function TrackerClient({
           >
             <DateInput
               autoFocus
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               required
               value={singleSnoozeDateValue}
               onChange={(e) => setSingleSnoozeDateValue(e.target.value)}
             />
             <button
-              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
               disabled={bulkSaving}
               type="submit"
             >
@@ -3855,13 +4136,13 @@ export function TrackerClient({
           >
             <DateInput
               autoFocus
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               required
               value={bulkSnoozeDateValue}
               onChange={(e) => setBulkSnoozeDateValue(e.target.value)}
             />
             <button
-              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
               disabled={bulkSaving}
               type="submit"
             >
@@ -3892,9 +4173,9 @@ export function TrackerClient({
           }}
         >
           <label className="space-y-1 text-sm">
-            <div className="opacity-70">Project</div>
+            <div className="tm-muted">Project</div>
             <select
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               value={bulkProjectValue}
               onChange={(e) => setBulkProjectValue(e.target.value)}
             >
@@ -3910,7 +4191,7 @@ export function TrackerClient({
             </select>
           </label>
           <button
-            className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+            className={`${primaryButtonClass} px-4 disabled:opacity-50`}
             disabled={bulkSaving}
             type="submit"
           >
@@ -3941,14 +4222,14 @@ export function TrackerClient({
         >
           <CategoryCombobox
             autoFocus
-            className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+            className={`w-full ${inputClass}`}
             placeholder="Category"
             suggestions={categorySuggestions}
             value={bulkCategoryValue}
             onChange={setBulkCategoryValue}
           />
           <button
-            className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+            className={`${primaryButtonClass} px-4 disabled:opacity-50`}
             disabled={bulkSaving}
             type="submit"
           >
@@ -3987,13 +4268,13 @@ export function TrackerClient({
           >
             <DateInput
               autoFocus
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               required
               value={bulkDateValue}
               onChange={(e) => setBulkDateValue(e.target.value)}
             />
             <button
-              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
               disabled={bulkSaving}
               type="submit"
             >
@@ -4023,7 +4304,7 @@ export function TrackerClient({
             }}
           >
             <div className="space-y-2">
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+              <label className={modalChoiceClass}>
                 <input
                   checked={deleteTaskMode === "this"}
                   disabled={deleteTaskSaving}
@@ -4036,7 +4317,7 @@ export function TrackerClient({
                   <div className="font-medium">This task only</div>
                 </div>
               </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+              <label className={modalChoiceClass}>
                 <input
                   checked={deleteTaskMode === "future"}
                   disabled={deleteTaskSaving}
@@ -4049,7 +4330,7 @@ export function TrackerClient({
                   <div className="font-medium">This and future tasks</div>
                 </div>
               </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-300/50 bg-red-50 p-3">
                 <input
                   checked={deleteTaskMode === "series"}
                   disabled={deleteTaskSaving}
@@ -4059,13 +4340,13 @@ export function TrackerClient({
                   onChange={() => setDeleteTaskMode("series")}
                 />
                 <div>
-                  <div className="font-medium text-red-200">Entire series</div>
+                  <div className="font-medium text-red-700">Entire series</div>
                 </div>
               </label>
             </div>
             <div className="flex justify-end gap-2">
               <button
-                className="rounded-md border border-white/10 px-4 py-2 text-sm"
+                className={buttonClass}
                 disabled={deleteTaskSaving}
                 type="button"
                 onClick={() => {
@@ -4077,9 +4358,7 @@ export function TrackerClient({
               </button>
               <button
                 className={`rounded-md px-4 py-2 text-sm disabled:opacity-50 ${
-                  deleteTaskMode === "series"
-                    ? "bg-red-500 text-white"
-                    : "bg-white text-black"
+                  deleteTaskMode === "series" ? "tm-button-danger" : "tm-button-primary border"
                 }`}
                 disabled={deleteTaskSaving}
                 type="submit"
@@ -4101,7 +4380,7 @@ export function TrackerClient({
       >
         <form className="space-y-3" onSubmit={createProject}>
           <input
-            className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+            className={`w-full ${inputClass}`}
             placeholder="Project name"
             value={newProjectForm.name}
             onChange={(e) =>
@@ -4110,14 +4389,14 @@ export function TrackerClient({
           />
           <div className="grid gap-3 md:grid-cols-2">
             <DateInput
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={inputClass}
               value={newProjectForm.startDate}
               onChange={(e) =>
                 setNewProjectForm((prev) => ({ ...prev, startDate: e.target.value }))
               }
             />
             <DateInput
-              className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={inputClass}
               value={newProjectForm.dueAt}
               onChange={(e) =>
                 setNewProjectForm((prev) => ({ ...prev, dueAt: e.target.value }))
@@ -4125,7 +4404,7 @@ export function TrackerClient({
             />
           </div>
           <input
-            className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+            className={`w-full ${inputClass}`}
             placeholder="Category"
             value={newProjectForm.category}
             onChange={(e) =>
@@ -4133,7 +4412,7 @@ export function TrackerClient({
             }
           />
           <button
-            className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+            className={`${primaryButtonClass} px-4 disabled:opacity-50`}
             disabled={newProjectSaving}
             type="submit"
           >
@@ -4146,7 +4425,7 @@ export function TrackerClient({
         {editTaskForm && (
           <form className="space-y-3" onSubmit={submitTaskEditor}>
             <input
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               placeholder="Task title"
               value={editTaskForm.title}
               onChange={(e) =>
@@ -4157,9 +4436,9 @@ export function TrackerClient({
             />
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
-                <div className="opacity-70">Start date</div>
+                <div className="tm-muted">Start date</div>
                 <DateInput
-                  className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                  className={`w-full ${inputClass}`}
                   required
                   value={editTaskForm.startDate}
                   onChange={(e) =>
@@ -4170,9 +4449,9 @@ export function TrackerClient({
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <div className="opacity-70">Due date</div>
+                <div className="tm-muted">Due date</div>
                 <DateInput
-                  className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                  className={`w-full ${inputClass}`}
                   value={editTaskForm.dueAt}
                   onChange={(e) =>
                     setEditTaskForm((prev) =>
@@ -4183,7 +4462,7 @@ export function TrackerClient({
               </label>
             </div>
             <CategoryCombobox
-              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`w-full ${inputClass}`}
               placeholder="Category"
               suggestions={categorySuggestions}
               value={editTaskForm.category}
@@ -4192,7 +4471,7 @@ export function TrackerClient({
               }
             />
             <textarea
-              className="min-h-28 w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              className={`min-h-28 w-full ${inputClass}`}
               placeholder="Notes"
               value={editTaskForm.notes}
               onChange={(e) =>
@@ -4202,9 +4481,9 @@ export function TrackerClient({
               }
             />
             <label className="space-y-1 text-sm">
-              <div className="opacity-70">Project</div>
+              <div className="tm-muted">Project</div>
               <select
-                className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                className={`w-full ${inputClass}`}
                 value={editTaskForm.projectId}
                 onChange={(e) =>
                   setEditTaskForm((prev) =>
@@ -4231,7 +4510,7 @@ export function TrackerClient({
               }
             />
             <button
-              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
               disabled={editTaskSaving}
               type="submit"
             >

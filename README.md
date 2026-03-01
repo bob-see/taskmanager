@@ -366,6 +366,131 @@ It enables:
 
 ____
 
+📅 Latest Update — Tracker UX & Matrix Layout (March 2026)
+
+✅ What we shipped
+
+🎨 Visual refresh (Tracker)
+	•	Switched tracker UI from dark theme to light “retro cream” palette
+	•	Introduced softer card surfaces for better readability
+	•	Improved contrast hierarchy for:
+	•	Headers
+	•	Filters
+	•	Table rows
+	•	Overall goal: closer visual alignment to DREAM matrix clarity
+
+🧭 Navigation & structure
+	•	Added Tracker / Reporting toggle in header
+	•	Cleaner top control bar with:
+	•	View switch (Day / Week / Month)
+	•	Date navigation
+	•	Search
+	•	Archive toggle
+	•	Quick add task
+
+📊 Matrix-style task tables
+	•	Reworked Open and Done into true matrix tables:
+	•	Consistent column headers
+	•	Fixed row density
+	•	Clear task metadata (Project, Category, Dates, Status)
+
+🧷 Sticky header bug fix
+Root issue:
+Sticky <th> cells were offset to viewport (top-[73px]) causing first row to render underneath header.
+
+Fix implemented:
+	•	Each table now lives inside its own scroll container
+(relative max-h-[520px] overflow-y-auto)
+	•	Sticky headers now use top-0 so they anchor to the card, not the page
+
+Result:
+✔ First row fully visible
+✔ Header remains sticky
+✔ No spacer hacks
+✔ No changes to sorting/filtering/data logic
+
+🗂 Reporting direction set
+	•	Confirmed approach: Reporting as a dedicated page
+	•	Concept aligned with DREAM matrix summary philosophy
+
+⸻
+
+🧠 Product direction confirmed
+
+The tracker is evolving toward a personal operational matrix, not just a to-do list.
+
+Core principles going forward:
+	1.	Matrix clarity over card clutter
+	2.	Fast scanning (status + time + ownership)
+	3.	Reporting as a first-class view
+	4.	Minimal cognitive load
+
+⸻
+
+🚧 Next priorities
+
+1️⃣ Reporting page (MVP)
+
+Goal: DREAM-style summary layer
+
+Planned components:
+	•	Period selector (Day / Week / Month / Custom)
+	•	KPI strip:
+	•	Tasks created
+	•	Tasks completed
+	•	Completion rate
+	•	Overdue count
+	•	Category / Project breakdown
+	•	Trend chart (completion over time)
+
+⸻
+
+2️⃣ Drag & drop ordering (DB persisted)
+
+Allow manual prioritisation of tasks
+
+Scope:
+	•	Drag within filtered list
+	•	Persist orderIndex per profile
+	•	No effect on sort modes (date / status)
+
+⸻
+
+3️⃣ Table usability enhancements
+	•	Column visibility toggles
+	•	Density modes (Comfortable / Compact)
+	•	Keyboard navigation
+
+⸻
+
+4️⃣ Header & branding polish
+	•	Final logo placement refinement
+	•	Optional subtle elevation on sticky header
+	•	Responsive tightening for smaller screens
+
+⸻
+
+5️⃣ Data & intelligence layer (future)
+	•	Task aging indicators
+	•	Smart “focus” suggestions
+	•	Reporting export (CSV / PDF)
+
+⸻
+
+🗺 Longer-term vision
+
+The tracker becomes:
+
+A lightweight personal command centre
+sitting philosophically between a task manager and a DREAM matrix.
+
+It should answer instantly:
+	•	What needs attention?
+	•	What’s slipping?
+	•	Where is time going?
+
+____
+
 
 🗺️ ROADMAP
 

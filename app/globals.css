@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf7f0;
+  --foreground: #1f2937;
+  --tm-bg: #faf7f0;
+  --tm-card: #f6f0e6;
+  --tm-border: rgba(0, 0, 0, 0.08);
+  --tm-surface-hover: rgba(0, 0, 0, 0.03);
+  --tm-text: #1f2937;
+  --tm-muted: #6b7280;
 }
 
 @theme inline {
@@ -12,15 +18,101 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--tm-bg);
+  color: var(--tm-text);
+  font-family: var(--font-geist-sans), sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.tm-card {
+  background: var(--tm-card) !important;
+  border-color: var(--tm-border) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.tm-input {
+  background: rgba(255, 255, 255, 0.82) !important;
+  border-color: var(--tm-border) !important;
+  color: var(--tm-text) !important;
+}
+
+.tm-input::placeholder {
+  color: var(--tm-muted);
+}
+
+.tm-button {
+  background: rgba(255, 255, 255, 0.76) !important;
+  border-color: var(--tm-border) !important;
+  color: var(--tm-text) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.tm-button-primary {
+  background: #fff !important;
+  border-color: rgba(15, 23, 42, 0.16) !important;
+  color: var(--tm-text) !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.tm-button-danger {
+  background: rgba(254, 242, 242, 0.95) !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  color: #b91c1c !important;
+}
+
+.tm-chip {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: var(--tm-border) !important;
+  color: var(--tm-text) !important;
+}
+
+.tm-menu {
+  background: #fffaf2 !important;
+  border-color: var(--tm-border) !important;
+  color: var(--tm-text) !important;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+.tm-overlay {
+  background: rgba(17, 24, 39, 0.38) !important;
+}
+
+.tm-tabset {
+  background: rgba(255, 255, 255, 0.56) !important;
+  border-color: var(--tm-border) !important;
+}
+
+.tm-tab {
+  color: var(--tm-muted) !important;
+}
+
+.tm-tab-active {
+  background: #fff !important;
+  color: var(--tm-text) !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.tm-muted {
+  color: var(--tm-muted) !important;
+}
+
+.tm-progress-track {
+  background: rgba(15, 23, 42, 0.1) !important;
+}
+
+.tm-progress-fill {
+  background: #111827 !important;
+}
+
+.tm-choice {
+  background: rgba(255, 255, 255, 0.42) !important;
+  border-color: var(--tm-border) !important;
+}
+
+.tm-table-row {
+  border-color: var(--tm-border) !important;
+}
+
+.tm-table-row:hover {
+  background: var(--tm-surface-hover) !important;
 }

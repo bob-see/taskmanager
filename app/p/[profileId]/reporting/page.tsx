@@ -6,7 +6,7 @@ type Props = {
   params: Promise<{ profileId: string }>;
 };
 
-export default async function ProfilePage({ params }: Props) {
+export default async function ReportingPage({ params }: Props) {
   const { profileId } = await params;
 
   const profile = await prisma.profile.findUnique({
@@ -19,7 +19,7 @@ export default async function ProfilePage({ params }: Props) {
   return (
     <main className="mx-auto max-w-6xl px-4 pb-6 pt-3 text-[color:var(--tm-text)] md:px-6 md:pb-8 md:pt-4">
       <TrackerClient
-        pageMode="tracker"
+        pageMode="reporting"
         profileId={profile.id}
         profileName={profile.name}
       />
