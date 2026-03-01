@@ -12,10 +12,18 @@ const DEFAULT_PROFILE_ID = "default";
 const DEFAULT_PROFILE_NAME = "Default";
 
 async function main() {
+  const result = await prisma.profile.aggregate({
+    _max: { order: true },
+  });
+
   await prisma.profile.upsert({
     where: { id: DEFAULT_PROFILE_ID },
     update: { name: DEFAULT_PROFILE_NAME },
-    create: { id: DEFAULT_PROFILE_ID, name: DEFAULT_PROFILE_NAME },
+    create: {
+      id: DEFAULT_PROFILE_ID,
+      name: DEFAULT_PROFILE_NAME,
+      order: (result._max.order ?? -1) + 1,
+    },
   });
 
   await prisma.$executeRawUnsafe(

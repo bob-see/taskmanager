@@ -311,6 +311,61 @@ It sets up the next phase (PR11) to focus on project progress visibility rather 
 
 ____
 
+📊 PR11 — Project Progress Bars (Day view)
+
+Summary
+
+PR11 introduces per-project progress tracking in the Day view, giving immediate visibility into how work is distributed and progressing across projects.
+
+Alongside the existing overall day progress bar, you can now see completion status for each project (and unassigned tasks), making it easier to spot bottlenecks and understand where your effort is going.
+
+⸻
+
+✨ What’s Included
+
+📂 Project Progress (Today)
+A new section appears directly beneath the main Day progress bar:
+	•	One row per project that has tasks counted for the selected day
+	•	Includes an Unassigned row for tasks without a project
+	•	Displays:
+	•	Project name
+	•	Done / Total count
+	•	Compact progress bar
+
+Rows update instantly when:
+	•	Tasks are marked done or reopened
+	•	The selected day changes
+	•	Profiles change
+	•	Archived visibility toggles
+
+⸻
+
+🗃 Archived Behaviour
+	•	Archived projects are hidden by default
+	•	When Show archived is enabled:
+	•	Archived project rows appear
+	•	Archived styling and badge are applied
+
+⸻
+
+🧠 Why This Matters
+
+PR11 shifts the tracker from just showing what’s done today to showing where progress is happening.
+
+It enables:
+	•	Better daily planning
+	•	Faster identification of stalled projects
+	•	A foundation for future reporting and analytics
+
+⸻
+
+🔒 Scope
+	•	Day view only
+	•	No database or API changes
+	•	Built on the same task visibility logic as the main Day progress bar
+
+____
+
 
 🗺️ ROADMAP
 

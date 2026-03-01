@@ -41,6 +41,7 @@ model Task {
 model Profile {
   id            String    @id @default(cuid())
   name          String
+  order         Int
   defaultView   String?
   averageBasis  String?
   createdAt     DateTime  @default(now())
