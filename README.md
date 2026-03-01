@@ -1,458 +1,309 @@
-Taskmanager
+Great call — this is the perfect moment to clean-slate it so the README actually reflects what you’ve built (which is now far beyond a starter Next.js app).
 
-A profile-based task and project tracker designed to help manage work across multiple contexts (e.g. Personal, Work, DREAM).
-
-The app focuses on:
-	•	Daily execution
-	•	Visual planning
-	•	Progress awareness
-	•	Future productivity insights
+Below is a fully rewritten README you can paste straight into README.md (replace everything). It keeps your release notes style but adds a clear overview, setup, and roadmap.
 
 ⸻
 
-✨ Overview
+:::writing{variant=“standard” id=“readme_full_001”}
 
-Taskmanager is evolving into a lightweight personal operating system for planning, doing, and reviewing work.
+Task Manager
 
-Each Profile acts as its own workspace, allowing you to separate different areas of life while keeping a consistent workflow.
+A profile-based productivity tracker designed to manage real-world workflows across multiple contexts (e.g. Work, Personal, Projects).
 
-Key principles:
-	•	Tasks appear when they become relevant
-	•	Incomplete work rolls forward naturally
-	•	Time views provide context, not clutter
-	•	Progress is visible and measurable
+The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
 
 ⸻
 
-🚀 Getting Started
+✨ Core Concepts
 
-Run the development server:
+Profiles
+
+Each profile acts as an independent workspace with its own:
+	•	tasks
+	•	projects
+	•	categories
+	•	reporting context
+
+This keeps different areas of life or work cleanly separated.
+
+Projects
+
+Projects group related tasks and provide progress tracking and reporting context.
+Tasks can exist with or without a project.
+
+Tasks
+
+Tasks support:
+	•	start dates (when work becomes active)
+	•	optional due dates
+	•	recurring schedules (daily, weekly, custom)
+	•	categories
+	•	project assignment
+	•	completion tracking
+	•	rollover behaviour
+
+⸻
+
+🚀 Features
+
+Scheduling & Planning
+	•	Day / Week / Month calendar views
+	•	Start date driven visibility
+	•	Automatic rollover for incomplete tasks
+	•	Upcoming and overdue tracking
+
+Recurring Tasks
+	•	Daily and weekly repeat rules
+	•	Series-aware logic (only one active instance shown)
+	•	Delete options: this task / future / entire series
+	•	Accurate historical tracking
+
+Productivity Tools
+	•	Multi-select bulk actions
+	•	Inline editing
+	•	Category suggestions
+	•	Project assignment
+	•	Progress tracking
+	•	Reporting averages (Calendar vs Work week)
+
+Organisation
+	•	Category memory per profile
+	•	Project progress bars
+	•	Archive support
+	•	Search across tasks and projects
+
+⸻
+
+🧑‍💻 Tech Stack
+	•	Next.js (App Router)
+	•	React
+	•	TypeScript
+	•	Prisma
+	•	SQLite (local development)
+	•	Tailwind (UI styling)
+
+⸻
+
+🛠️ Getting Started
+
+1. Install dependencies
+
+npm install
+
+2. Run the dev server
 
 npm run dev
 
-Then open:
-
-http://localhost:3000
-
-The app will reload automatically as you edit files.
+Open http://localhost:3000 in your browser.
 
 ⸻
 
-🧱 Tech Stack
-	•	Next.js (App Router)
-	•	Prisma ORM
-	•	SQLite (local dev DB)
-	•	React
-	•	TypeScript
+🧭 Product Direction
+
+The goal of this app is to bridge the gap between simple task lists and heavy project management tools by focusing on:
+	•	clarity over complexity
+	•	real-world scheduling behaviour
+	•	fast daily workflows
+	•	meaningful insights into output
 
 ⸻
 
-🗂️ Releases
+📦 RELEASES
+
+⸻
 
 PR1 — Profiles & Projects Foundation
 
-This release establishes the multi-profile architecture that the app is built on.
-The task manager now supports separate workspaces, allowing tasks to be organised by context (e.g. Personal, Work, DREAM).
+Summary
 
-✨ What was added
-	•	Profile model (workspace container for tasks & projects)
-	•	Project model (optional grouping for tasks)
-	•	Updated Task model with:
-	•	profileId relation
-	•	optional projectId
-	•	startDate
-	•	Database migration + backfill script to create a default profile
-	•	Profiles API (/api/profiles)
-	•	Profile selector home screen
-	•	Profile page scaffold (/p/[profileId])
+Introduced multi-profile architecture and project grouping, transforming the app from a single list into a scalable workspace model.
 
-🧠 Why this matters
-
-This shifts the app from a single list to a scalable structure where:
-	•	Tasks are scoped to a profile
-	•	Future features operate per workspace
-	•	Projects can group related tasks
-
-🗄️ Migration notes
-
-Existing tasks were automatically:
-	•	assigned to the Default profile
-	•	given startDate = createdAt
+Added
+	•	Profile model
+	•	Project model
+	•	Task profile + project relations
+	•	Default profile backfill
+	•	Profile selector UI
+	•	Profiles API
 
 ⸻
 
 PR2 — Profile-Scoped Tasks & Scheduling
 
-This milestone brings the core task workflow into each profile, making the app behave like a true workspace-based task manager.
+Summary
 
-✨ What was added
-	•	Tasks displayed within /p/[profileId]
-	•	APIs scoped to profile context
-	•	Start date behaviour
-	•	Automatic rollover of incomplete tasks
-	•	Profile switcher UI
-	•	“Unassigned” grouping for tasks without a project
+Established the core task workflow with start dates and rollover behaviour.
 
-🧠 Behaviour introduced
-
-Start dates
-Tasks can be scheduled to appear on a future date without requiring a due date.
-
-Rollover logic
-If a task is not completed by the end of the day, it automatically appears the next day until completed.
-
-Profile scoping
-Each profile acts as an independent workspace with its own:
-	•	tasks
-	•	categories
-	•	projects
+Added
+	•	Profile-scoped task lists
+	•	Start date visibility rules
+	•	Automatic rollover
+	•	Profile switching
+	•	Unassigned task grouping
 
 ⸻
 
-PR3 — Calendar Views, Progress & Done Filters
+PR3 — Calendar Views & Progress Tracking
 
-PR3 evolves the tracker from a simple list into a time-aware productivity view.
+Summary
 
-🗓️ Calendar Navigation
-	•	Day / Week / Month view switcher
-	•	Week runs Monday → Sunday
-	•	Prev / Next navigation per mode
-	•	Clicking a day jumps to that date
+Introduced time-aware planning and productivity tracking.
 
-📊 Progress Tracking
-	•	Daily progress bar showing completion ratio
-	•	Updates live when tasks change
-
-📂 Open Task Filters
-	•	All Active
-	•	Today
-	•	Upcoming
-	•	Overdue
-
-Today includes tasks where:
-	•	startDate == selected day OR
-	•	dueAt == selected day
-
-✅ Done Section
-
-Completed tasks can be filtered by:
-	•	Today
-	•	This Week
-	•	This Month
-	•	All
-
-🔒 Scope
-	•	Client-side filtering
-	•	No schema changes
-	•	No API changes
+Added
+	•	Day / Week / Month views
+	•	Navigation between periods
+	•	Daily progress bar
+	•	Task filters (Today / Upcoming / Overdue)
 
 ⸻
 
 PR3.x — UX Clarity Improvements
 
-A lightweight UX polish pass to make calendar insights easier to interpret at a glance.
-
-Improvements
-	•	Today helper text (only when Today filter active)
-	•	Calendar legend for indicators:
-	•	X active
-	•	+Y new
-	•	Z due
-	•	Visual emphasis on days with changes
-
-Scope
-	•	UI only
-	•	No logic changes
-	•	No API changes
-
-⸻
-
-🚀 PR4 — Projects, Task Editing & Profile Search
-
-Summary
-PR4 introduces Projects as a first-class feature in Day view, adds a full Edit Task modal, and upgrades search to work across a profile’s timeline (Active / Upcoming / Complete), with better UX for clearing and archived visibility.
-
-What’s Included
-
-📁 Projects
-	•	Create projects even with no tasks (projects show immediately)
-	•	Collapse/expand project sections (persists after reload)
-	•	Archive projects (hidden by default; visible with “Show archived”)
-	•	Archived projects display with distinct styling
-
-📝 Task Editing
-	•	Edit Task modal supports: title, start date, due date, category, notes, project assignment
-	•	New task modal includes calendar date pickers for dates
-	•	Tasks can be assigned to a project at creation time and display under that project
-
-📊 Progress
-	•	Project-level progress bars (separate from overall/day progress)
-
-🔎 Search (Profile-scoped, time-aware)
-	•	Search scans tasks across time within the current profile (not just the selected day)
-	•	Results grouped into: Active / Upcoming / Complete
-	•	Clear “×” button appears when searching; Esc clears as well
-	•	“Include archived” shows archived results with an Archived badge + archived styling
-
-Notes
-	•	Prisma schema + migration included for project fields (run npx prisma migrate dev after pulling).
-____
-
-
-🚀 PR5 — Recurrence, Day-Accurate Progress, and Search Improvements
-
-Summary
-PR5 adds recurring tasks (daily/weekly/monthly) with weekday selection, prevents recurrence duplication, improves day-specific progress tracking, and upgrades search to include project names and project results (active + archived).
-
-What’s Included
-
-🔁 Recurring Tasks
-	•	Repeat checkbox with Daily / Weekly / Monthly
-	•	Daily repeats support Mon–Sun day toggles (e.g. Mon–Fri)
-	•	Completing a recurring task automatically creates the next occurrence
-	•	Recurrence is deduped (no duplicates when toggling done/undone)
-	•	Tasks are linked by recurrenceSeriesId and protected by a uniqueness rule
-
-📊 Progress Bar (Day-Accurate)
-	•	Progress now resets per day
-	•	Completed count is based on tasks completed on that selected day
-	•	Total excludes tasks completed on earlier days (so “0/2” behaves as expected)
-
-🗓 Filters
-	•	Upcoming now includes tasks with future start dates (not just due dates)
-
-🔎 Search Enhancements
-	•	Search matches project names as well as task fields
-	•	Search shows Projects sections:
-	•	Active Projects
-	•	Archived Projects (only when “Include archived” is enabled)
-	•	Clicking a project result clears search and focuses that project (expand + scroll)
-
-Migration Notes
-	•	PR5 includes migrations for recurring task fields, repeat-days support, and recurrence series dedupe.
-	•	After pulling: run npx prisma migrate dev.
-
-_____
-
-🚀 PR6 — Recurring Task Controls & Archived Visibility
-
-Summary
-PR6 improves control and predictability when working with recurring tasks and archived projects.
-It introduces flexible delete behaviour for recurring series and ensures archived items behave consistently across calendar and task views.
-
-⸻
-
-What’s Included
-
-🗑️ Recurring Delete Options
-
-When deleting a task that belongs to a recurring series, a modal now allows:
-	•	This task only → removes only the selected occurrence
-	•	This and future tasks → removes the selected occurrence and all upcoming ones
-	•	Entire series → removes every occurrence (past, present, future)
-
-Non-recurring tasks still delete instantly without a modal.
-
-⸻
-
-🔁 Recurrence Continuity
-
-Deleting “this task only” no longer breaks the recurrence chain.
-
-If no later occurrence exists, the system automatically generates the next valid occurrence so the series continues as expected.
-
-Example:
-A Mon–Fri daily task deleted on Wednesday will still appear on Thursday.
-
-⸻
-
-🗂 Archived Visibility Consistency
-
-Archived project tasks are now filtered consistently across the app.
-
-By default, tasks under archived projects are excluded from:
-	•	Calendar indicators (day/week/month)
-	•	Progress calculations
-	•	Task lists
-
-Enabling Show archived includes them again with archived styling.
-
-⸻
-
-Behaviour Improvements
-	•	Calendar, week, and month views now use a single shared “visible task” set
-	•	Progress counts reflect only currently visible tasks
-	•	Search results respect archived filtering rules
-	•	Recurring series remain stable regardless of delete actions
-
-⸻
-
-Scope
-	•	No Prisma schema changes
-	•	API logic updated for delete modes
-	•	UI modal added for recurring deletes
-	•	Filtering logic unified across calendar + lists
-
-⸻
-
-🧭 Next Milestone — PR7: Insights & Reporting
-
-PR7 will build on the improved task data to introduce productivity insights, including:
-	•	Weekly and monthly completion summaries
-	•	Progress trends over time
-	•	Project and category performance breakdowns
-	•	Foundations for exportable reports
-
-____
-
-
-📦 PR7 — Insights Controls & Cross-View Context
-
 Summary
 
-PR7 refines the reporting layer by making productivity insights more flexible and by adding project context to longer-range views.
-The app now better reflects real work patterns (e.g. 5-day work weeks vs full calendar weeks) and keeps project visibility consistent outside the Day view.
+Improved visual comprehension of calendar data.
+
+Added
+	•	Calendar legend
+	•	New vs active indicators
+	•	Today filter helper text
 
 ⸻
-
-✨ What’s Included
-
-📊 Average-per-Day Basis Toggle
-
-Week and Month insights now support two calculation modes:
-	•	Calendar days — averages based on all days in the period
-	•	Work week (Mon–Fri) — averages based on weekdays only
-
-This allows reporting to match the profile’s context (work vs personal) without changing underlying completion counts.
-
-⚙️ Implementation notes
-	•	UI-only state (no schema changes)
-	•	Insights helpers now calculate basisDays dynamically
-	•	Safe zero-division handling
-
-⸻
-
-🧩 Project Context in Week & Month Lists
-
-Week and Month task tables now include a Project column.
-
-Tasks display:
-	•	Project name
-	•	“Unassigned” when no project exists
-
-This keeps navigation consistent with Day view and makes longer-range planning clearer.
-
-⸻
-
-🔒 Scope
-	•	No Prisma schema changes
-	•	No API changes
-	•	Archived filtering continues to apply consistently
-	•	Insights and lists derive from the same visible task set
-
-⸻
-
-🧠 Why This Matters
-
-PR7 completes the transition from a simple tracker to a context-aware productivity tool:
-	•	Reporting can now match how you actually work
-	•	Projects remain visible beyond the daily workflow
-	•	The app is ready for persistent preferences and deeper analytics
-
-⸻
-
-🚀 Next Milestone
-
-PR8 will introduce persistent profile settings & reporting foundations, including:
-	•	Saving insights preferences per profile
-	•	Profile-level defaults (view mode, reporting basis)
-	•	Groundwork for historical analytics
-
-
-____
-
-
-🗺️ Roadmap
-
-This project is evolving from a simple task tracker into a personal productivity platform with scheduling, insights, and reporting.
-
-✅ Completed
-	•	PR1 — Foundations
-	•	PR2 — Scheduling & workspace behaviour
-	•	PR3 — Calendar + progress
-	•	PR3.x — UX clarity
-
-⸻
-
-🔜 Next Up
 
 PR4 — Task Editing & Structure
-	•	Edit task title, dates, category
-	•	Project assignment UI
+
+Summary
+
+Enhanced task manipulation and project organisation.
+
+Added
+	•	Edit task modal
 	•	Inline quick edits
-	•	Better empty states
+	•	Project assignment UI
+	•	Improved empty states
+
+⸻
 
 PR5 — Categories & Organisation
-	•	Category management
-	•	Filtering by category
-	•	Category colour coding
-	•	Category insights
 
-PR6 — Projects Expansion
-	•	Project progress tracking
-	•	Project timeline view
-	•	Archive / complete projects
-	•	Project-level reporting
+Summary
+
+Introduced category workflows and improved project context.
+
+Added
+	•	Category field across tasks
+	•	Project progress bars
+	•	Archive support
+	•	Project cards
 
 ⸻
 
-📊 Future Direction
+PR6 — Recurrence Controls & Delete Logic
 
-Insights & Reporting
-	•	Weekly productivity summaries
-	•	Completion trends
-	•	Streak tracking
+Summary
+
+Completed the recurrence lifecycle with safe editing and deletion behaviour.
+
+Added
+	•	Delete scope options (this / future / all)
+	•	Recurrence stability fixes
+	•	Archive behaviour consistency
+
+⸻
+
+PR7 — Reporting & Preferences
+
+Summary
+
+Expanded insights into productivity with flexible reporting.
+
+Added
+	•	Weekly and monthly reporting
+	•	Average calculations
+	•	Work week vs calendar options
+	•	Project column in reports
+
+⸻
+
+PR8 — Series-Aware Recurrence & Accurate Reporting
+
+Summary
+
+Resolved duplication issues by projecting recurring tasks as a single active series.
+
+Added
+	•	Series-aware open task projection
+	•	Accurate calendar counts
+	•	Correct progress calculations
+	•	Consistent behaviour across all views
+
+⸻
+
+PR9 — Day View Editing & Bulk Workflow Tools
+
+Summary
+
+Significantly improved daily workflow speed with bulk operations and smarter editing.
+
+Added
+	•	Multi-select mode
+	•	Bulk actions (complete, move, edit, delete)
+	•	Category suggestions
+	•	Inline project/date/category edits
+
+⸻
+
+PR9.x — Day View UX Polish
+
+Summary
+
+Refined selection and category behaviour for smoother interaction.
+
+Added
+	•	Select all shown
+	•	Improved category dropdown behaviour
+	•	Consistent combobox interactions
+
+⸻
+
+🗺️ ROADMAP
+
+Short Term
+	•	Editing improvements for recurring series
+	•	Keyboard shortcuts
+	•	Bulk rescheduling presets
+
+Medium Term
+	•	Productivity analytics dashboard
+	•	Streak tracking and trends
 	•	Exportable reports
 
-Automation & Smart Behaviour
-	•	Recurring tasks
-	•	Smart rollover rules
-	•	Notifications/reminders
-	•	AI-assisted planning
+Long Term
+	•	Sync / cloud persistence
+	•	Mobile optimisation
+	•	Collaboration features
 
 ⸻
 
-🎯 Vision
+📌 Status
 
-A lightweight personal operating system for work and life:
+The app is now functionally stable as a personal productivity engine with reliable recurrence behaviour and reporting accuracy.
 
-Plan → Execute → Reflect
-
-Where:
-	•	Planning happens through calendar context
-	•	Execution happens through focused daily lists
-	•	Reflection happens through progress insights
+Future milestones will focus on insights and workflow intelligence rather than core mechanics.
 
 ⸻
 
-📦 Deployment
+🤝 Contributing
 
-The app can be deployed easily on Vercel:
-
-https://vercel.com/new
+This project is currently in active development.
+Architecture and behaviour may evolve as new workflows are tested.
 
 ⸻
 
-🧪 Local Development Notes
+📄 License
 
-If you need a fresh database:
-
-bash
-
-npx prisma migrate dev
-npm run dev
-
-🙌 Contributing (Future)
-
-Once the core workflow stabilises, contribution guidelines will be added.
+Private project – not licensed for distribution.
 :::
+
+⸻
+

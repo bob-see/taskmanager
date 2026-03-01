@@ -127,6 +127,15 @@ type SearchSection = {
   tasks: Task[];
 };
 
+type QuickAddParseResult = {
+  title: string;
+  category: string | null;
+  projectId: string | null;
+  dueAt: string | null;
+};
+
+type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
+
 const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
@@ -153,6 +162,7 @@ const AVERAGE_BASIS_OPTIONS: Array<{ value: AverageBasis; label: string }> = [
 ];
 const VALID_AVERAGE_BASES = new Set<AverageBasis>(["calendar-days", "work-week"]);
 const PREFERENCE_SAVE_DEBOUNCE_MS = 400;
+const DATE_ONLY_INPUT_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_TOGGLE_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -162,6 +172,11 @@ const REPEAT_PATTERN_OPTIONS: Array<{ value: RepeatPattern; label: string }> = [
   { value: "monthly", label: "Monthly" },
 ];
 const ALL_REPEAT_DAYS_MASK = 0b1111111;
+const SNOOZE_PRESET_OPTIONS: Array<{ value: SnoozePreset; label: string }> = [
+  { value: "tomorrow", label: "Tomorrow" },
+  { value: "next-business-day", label: "Next business day" },
+  { value: "next-week", label: "Next week (+7 days)" },
+];
 
 function dateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -215,6 +230,101 @@ function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
   return next;
+}
+
+function maxDateValue(left: string, right: string) {
+  return left >= right ? left : right;
+}
+
+function getNextBusinessDay(value: string) {
+  let next = addDays(parseDateOnly(value), 1);
+
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next = addDays(next, 1);
+  }
+
+  return dateInputValue(next);
+}
+
+function getSnoozeDateValue(baseDateValue: string, preset: SnoozePreset) {
+  if (preset === "tomorrow") {
+    return dateInputValue(addDays(parseDateOnly(baseDateValue), 1));
+  }
+
+  if (preset === "next-business-day") {
+    return getNextBusinessDay(baseDateValue);
+  }
+
+  return dateInputValue(addDays(parseDateOnly(baseDateValue), 7));
+}
+
+function resolveQuickAddProjectId(projects: Project[], projectToken: string) {
+  const normalizedToken = projectToken.trim().toLocaleLowerCase();
+  if (!normalizedToken) {
+    return null;
+  }
+
+  const exactMatch = projects.find(
+    (project) => project.name.trim().toLocaleLowerCase() === normalizedToken
+  );
+  if (exactMatch) {
+    return exactMatch.id;
+  }
+
+  const startsWithMatch = projects.find((project) =>
+    project.name.trim().toLocaleLowerCase().startsWith(normalizedToken)
+  );
+  return startsWithMatch?.id ?? null;
+}
+
+function parseQuickAddInput(
+  value: string,
+  selectedDay: string,
+  projects: Project[]
+): QuickAddParseResult {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const titleParts: string[] = [];
+  let category: string | null = null;
+  let projectId: string | null = null;
+  let dueAt: string | null = null;
+
+  for (const part of parts) {
+    if (part.startsWith("#")) {
+      category = part.slice(1).trim() || null;
+      continue;
+    }
+
+    if (part.startsWith("@")) {
+      projectId = resolveQuickAddProjectId(projects, part.slice(1));
+      continue;
+    }
+
+    if (part.startsWith("^due:")) {
+      const dueToken = part.slice(5).trim().toLocaleLowerCase();
+
+      if (dueToken === "tomorrow") {
+        dueAt = dateInputValue(addDays(parseDateOnly(selectedDay), 1));
+      } else if (DATE_ONLY_INPUT_RE.test(dueToken)) {
+        dueAt = dueToken;
+      } else {
+        dueAt = null;
+      }
+      continue;
+    }
+
+    if (part.startsWith("^")) {
+      continue;
+    }
+
+    titleParts.push(part);
+  }
+
+  return {
+    title: titleParts.join(" ").trim(),
+    category,
+    projectId,
+    dueAt,
+  };
 }
 
 function addMonthsKeepingDay(date: Date, amount: number) {
@@ -607,14 +717,16 @@ function CategoryCombobox({
   }, [open]);
 
   return (
-    <div className="relative" ref={rootRef}>
-      <div className="flex items-center gap-2">
+    <div className="relative min-w-0" ref={rootRef}>
+      <div className="flex min-w-0 items-center gap-2">
         <input
           {...props}
           className={className}
           disabled={disabled}
           value={value}
-          onBlur={onBlur}
+          onBlur={(event) => {
+            onBlur?.(event);
+          }}
           onChange={(event) => {
             onChange(event.target.value);
             setOpen(true);
@@ -645,7 +757,7 @@ function CategoryCombobox({
       </div>
 
       {open && filteredSuggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-md border border-white/10 bg-neutral-950 py-1 shadow-2xl">
+        <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-52 min-w-full overflow-auto rounded-md border border-white/10 bg-neutral-950 py-1 shadow-2xl">
           {filteredSuggestions.map((suggestion) => (
             <button
               key={suggestion}
@@ -660,6 +772,78 @@ function CategoryCombobox({
               {suggestion}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SnoozeMenu({
+  label = "Snooze",
+  disabled = false,
+  onSelectPreset,
+  onPickDate,
+}: {
+  label?: string;
+  disabled?: boolean;
+  onSelectPreset: (preset: SnoozePreset) => void;
+  onPickDate: () => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        className="rounded-md border border-white/10 px-3 py-1 text-sm disabled:opacity-50"
+        disabled={disabled}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        {label}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-40 mt-2 min-w-48 overflow-hidden rounded-lg border border-white/10 bg-neutral-950 shadow-2xl">
+          {SNOOZE_PRESET_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onSelectPreset(option.value);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+          <button
+            className="block w-full border-t border-white/10 px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onPickDate();
+            }}
+          >
+            Pick date...
+          </button>
         </div>
       )}
     </div>
@@ -707,6 +891,10 @@ function createEditTaskForm(task: Task): EditTaskFormState {
     repeatWeeklyDay,
     repeatMonthlyDay: task.repeatMonthlyDay ?? getDayOfMonth(startDate),
   };
+}
+
+function isRecurringTask(task: Task) {
+  return Boolean(task.recurrenceSeriesId || task.repeatEnabled || task.repeatPattern);
 }
 
 function RepeatFields<T extends RepeatFormState>({
@@ -894,6 +1082,8 @@ function TaskRow({
   projectName,
   projectArchived = false,
   completionPending = false,
+  snoozeDisabled = false,
+  showSnoozeAction = false,
   selectMode = false,
   selected = false,
   editingTitleTaskId,
@@ -912,12 +1102,16 @@ function TaskRow({
   onSaveCategoryEdit,
   onOpenEditModal,
   onToggleCompleted,
+  onSnoozePreset,
+  onPickSnoozeDate,
   onDelete,
 }: {
   task: Task;
   projectName?: string;
   projectArchived?: boolean;
   completionPending?: boolean;
+  snoozeDisabled?: boolean;
+  showSnoozeAction?: boolean;
   selectMode?: boolean;
   selected?: boolean;
   editingTitleTaskId: string | null;
@@ -936,6 +1130,8 @@ function TaskRow({
   onSaveCategoryEdit: () => void;
   onOpenEditModal: (task: Task) => void;
   onToggleCompleted: (task: Task, completed: boolean) => void;
+  onSnoozePreset: (task: Task, preset: SnoozePreset) => void;
+  onPickSnoozeDate: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
   const isEditing = editingTitleTaskId === task.id;
@@ -1069,6 +1265,13 @@ function TaskRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {showSnoozeAction && (
+            <SnoozeMenu
+              disabled={snoozeDisabled}
+              onPickDate={() => onPickSnoozeDate(task)}
+              onSelectPreset={(preset) => onSnoozePreset(task, preset)}
+            />
+          )}
           <button
             className="rounded-md border border-white/10 px-3 py-1 text-sm"
             type="button"
@@ -1193,6 +1396,7 @@ export function TrackerClient({
   const router = useRouter();
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
+  const quickAddInputRef = useRef<HTMLInputElement | null>(null);
   const lastSavedPreferencesRef = useRef<{
     profileId: string;
     defaultView: ViewMode;
@@ -1242,6 +1446,11 @@ export function TrackerClient({
   const [bulkProjectValue, setBulkProjectValue] = useState("");
   const [bulkCategoryValue, setBulkCategoryValue] = useState("");
   const [bulkDateValue, setBulkDateValue] = useState("");
+  const [quickAddValue, setQuickAddValue] = useState("");
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+  const [singleSnoozeTask, setSingleSnoozeTask] = useState<Task | null>(null);
+  const [singleSnoozeDateValue, setSingleSnoozeDateValue] = useState("");
+  const [bulkSnoozeDateValue, setBulkSnoozeDateValue] = useState("");
   const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
   const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
     createEmptyProjectForm
@@ -1322,6 +1531,11 @@ export function TrackerClient({
     setBulkProjectValue("");
     setBulkCategoryValue("");
     setBulkDateValue("");
+    setQuickAddValue("");
+    setQuickAddSaving(false);
+    setSingleSnoozeTask(null);
+    setSingleSnoozeDateValue("");
+    setBulkSnoozeDateValue("");
     preferenceSyncProfileIdRef.current = null;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
@@ -1663,7 +1877,8 @@ export function TrackerClient({
     )
   );
   const selectedTasks = tasks.filter((task) => selectedTaskIds.includes(task.id));
-  const hasRecurringSelection = selectedTasks.some((task) => Boolean(task.recurrenceSeriesId));
+  const recurringSelectedTasks = selectedTasks.filter((task) => isRecurringTask(task));
+  const hasRecurringSelection = recurringSelectedTasks.length > 0;
   const visibleSelectedCount = visibleDayTaskIds.filter((taskId) =>
     selectedTaskIds.includes(taskId)
   ).length;
@@ -1768,6 +1983,48 @@ export function TrackerClient({
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitQuickAdd() {
+    if (quickAddSaving) return;
+
+    const parsed = parseQuickAddInput(quickAddValue, selectedDay, projects);
+    if (!parsed.title) {
+      return;
+    }
+
+    setQuickAddSaving(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/p/${profileId}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: parsed.title,
+          startDate: selectedDay,
+          dueAt: parsed.dueAt,
+          category: parsed.category,
+          projectId: parsed.projectId,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Could not create task");
+      }
+
+      const task = (await res.json()) as Task;
+      setTasks((prev) => [task, ...prev]);
+      setQuickAddValue("");
+      requestAnimationFrame(() => {
+        quickAddInputRef.current?.focus();
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create task");
+    } finally {
+      setQuickAddSaving(false);
     }
   }
 
@@ -2028,7 +2285,6 @@ export function TrackerClient({
       }
 
       await refreshData();
-      setSelectedTaskIds([]);
       setBulkActionScope("this");
       setBulkScopeAction(null);
       setBulkProjectModalOpen(false);
@@ -2037,6 +2293,9 @@ export function TrackerClient({
       setBulkProjectValue("");
       setBulkCategoryValue("");
       setBulkDateValue("");
+      setSingleSnoozeTask(null);
+      setSingleSnoozeDateValue("");
+      setBulkSnoozeDateValue("");
       requestAnimationFrame(() => {
         window.scrollTo({ top: scrollY });
       });
@@ -2060,12 +2319,7 @@ export function TrackerClient({
       taskIds: selectedTaskIds,
     };
 
-    if (
-      hasRecurringSelection &&
-      (input.action === "mark-done" ||
-        input.action === "mark-open" ||
-        input.action === "delete")
-    ) {
+    if (input.action === "delete" && hasRecurringSelection) {
       setBulkScopeAction(request);
       setBulkActionScope("this");
       return;
@@ -2074,6 +2328,37 @@ export function TrackerClient({
     void executeBulkAction({ ...request, scope: "this" }).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : "Could not run bulk action")
     );
+  }
+
+  function getTaskSnoozeBaseDateValue(task: Task) {
+    return maxDateValue(toDateOnly(task.startDate), selectedDay);
+  }
+
+  function snoozeTask(task: Task, preset: SnoozePreset) {
+    const startDate = getSnoozeDateValue(getTaskSnoozeBaseDateValue(task), preset);
+
+    void executeBulkAction({
+      action: "set-start-date",
+      taskIds: [task.id],
+      scope: "this",
+      startDate,
+    }).catch((err: unknown) =>
+      setError(err instanceof Error ? err.message : "Could not snooze task")
+    );
+  }
+
+  function openSingleTaskSnoozeDate(task: Task) {
+    setSingleSnoozeTask(task);
+    setSingleSnoozeDateValue(getSnoozeDateValue(getTaskSnoozeBaseDateValue(task), "tomorrow"));
+  }
+
+  function snoozeSelectedTasks(preset: SnoozePreset) {
+    if (selectedTaskIds.length === 0) return;
+
+    requestBulkAction({
+      action: "set-start-date",
+      startDate: getSnoozeDateValue(selectedDay, preset),
+    });
   }
 
   function openTaskEditor(task: Task) {
@@ -2592,10 +2877,27 @@ export function TrackerClient({
                   });
                 }}
               >
-                {selectMode ? "Done Selecting" : "Select"}
+                {selectMode ? "Done selecting" : "Select"}
               </button>
             </div>
           </div>
+
+          <form
+            className="mb-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitQuickAdd();
+            }}
+          >
+            <input
+              ref={quickAddInputRef}
+              className="w-full rounded-md border border-white/10 bg-black/10 px-3 py-2 text-sm outline-none transition-colors placeholder:text-white/40 focus:border-white/30"
+              disabled={quickAddSaving}
+              placeholder="Quick add... (Enter to add)"
+              value={quickAddValue}
+              onChange={(e) => setQuickAddValue(e.target.value)}
+            />
+          </form>
 
           {searchActive ? (
             <div className="mb-4 text-sm opacity-70">
@@ -2641,8 +2943,13 @@ export function TrackerClient({
 
           {selectMode && (
             <div className="mb-4 rounded-xl border border-white/10 bg-black/10 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-2">
+                  <div className="text-sm opacity-70">
+                    {selectedTaskIds.length === 0
+                      ? "Select tasks to apply bulk actions."
+                      : `${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} selected.`}
+                  </div>
                   <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm">
                     <input
                       ref={selectAllShownCheckboxRef}
@@ -2652,17 +2959,25 @@ export function TrackerClient({
                     />
                     <span>Select all shown</span>
                   </label>
-                  <div className="text-sm opacity-70">
-                    {selectedTaskIds.length === 0
-                      ? "Select tasks to apply bulk actions."
-                      : `${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} selected.`}
-                  </div>
+                  {hasRecurringSelection && (
+                    <div className="text-xs text-amber-200/90">
+                      Bulk done/open not available for repeating tasks
+                    </div>
+                  )}
                 </div>
                 {selectedTaskIds.length > 0 && (
                   <div className="flex flex-wrap gap-2">
+                    <SnoozeMenu
+                      disabled={bulkSaving}
+                      label="Snooze selected"
+                      onPickDate={() =>
+                        setBulkSnoozeDateValue(getSnoozeDateValue(selectedDay, "tomorrow"))
+                      }
+                      onSelectPreset={snoozeSelectedTasks}
+                    />
                     <button
                       className="rounded-md border border-white/10 px-3 py-1 text-sm"
-                      disabled={bulkSaving}
+                      disabled={bulkSaving || hasRecurringSelection}
                       type="button"
                       onClick={() =>
                         requestBulkAction({
@@ -2675,7 +2990,7 @@ export function TrackerClient({
                     </button>
                     <button
                       className="rounded-md border border-white/10 px-3 py-1 text-sm"
-                      disabled={bulkSaving}
+                      disabled={bulkSaving || hasRecurringSelection}
                       type="button"
                       onClick={() => requestBulkAction({ action: "mark-open" })}
                     >
@@ -2874,6 +3189,10 @@ export function TrackerClient({
                                 )
                             )
                           }
+                          onSnoozePreset={snoozeTask}
+                          onPickSnoozeDate={openSingleTaskSnoozeDate}
+                          showSnoozeAction={!isTaskCompleted(task)}
+                          snoozeDisabled={bulkSaving}
                           onDelete={requestDeleteTask}
                         />
                       ))}
@@ -3015,6 +3334,10 @@ export function TrackerClient({
                                         )
                                     )
                                   }
+                                  onSnoozePreset={snoozeTask}
+                                  onPickSnoozeDate={openSingleTaskSnoozeDate}
+                                  showSnoozeAction
+                                  snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
                                 />
                               ))}
@@ -3062,6 +3385,10 @@ export function TrackerClient({
                                         )
                                     )
                                   }
+                                  onSnoozePreset={snoozeTask}
+                                  onPickSnoozeDate={openSingleTaskSnoozeDate}
+                                  showSnoozeAction={false}
+                                  snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
                                 />
                               ))}
@@ -3391,6 +3718,86 @@ export function TrackerClient({
                 Continue
               </button>
             </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(singleSnoozeTask)}
+        title="Snooze task"
+        onClose={() => {
+          if (bulkSaving) return;
+          setSingleSnoozeTask(null);
+          setSingleSnoozeDateValue("");
+        }}
+      >
+        {singleSnoozeTask && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void executeBulkAction({
+                action: "set-start-date",
+                taskIds: [singleSnoozeTask.id],
+                scope: "this",
+                startDate: singleSnoozeDateValue,
+              }).catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : "Could not snooze task")
+              );
+            }}
+          >
+            <DateInput
+              autoFocus
+              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              required
+              value={singleSnoozeDateValue}
+              onChange={(e) => setSingleSnoozeDateValue(e.target.value)}
+            />
+            <button
+              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              disabled={bulkSaving}
+              type="submit"
+            >
+              Apply
+            </button>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={bulkSnoozeDateValue !== ""}
+        title="Snooze selected tasks"
+        onClose={() => {
+          if (bulkSaving) return;
+          setBulkSnoozeDateValue("");
+        }}
+      >
+        {bulkSnoozeDateValue !== "" && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setBulkSnoozeDateValue("");
+              requestBulkAction({
+                action: "set-start-date",
+                startDate: bulkSnoozeDateValue,
+              });
+            }}
+          >
+            <DateInput
+              autoFocus
+              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              required
+              value={bulkSnoozeDateValue}
+              onChange={(e) => setBulkSnoozeDateValue(e.target.value)}
+            />
+            <button
+              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              disabled={bulkSaving}
+              type="submit"
+            >
+              Apply
+            </button>
           </form>
         )}
       </Modal>
