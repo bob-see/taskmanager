@@ -306,6 +306,72 @@ PR7 will build on the improved task data to introduce productivity insights, inc
 ____
 
 
+📦 PR7 — Insights Controls & Cross-View Context
+
+Summary
+
+PR7 refines the reporting layer by making productivity insights more flexible and by adding project context to longer-range views.
+The app now better reflects real work patterns (e.g. 5-day work weeks vs full calendar weeks) and keeps project visibility consistent outside the Day view.
+
+⸻
+
+✨ What’s Included
+
+📊 Average-per-Day Basis Toggle
+
+Week and Month insights now support two calculation modes:
+	•	Calendar days — averages based on all days in the period
+	•	Work week (Mon–Fri) — averages based on weekdays only
+
+This allows reporting to match the profile’s context (work vs personal) without changing underlying completion counts.
+
+⚙️ Implementation notes
+	•	UI-only state (no schema changes)
+	•	Insights helpers now calculate basisDays dynamically
+	•	Safe zero-division handling
+
+⸻
+
+🧩 Project Context in Week & Month Lists
+
+Week and Month task tables now include a Project column.
+
+Tasks display:
+	•	Project name
+	•	“Unassigned” when no project exists
+
+This keeps navigation consistent with Day view and makes longer-range planning clearer.
+
+⸻
+
+🔒 Scope
+	•	No Prisma schema changes
+	•	No API changes
+	•	Archived filtering continues to apply consistently
+	•	Insights and lists derive from the same visible task set
+
+⸻
+
+🧠 Why This Matters
+
+PR7 completes the transition from a simple tracker to a context-aware productivity tool:
+	•	Reporting can now match how you actually work
+	•	Projects remain visible beyond the daily workflow
+	•	The app is ready for persistent preferences and deeper analytics
+
+⸻
+
+🚀 Next Milestone
+
+PR8 will introduce persistent profile settings & reporting foundations, including:
+	•	Saving insights preferences per profile
+	•	Profile-level defaults (view mode, reporting basis)
+	•	Groundwork for historical analytics
+
+
+____
+
+
 🗺️ Roadmap
 
 This project is evolving from a simple task tracker into a personal productivity platform with scheduling, insights, and reporting.

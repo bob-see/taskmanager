@@ -3,6 +3,14 @@ import { prisma } from "@/app/lib/prisma";
 export async function GET() {
   const profiles = await prisma.profile.findMany({
     orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      defaultView: true,
+      averageBasis: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 
   return Response.json(profiles);

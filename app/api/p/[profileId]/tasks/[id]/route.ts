@@ -1,9 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import {
+  addDays,
   ensureProfile,
   ensureProject,
-  getRecurringSeriesId,
   nextOccurrenceDate,
   normalizeRepeatSettings,
   parseOptionalBooleanInput,
@@ -11,6 +11,7 @@ import {
   parseOptionalRepeatPatternInput,
   parseDateInput,
   parseOptionalTextInput,
+  toLocalDayStart,
 } from "@/app/api/p/tasks-shared";
 
 type Ctx = {
@@ -216,20 +217,41 @@ export async function PATCH(req: Request, ctx: Ctx) {
   });
   if (finalRepeat.error) return finalRepeat.error;
 
+  if (data.startDate && finalRepeat.value?.repeatEnabled) {
+    data.startDate = toLocalDayStart(data.startDate);
+  }
+
+  const recurrenceSeriesId = finalRepeat.value?.repeatEnabled
+    ? existingTask.recurrenceSeriesId ?? existingTask.id
+    : null;
+
   if (finalRepeat.value?.repeatEnabled) {
-    data.recurrenceSeriesId = getRecurringSeriesId(existingTask);
+    data.recurrenceSeriesId = recurrenceSeriesId;
   }
 
   const result = await prisma.$transaction(async (tx) => {
     const isCompletingTask = body?.completed === true;
+    const isUncompletingTask = body?.completed === false;
+    let completionTransitionSucceeded = false;
 
     if (isCompletingTask) {
       const markedDone = await tx.task.updateMany({
-        where: { id, profileId, completedAt: null },
+        where: { id, profileId, completedOn: null },
         data,
       });
 
       if (markedDone.count === 0) {
+        const task = await tx.task.findFirst({ where: { id, profileId } });
+        return { task, createdTask: null };
+      }
+      completionTransitionSucceeded = true;
+    } else if (isUncompletingTask) {
+      const markedUndone = await tx.task.updateMany({
+        where: { id, profileId, completedOn: { not: null } },
+        data,
+      });
+
+      if (markedUndone.count === 0) {
         const task = await tx.task.findFirst({ where: { id, profileId } });
         return { task, createdTask: null };
       }
@@ -250,11 +272,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     let createdTask = null;
     if (
-      isCompletingTask &&
+      completionTransitionSucceeded &&
       finalRepeat.value?.repeatEnabled &&
-      finalRepeat.value.repeatPattern
+      finalRepeat.value.repeatPattern &&
+      recurrenceSeriesId
     ) {
-      const recurrenceSeriesId = getRecurringSeriesId(existingTask);
       const completedOn = completionBaseDate ?? data.completedOn ?? new Date();
       const nextStartDate = nextOccurrenceDate({
         baseDate: completedOn,
@@ -263,6 +285,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
         weeklyDay: finalRepeat.value.repeatWeeklyDay,
         monthlyDay: finalRepeat.value.repeatMonthlyDay,
       });
+      const dayStart = toLocalDayStart(nextStartDate);
+      const dayEnd = addDays(dayStart, 1);
 
       const nextTaskData = {
         title: data.title ?? existingTask.title,
@@ -273,7 +297,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           data.projectId !== undefined ? data.projectId : existingTask.projectId,
         profileId,
         recurrenceSeriesId,
-        startDate: nextStartDate,
+        startDate: dayStart,
         dueAt: null,
         repeatEnabled: finalRepeat.value.repeatEnabled,
         repeatPattern: finalRepeat.value.repeatPattern,
@@ -282,41 +306,42 @@ export async function PATCH(req: Request, ctx: Ctx) {
         repeatMonthlyDay: finalRepeat.value.repeatMonthlyDay,
       };
 
-      createdTask = await tx.task.findFirst({
+      const nextOccurrenceWhere = {
+        profileId,
+        recurrenceSeriesId,
+        startDate: dayStart,
+      };
+
+      const legacyOccurrence = await tx.task.findFirst({
         where: {
+          id: { not: id },
           profileId,
-          recurrenceSeriesId,
-          startDate: nextStartDate,
+          recurrenceSeriesId: null,
+          startDate: {
+            gte: dayStart,
+            lt: dayEnd,
+          },
+          completedOn: null,
+          title: nextTaskData.title,
+          category: nextTaskData.category,
+          notes: nextTaskData.notes,
+          projectId: nextTaskData.projectId,
+          repeatEnabled: true,
+          repeatPattern: nextTaskData.repeatPattern,
+          repeatDays: nextTaskData.repeatDays,
+          repeatWeeklyDay: nextTaskData.repeatWeeklyDay,
+          repeatMonthlyDay: nextTaskData.repeatMonthlyDay,
         },
       });
 
-      if (!createdTask) {
-        const legacyOccurrence = await tx.task.findFirst({
-          where: {
-            id: { not: id },
-            profileId,
-            recurrenceSeriesId: null,
-            startDate: nextStartDate,
-            title: nextTaskData.title,
-            category: nextTaskData.category,
-            notes: nextTaskData.notes,
-            projectId: nextTaskData.projectId,
-            repeatEnabled: true,
-            repeatPattern: nextTaskData.repeatPattern,
-            repeatDays: nextTaskData.repeatDays,
-            repeatWeeklyDay: nextTaskData.repeatWeeklyDay,
-            repeatMonthlyDay: nextTaskData.repeatMonthlyDay,
+      if (legacyOccurrence) {
+        createdTask = await tx.task.update({
+          where: { id: legacyOccurrence.id },
+          data: {
+            recurrenceSeriesId,
+            startDate: dayStart,
           },
         });
-
-        if (legacyOccurrence) {
-          createdTask = await tx.task.update({
-            where: { id: legacyOccurrence.id },
-            data: {
-              recurrenceSeriesId,
-            },
-          });
-        }
       }
 
       if (!createdTask) {
@@ -330,11 +355,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
             error.code === "P2002"
           ) {
             createdTask = await tx.task.findFirst({
-              where: {
-                profileId,
-                recurrenceSeriesId,
-                startDate: nextStartDate,
-              },
+              where: nextOccurrenceWhere,
             });
           } else {
             throw error;

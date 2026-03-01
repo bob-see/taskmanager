@@ -39,12 +39,14 @@ model Task {
 }
 
 model Profile {
-  id        String    @id @default(cuid())
-  name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  tasks     Task[]
-  projects  Project[]
+  id            String    @id @default(cuid())
+  name          String
+  defaultView   String?
+  averageBasis  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  tasks         Task[]
+  projects      Project[]
 }
 
 model Project {

@@ -2,13 +2,13 @@ import { prisma } from "@/app/lib/prisma";
 import {
   ensureProfile,
   ensureProject,
-  getRecurringSeriesId,
   normalizeRepeatSettings,
   parseOptionalBooleanInput,
   parseOptionalIntInput,
   parseOptionalRepeatPatternInput,
   parseDateInput,
   parseOptionalTextInput,
+  toLocalDayStart,
 } from "@/app/api/p/tasks-shared";
 
 type Ctx = {
@@ -115,11 +115,15 @@ export async function POST(req: Request, ctx: Ctx) {
   });
   if (normalizedRepeat.error) return normalizedRepeat.error;
 
+  const normalizedStartDate = normalizedRepeat.value?.repeatEnabled
+    ? toLocalDayStart(startDate.value)
+    : startDate.value;
+
   const task = await prisma.$transaction(async (tx) => {
     const createdTask = await tx.task.create({
       data: {
         title,
-        startDate: startDate.value,
+        startDate: normalizedStartDate,
         profileId,
         ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
         ...(category.value !== undefined ? { category: category.value } : {}),
@@ -136,7 +140,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return tx.task.update({
       where: { id: createdTask.id },
       data: {
-        recurrenceSeriesId: getRecurringSeriesId(createdTask),
+        recurrenceSeriesId: createdTask.id,
       },
     });
   });

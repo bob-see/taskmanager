@@ -200,18 +200,15 @@ export function matchesRepeatDays(date: Date, repeatDays: number | null | undefi
   return (mask & getRepeatDayBit(getWeekdayNumber(date))) !== 0;
 }
 
-export function getDateOnly(date: Date) {
+export function toLocalDayStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-export function getRecurringSeriesId(task: {
-  id: string;
-  recurrenceSeriesId?: string | null;
-}) {
-  return task.recurrenceSeriesId ?? task.id;
+export function getDateOnly(date: Date) {
+  return toLocalDayStart(date);
 }
 
-function addDays(date: Date, amount: number) {
+export function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
   return next;

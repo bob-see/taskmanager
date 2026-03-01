@@ -1,11 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
+import {
+  type AverageBasis,
+  endOfMonth,
+  endOfWeekSun,
+  getCompletedBreakdowns,
+  getDayInsightMetrics,
+  getMonthInsightMetrics,
+  getWeekInsightMetrics,
+  inRangeInclusive,
+  startOfMonth,
+  startOfWeekMon,
+} from "@/app/p/[profileId]/tracker-insights";
 
 type Profile = {
   id: string;
   name: string;
+  defaultView: string | null;
+  averageBasis: string | null;
 };
 
 type Task = {
@@ -81,6 +102,15 @@ type ViewMode = "day" | "week" | "month";
 type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
 type DoneRange = "today" | "week" | "month" | "all";
 type DeleteMode = "this" | "future" | "series";
+type BulkAction =
+  | "mark-done"
+  | "mark-open"
+  | "move-project"
+  | "set-category"
+  | "set-start-date"
+  | "set-due-date"
+  | "clear-due-date"
+  | "delete";
 
 type CalendarDay = {
   key: string;
@@ -103,6 +133,7 @@ const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
 ];
+const VALID_VIEW_MODES = new Set<ViewMode>(["day", "week", "month"]);
 
 const OPEN_FILTER_OPTIONS: Array<{ value: OpenFilter; label: string }> = [
   { value: "all-active", label: "All Active" },
@@ -117,6 +148,12 @@ const DONE_RANGE_OPTIONS: Array<{ value: DoneRange; label: string }> = [
   { value: "month", label: "This Month" },
   { value: "all", label: "All" },
 ];
+const AVERAGE_BASIS_OPTIONS: Array<{ value: AverageBasis; label: string }> = [
+  { value: "calendar-days", label: "Calendar days" },
+  { value: "work-week", label: "Work week" },
+];
+const VALID_AVERAGE_BASES = new Set<AverageBasis>(["calendar-days", "work-week"]);
+const PREFERENCE_SAVE_DEBOUNCE_MS = 400;
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_TOGGLE_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -235,6 +272,13 @@ function formatLongDate(value: string) {
   });
 }
 
+function formatShortDate(value: string) {
+  return parseDateOnly(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function formatMonthTitle(date: Date) {
   return date.toLocaleDateString(undefined, {
     month: "long",
@@ -242,37 +286,24 @@ function formatMonthTitle(date: Date) {
   });
 }
 
-function getStartOfWeek(date: Date) {
-  const currentDay = date.getDay();
-  const diff = currentDay === 0 ? -6 : 1 - currentDay;
-  return addDays(date, diff);
-}
-
-function getEndOfWeek(date: Date) {
-  return addDays(getStartOfWeek(date), 6);
-}
-
 function getStartOfMonthGrid(date: Date) {
-  return getStartOfWeek(new Date(date.getFullYear(), date.getMonth(), 1));
+  return startOfWeekMon(new Date(date.getFullYear(), date.getMonth(), 1));
 }
 
 function getEndOfMonthGrid(date: Date) {
-  return addDays(
-    getStartOfWeek(new Date(date.getFullYear(), date.getMonth() + 1, 0)),
-    6
-  );
+  return addDays(startOfWeekMon(new Date(date.getFullYear(), date.getMonth() + 1, 0)), 6);
 }
 
 function isTaskActiveOnDate(task: Task, dateValue: string) {
   return toDateOnly(task.startDate) <= dateValue;
 }
 
-function isTaskCompleted(task: Task) {
-  return Boolean(task.completedAt);
+function isTaskUpcomingAfterDate(task: Task, dateValue: string) {
+  return toDateOnly(task.startDate) > dateValue;
 }
 
-function isOpenActiveOnDate(task: Task, dateValue: string) {
-  return !isTaskCompleted(task) && isTaskActiveOnDate(task, dateValue);
+function isTaskCompleted(task: Task) {
+  return Boolean(task.completedAt);
 }
 
 function isOpenTaskNewOnDate(task: Task, dateValue: string) {
@@ -283,20 +314,125 @@ function isOpenTaskDueOnDate(task: Task, dateValue: string) {
   return !isTaskCompleted(task) && toDateOnly(task.dueAt) === dateValue;
 }
 
+function isTaskRelevantToRange(task: Task, startValue: string, endValue: string) {
+  return (
+    inRangeInclusive(task.startDate, startValue, endValue) ||
+    inRangeInclusive(task.dueAt, startValue, endValue)
+  );
+}
+
+function getTaskSeriesKey(task: Task) {
+  return task.recurrenceSeriesId ? `series:${task.recurrenceSeriesId}` : `task:${task.id}`;
+}
+
+function compareTasksByStartDate(
+  left: Task,
+  right: Task,
+  direction: "asc" | "desc"
+) {
+  const leftStart = toDateOnly(left.startDate);
+  const rightStart = toDateOnly(right.startDate);
+
+  if (leftStart !== rightStart) {
+    return direction === "asc"
+      ? leftStart.localeCompare(rightStart)
+      : rightStart.localeCompare(leftStart);
+  }
+
+  return direction === "asc"
+    ? left.id.localeCompare(right.id)
+    : right.id.localeCompare(left.id);
+}
+
+function projectTasksBySeries(tasks: Task[], pick: "earliest" | "latest") {
+  const projected = new Map<string, Task>();
+
+  for (const task of tasks) {
+    const key = getTaskSeriesKey(task);
+    const existing = projected.get(key);
+
+    if (!existing) {
+      projected.set(key, task);
+      continue;
+    }
+
+    const comparison = compareTasksByStartDate(task, existing, pick === "earliest" ? "asc" : "desc");
+    if (comparison < 0) {
+      projected.set(key, task);
+    }
+  }
+
+  return Array.from(projected.values()).sort((left, right) =>
+    compareTasksByStartDate(left, right, "desc")
+  );
+}
+
+function projectOpenTasksForView(
+  tasks: Task[],
+  viewMode: ViewMode,
+  selectedDay: string,
+  weekStart: string,
+  weekEnd: string,
+  monthStart: string,
+  monthEnd: string
+) {
+  const rangeStart =
+    viewMode === "week" ? weekStart : viewMode === "month" ? monthStart : selectedDay;
+  const rangeEnd =
+    viewMode === "week" ? weekEnd : viewMode === "month" ? monthEnd : selectedDay;
+  const openTasks = tasks.filter((task) => !isTaskCompleted(task));
+  const viewScopedTasks =
+    viewMode === "day"
+      ? openTasks
+      : openTasks.filter((task) => isTaskRelevantToRange(task, rangeStart, rangeEnd));
+  const rangeProjectedTasks = projectTasksBySeries(
+    viewScopedTasks.filter((task) => toDateOnly(task.startDate) <= rangeEnd),
+    "latest"
+  );
+  const upcomingTasks = projectTasksBySeries(
+    viewScopedTasks.filter((task) => toDateOnly(task.startDate) > selectedDay),
+    "earliest"
+  );
+
+  return {
+    allOpen: viewScopedTasks,
+    allActive: rangeProjectedTasks,
+    today: rangeProjectedTasks.filter((task) => {
+      const startDate = toDateOnly(task.startDate);
+      const dueDate = toDateOnly(task.dueAt);
+      return startDate === selectedDay || dueDate === selectedDay;
+    }),
+    upcoming: upcomingTasks,
+    overdue: rangeProjectedTasks.filter((task) => {
+      const dueDate = toDateOnly(task.dueAt);
+      return dueDate !== "" && dueDate < selectedDay;
+    }),
+  };
+}
+
 function buildCalendarDays(tasks: Task[], start: Date, end: Date, month: number) {
   const days: CalendarDay[] = [];
 
   for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
     const dateValue = dateInputValue(cursor);
+    const projectedOpenTasks = projectOpenTasksForView(
+      tasks,
+      "day",
+      dateValue,
+      dateValue,
+      dateValue,
+      dateValue,
+      dateValue
+    ).allActive;
     days.push({
       key: dateValue,
       date: new Date(cursor),
       dateValue,
       isCurrentMonth: cursor.getMonth() === month,
-      openActiveCount: tasks.filter((task) => isOpenActiveOnDate(task, dateValue))
-        .length,
+      openActiveCount: projectedOpenTasks.length,
       openNewCount: tasks.filter((task) => isOpenTaskNewOnDate(task, dateValue)).length,
-      openDueCount: tasks.filter((task) => isOpenTaskDueOnDate(task, dateValue)).length,
+      openDueCount: projectedOpenTasks.filter((task) => isOpenTaskDueOnDate(task, dateValue))
+        .length,
     });
   }
 
@@ -353,6 +489,20 @@ function filterTasksByArchivedVisibility(
   );
 }
 
+function getTaskProjectLabel(task: Task, projectById: Map<string, Project>) {
+  return task.projectId ? projectById.get(task.projectId)?.name ?? "Unassigned" : "Unassigned";
+}
+
+function normalizeViewMode(value: string | null | undefined): ViewMode {
+  return value && VALID_VIEW_MODES.has(value as ViewMode) ? (value as ViewMode) : "day";
+}
+
+function normalizeAverageBasis(value: string | null | undefined): AverageBasis {
+  return value && VALID_AVERAGE_BASES.has(value as AverageBasis)
+    ? (value as AverageBasis)
+    : "calendar-days";
+}
+
 async function loadTrackerData(profileId: string) {
   const [profilesRes, tasksRes, projectsRes] = await Promise.all([
     fetch("/api/profiles", { cache: "no-store" }),
@@ -403,7 +553,7 @@ function openDateInputPicker(input: HTMLInputElement) {
   pickerInput.showPicker?.();
 }
 
-function DateInput(props: React.ComponentPropsWithoutRef<"input">) {
+function DateInput(props: ComponentPropsWithoutRef<"input">) {
   const { onClick, ...rest } = props;
 
   return (
@@ -415,6 +565,24 @@ function DateInput(props: React.ComponentPropsWithoutRef<"input">) {
         onClick?.(event);
       }}
     />
+  );
+}
+
+function CategoryCombobox({
+  suggestions,
+  ...props
+}: ComponentPropsWithoutRef<"input"> & { suggestions: string[] }) {
+  const listId = useId();
+
+  return (
+    <>
+      <input {...props} list={listId} />
+      <datalist id={listId}>
+        {suggestions.map((suggestion) => (
+          <option key={suggestion} value={suggestion} />
+        ))}
+      </datalist>
+    </>
   );
 }
 
@@ -618,7 +786,7 @@ function Modal({
   open: boolean;
   title: string;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   if (!open) return null;
 
@@ -646,12 +814,22 @@ function TaskRow({
   projectName,
   projectArchived = false,
   completionPending = false,
+  selectMode = false,
+  selected = false,
   editingTitleTaskId,
   editingTitleValue,
+  editingCategoryTaskId,
+  editingCategoryValue,
+  categorySuggestions,
   onStartTitleEdit,
   onChangeTitleEdit,
   onCancelTitleEdit,
   onSaveTitleEdit,
+  onToggleSelected,
+  onStartCategoryEdit,
+  onChangeCategoryEdit,
+  onCancelCategoryEdit,
+  onSaveCategoryEdit,
   onOpenEditModal,
   onToggleCompleted,
   onDelete,
@@ -660,17 +838,28 @@ function TaskRow({
   projectName?: string;
   projectArchived?: boolean;
   completionPending?: boolean;
+  selectMode?: boolean;
+  selected?: boolean;
   editingTitleTaskId: string | null;
   editingTitleValue: string;
+  editingCategoryTaskId: string | null;
+  editingCategoryValue: string;
+  categorySuggestions: string[];
   onStartTitleEdit: (task: Task) => void;
   onChangeTitleEdit: (value: string) => void;
   onCancelTitleEdit: () => void;
   onSaveTitleEdit: () => void;
+  onToggleSelected: (taskId: string, checked: boolean) => void;
+  onStartCategoryEdit: (task: Task) => void;
+  onChangeCategoryEdit: (value: string) => void;
+  onCancelCategoryEdit: () => void;
+  onSaveCategoryEdit: () => void;
   onOpenEditModal: (task: Task) => void;
   onToggleCompleted: (task: Task, completed: boolean) => void;
   onDelete: (task: Task) => void;
 }) {
   const isEditing = editingTitleTaskId === task.id;
+  const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
 
   return (
@@ -682,6 +871,16 @@ function TaskRow({
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
+        {selectMode && (
+          <label className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => onToggleSelected(task.id, e.target.checked)}
+            />
+            <span>Select</span>
+          </label>
+        )}
         <div className="min-w-0 flex-1">
           {isEditing ? (
             <input
@@ -726,9 +925,51 @@ function TaskRow({
             <span className="rounded-full border border-white/10 px-2 py-1">
               Due {toDateOnly(task.dueAt) || "—"}
             </span>
-            <span className="rounded-full border border-white/10 px-2 py-1">
-              Category {task.category ?? "—"}
-            </span>
+            {isEditingCategory ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 px-2 py-1">
+                <CategoryCombobox
+                  autoFocus
+                  className="min-w-40 bg-transparent outline-none"
+                  placeholder="Category"
+                  suggestions={categorySuggestions}
+                  value={editingCategoryValue}
+                  onChange={(e) => onChangeCategoryEdit(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      onSaveCategoryEdit();
+                    }
+
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      onCancelCategoryEdit();
+                    }
+                  }}
+                />
+                <button
+                  className="rounded-md border border-white/10 px-2 py-0.5"
+                  type="button"
+                  onClick={onSaveCategoryEdit}
+                >
+                  Save
+                </button>
+                <button
+                  className="rounded-md border border-white/10 px-2 py-0.5"
+                  type="button"
+                  onClick={onCancelCategoryEdit}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                className="rounded-full border border-white/10 px-2 py-1 text-left transition-colors hover:bg-white/10"
+                type="button"
+                onClick={() => onStartCategoryEdit(task)}
+              >
+                Category {task.category ?? "—"}
+              </button>
+            )}
             {projectName && (
               <span className="rounded-full border border-white/10 px-2 py-1">
                 Project {projectName}
@@ -819,11 +1060,64 @@ function ProjectSearchRow({
   );
 }
 
+function InsightMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+      <div className="text-xs uppercase tracking-wide opacity-50">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function BreakdownList({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ label: string; count: number }>;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+      <div className="mb-3 text-sm font-medium opacity-80">{title}</div>
+      {items.length === 0 ? (
+        <div className="text-sm opacity-50">No completed tasks in this period.</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div
+              key={`${title}-${item.label}`}
+              className="flex items-center justify-between gap-3 text-sm"
+            >
+              <span className="truncate opacity-80">{item.label}</span>
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs">
+                {item.count}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TrackerClient({
   profileId,
   profileName,
 }: TrackerClientProps) {
   const router = useRouter();
+  const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
+  const preferenceSyncProfileIdRef = useRef<string | null>(null);
+  const lastSavedPreferencesRef = useRef<{
+    profileId: string;
+    defaultView: ViewMode;
+    averageBasis: AverageBasis;
+  } | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -836,6 +1130,7 @@ export function TrackerClient({
   const [doneRange, setDoneRange] = useState<DoneRange>("today");
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectSaving, setNewProjectSaving] = useState(false);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
@@ -844,8 +1139,29 @@ export function TrackerClient({
   const [completionPendingTaskIds, setCompletionPendingTaskIds] = useState<string[]>([]);
   const [editingTitleTaskId, setEditingTitleTaskId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState("");
+  const [editingCategoryTaskId, setEditingCategoryTaskId] = useState<string | null>(null);
+  const [editingCategoryValue, setEditingCategoryValue] = useState("");
   const [deleteTaskModalTask, setDeleteTaskModalTask] = useState<Task | null>(null);
   const [deleteTaskMode, setDeleteTaskMode] = useState<DeleteMode>("this");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkActionScope, setBulkActionScope] = useState<DeleteMode>("this");
+  const [bulkScopeAction, setBulkScopeAction] = useState<{
+    action: BulkAction;
+    taskIds: string[];
+    category?: string | null;
+    projectId?: string | null;
+    startDate?: string | null;
+    dueAt?: string | null;
+    completedOn?: string | null;
+  } | null>(null);
+  const [bulkProjectModalOpen, setBulkProjectModalOpen] = useState(false);
+  const [bulkCategoryModalOpen, setBulkCategoryModalOpen] = useState(false);
+  const [bulkDateModal, setBulkDateModal] = useState<"startDate" | "dueAt" | null>(null);
+  const [bulkProjectValue, setBulkProjectValue] = useState("");
+  const [bulkCategoryValue, setBulkCategoryValue] = useState("");
+  const [bulkDateValue, setBulkDateValue] = useState("");
   const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
   const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
     createEmptyProjectForm
@@ -905,8 +1221,9 @@ export function TrackerClient({
     setEditTaskId(null);
     setEditingTitleTaskId(null);
     setEditingTitleValue("");
+    setEditingCategoryTaskId(null);
+    setEditingCategoryValue("");
     setSelectedDay(todayInputValue());
-    setViewMode("day");
     setOpenFilter("all-active");
     setDoneRange("today");
     setSearchQuery("");
@@ -914,17 +1231,121 @@ export function TrackerClient({
     setNewProjectOpen(false);
     setDeleteTaskModalTask(null);
     setDeleteTaskMode("this");
+    setSelectMode(false);
+    setSelectedTaskIds([]);
+    setBulkSaving(false);
+    setBulkActionScope("this");
+    setBulkScopeAction(null);
+    setBulkProjectModalOpen(false);
+    setBulkCategoryModalOpen(false);
+    setBulkDateModal(null);
+    setBulkProjectValue("");
+    setBulkCategoryValue("");
+    setBulkDateValue("");
+    preferenceSyncProfileIdRef.current = null;
+    lastSavedPreferencesRef.current = null;
   }, [profileId]);
 
-  const currentProfileName =
-    profiles.find((profile) => profile.id === profileId)?.name ?? profileName;
+  const currentProfile = profiles.find((profile) => profile.id === profileId);
+
+  useEffect(() => {
+    if (!currentProfile) return;
+
+    const hasPendingLocalPreferenceChange =
+      lastSavedPreferencesRef.current?.profileId === profileId &&
+      (lastSavedPreferencesRef.current.defaultView !== viewMode ||
+        lastSavedPreferencesRef.current.averageBasis !== averageBasis);
+
+    if (
+      preferenceSyncProfileIdRef.current === profileId &&
+      hasPendingLocalPreferenceChange
+    ) {
+      return;
+    }
+
+    const nextViewMode = normalizeViewMode(currentProfile.defaultView);
+    const nextAverageBasis = normalizeAverageBasis(currentProfile.averageBasis);
+
+    setViewMode(nextViewMode);
+    setAverageBasis(nextAverageBasis);
+    preferenceSyncProfileIdRef.current = profileId;
+    lastSavedPreferencesRef.current = {
+      profileId,
+      defaultView: nextViewMode,
+      averageBasis: nextAverageBasis,
+    };
+  }, [averageBasis, currentProfile, profileId, viewMode]);
+
+  useEffect(() => {
+    if (preferenceSyncProfileIdRef.current !== profileId) return;
+
+    const nextPreferences = {
+      profileId,
+      defaultView: viewMode,
+      averageBasis,
+    };
+
+    if (
+      lastSavedPreferencesRef.current?.profileId === nextPreferences.profileId &&
+      lastSavedPreferencesRef.current.defaultView === nextPreferences.defaultView &&
+      lastSavedPreferencesRef.current.averageBasis === nextPreferences.averageBasis
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/profiles/${profileId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              defaultView: nextPreferences.defaultView,
+              averageBasis: nextPreferences.averageBasis,
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`Preference save failed with status ${res.status}`);
+          }
+
+          if (cancelled) return;
+
+          lastSavedPreferencesRef.current = nextPreferences;
+          setProfiles((prev) =>
+            prev.map((profile) =>
+              profile.id === profileId
+                ? {
+                    ...profile,
+                    defaultView: nextPreferences.defaultView,
+                    averageBasis: nextPreferences.averageBasis,
+                  }
+                : profile
+            )
+          );
+        } catch (error) {
+          if (!cancelled) {
+            console.warn("Could not persist profile preferences", error);
+          }
+        }
+      })();
+    }, PREFERENCE_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [averageBasis, profileId, viewMode]);
+
+  const currentProfileName = currentProfile?.name ?? profileName;
   const selectedDate = parseDateOnly(selectedDay);
-  const weekStart = getStartOfWeek(selectedDate);
-  const weekEnd = getEndOfWeek(selectedDate);
+  const weekStart = startOfWeekMon(selectedDate);
+  const weekEnd = endOfWeekSun(selectedDate);
   const weekStartValue = dateInputValue(weekStart);
   const weekEndValue = dateInputValue(weekEnd);
-  const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-  const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+  const monthStart = startOfMonth(selectedDate);
+  const monthEnd = endOfMonth(selectedDate);
   const monthStartValue = dateInputValue(monthStart);
   const monthEndValue = dateInputValue(monthEnd);
 
@@ -949,6 +1370,21 @@ export function TrackerClient({
     : [];
 
   const visibleTasks = filterTasksByArchivedVisibility(tasks, projectById, showArchived);
+  const dayInsights = getDayInsightMetrics(visibleTasks, selectedDay);
+  const weekInsights = getWeekInsightMetrics(visibleTasks, selectedDay, true, averageBasis);
+  const monthInsights = getMonthInsightMetrics(visibleTasks, selectedDay, true, averageBasis);
+  const weekBreakdowns = getCompletedBreakdowns(
+    visibleTasks,
+    selectedDay,
+    "week",
+    (task) => getTaskProjectLabel(task, projectById)
+  );
+  const monthBreakdowns = getCompletedBreakdowns(
+    visibleTasks,
+    selectedDay,
+    "month",
+    (task) => getTaskProjectLabel(task, projectById)
+  );
   const progressTasks = visibleTasks.filter((task) =>
     isTaskVisibleForProgress(task, projectById, showArchived)
   );
@@ -961,25 +1397,24 @@ export function TrackerClient({
   const progressPercent =
     progressTotal === 0 ? 0 : Math.round((progressCompleted / progressTotal) * 100);
 
-  const openTasks = visibleTasks.filter((task) => {
-    if (isTaskCompleted(task)) return false;
-
-    const startDate = toDateOnly(task.startDate);
-    const dueDate = toDateOnly(task.dueAt);
-
-    switch (openFilter) {
-      case "all-active":
-        return isTaskActiveOnDate(task, selectedDay);
-      case "today":
-        return startDate === selectedDay || dueDate === selectedDay;
-      case "upcoming":
-        return startDate > selectedDay || (dueDate !== "" && dueDate > selectedDay);
-      case "overdue":
-        return dueDate !== "" && dueDate < selectedDay;
-      default:
-        return false;
-    }
-  });
+  const projectedOpenTasks = projectOpenTasksForView(
+    visibleTasks,
+    viewMode,
+    selectedDay,
+    weekStartValue,
+    weekEndValue,
+    monthStartValue,
+    monthEndValue
+  );
+  const openTasks = projectedOpenTasks[
+    openFilter === "all-active"
+      ? "allActive"
+      : openFilter === "today"
+        ? "today"
+        : openFilter === "upcoming"
+          ? "upcoming"
+          : "overdue"
+  ];
 
   const doneTasks = visibleTasks.filter((task) => {
     if (!task.completedOn) return false;
@@ -1030,7 +1465,7 @@ export function TrackerClient({
       key: "upcoming",
       label: "Upcoming",
       tasks: searchResults.filter(
-        (task) => !isTaskCompleted(task) && toDateOnly(task.startDate) > selectedDay
+        (task) => !isTaskCompleted(task) && isTaskUpcomingAfterDate(task, selectedDay)
       ),
     },
     {
@@ -1043,6 +1478,14 @@ export function TrackerClient({
     (count, section) => count + section.tasks.length,
     0
   );
+  const categorySuggestions = Array.from(
+    new Map(
+      tasks
+        .map((task) => task.category?.trim() ?? "")
+        .filter(Boolean)
+        .map((category) => [category.toLocaleLowerCase(), category])
+    ).values()
+  ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
   function clearSearch() {
     setSearchQuery("");
@@ -1097,6 +1540,11 @@ export function TrackerClient({
     getEndOfMonthGrid(selectedDate),
     selectedDate.getMonth()
   );
+  const nonDayOpenListLabel =
+    viewMode === "week"
+      ? `${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`
+      : formatMonthTitle(selectedDate);
+  const showStartChipInTables = viewMode === "week" || viewMode === "month";
 
   const groupedSections = [
     ...visibleProjects.map((project) => ({
@@ -1126,6 +1574,40 @@ export function TrackerClient({
       progressCompleted: 0,
     },
   ];
+  const visibleDayTaskIds = Array.from(
+    new Set(
+      (searchActive
+        ? searchSections.flatMap((section) => section.tasks)
+        : groupedSections.flatMap((section) => [...section.openTasks, ...section.doneTasks])
+      ).map((task) => task.id)
+    )
+  );
+  const selectedTasks = tasks.filter((task) => selectedTaskIds.includes(task.id));
+  const hasRecurringSelection = selectedTasks.some((task) => Boolean(task.recurrenceSeriesId));
+
+  useEffect(() => {
+    if (viewMode !== "day") {
+      setSelectMode(false);
+      setSelectedTaskIds([]);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+  setSelectedTaskIds((prev) => {
+    const next = prev.filter((taskId) =>
+      visibleDayTaskIds.includes(taskId)
+    );
+
+    if (
+      next.length === prev.length &&
+      next.every((id, i) => id === prev[i])
+    ) {
+      return prev;
+    }
+
+    return next;
+  });
+}, [visibleDayTaskIds]);
 
   const editTask = editTaskId ? tasks.find((task) => task.id === editTaskId) ?? null : null;
   const projectOptions = projects.filter(
@@ -1269,6 +1751,11 @@ export function TrackerClient({
   }
 
   async function toggleTaskCompleted(taskId: string, completed: boolean) {
+    if (completionPendingTaskIdsRef.current.has(taskId)) {
+      return;
+    }
+
+    completionPendingTaskIdsRef.current.add(taskId);
     setCompletionPendingTaskIds((prev) =>
       prev.includes(taskId) ? prev : [...prev, taskId]
     );
@@ -1279,6 +1766,7 @@ export function TrackerClient({
         completedOn: completed ? selectedDay : null,
       });
     } finally {
+      completionPendingTaskIdsRef.current.delete(taskId);
       setCompletionPendingTaskIds((prev) => prev.filter((id) => id !== taskId));
     }
   }
@@ -1350,6 +1838,16 @@ export function TrackerClient({
     setEditingTitleValue("");
   }
 
+  function startCategoryEdit(task: Task) {
+    setEditingCategoryTaskId(task.id);
+    setEditingCategoryValue(task.category ?? "");
+  }
+
+  function cancelCategoryEdit() {
+    setEditingCategoryTaskId(null);
+    setEditingCategoryValue("");
+  }
+
   async function saveTitleEdit() {
     if (!editingTitleTaskId) return;
 
@@ -1372,6 +1870,117 @@ export function TrackerClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update task");
     }
+  }
+
+  async function saveCategoryEdit() {
+    if (!editingCategoryTaskId) return;
+
+    const nextCategory = editingCategoryValue.trim();
+    const currentTask = tasks.find((task) => task.id === editingCategoryTaskId);
+
+    if (!currentTask) {
+      cancelCategoryEdit();
+      return;
+    }
+
+    if ((currentTask.category ?? "") === nextCategory) {
+      cancelCategoryEdit();
+      return;
+    }
+
+    try {
+      await updateTask(editingCategoryTaskId, { category: nextCategory || null });
+      cancelCategoryEdit();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update task");
+    }
+  }
+
+  function toggleTaskSelected(taskId: string, checked: boolean) {
+    setSelectedTaskIds((prev) => {
+      if (checked) {
+        return prev.includes(taskId) ? prev : [...prev, taskId];
+      }
+
+      return prev.filter((id) => id !== taskId);
+    });
+  }
+
+  async function executeBulkAction(input: {
+    action: BulkAction;
+    taskIds: string[];
+    scope?: DeleteMode;
+    category?: string | null;
+    projectId?: string | null;
+    startDate?: string | null;
+    dueAt?: string | null;
+    completedOn?: string | null;
+  }) {
+    if (input.taskIds.length === 0) return;
+
+    setBulkSaving(true);
+    setError(null);
+    const scrollY = window.scrollY;
+
+    try {
+      const res = await fetch(`/api/p/${profileId}/tasks/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Could not run bulk action");
+      }
+
+      await refreshData();
+      setSelectedTaskIds([]);
+      setBulkActionScope("this");
+      setBulkScopeAction(null);
+      setBulkProjectModalOpen(false);
+      setBulkCategoryModalOpen(false);
+      setBulkDateModal(null);
+      setBulkProjectValue("");
+      setBulkCategoryValue("");
+      setBulkDateValue("");
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY });
+      });
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+
+  function requestBulkAction(input: {
+    action: BulkAction;
+    category?: string | null;
+    projectId?: string | null;
+    startDate?: string | null;
+    dueAt?: string | null;
+    completedOn?: string | null;
+  }) {
+    if (selectedTaskIds.length === 0) return;
+
+    const request = {
+      ...input,
+      taskIds: selectedTaskIds,
+    };
+
+    if (
+      hasRecurringSelection &&
+      (input.action === "mark-done" ||
+        input.action === "mark-open" ||
+        input.action === "delete")
+    ) {
+      setBulkScopeAction(request);
+      setBulkActionScope("this");
+      return;
+    }
+
+    void executeBulkAction({ ...request, scope: "this" }).catch((err: unknown) =>
+      setError(err instanceof Error ? err.message : "Could not run bulk action")
+    );
   }
 
   function openTaskEditor(task: Task) {
@@ -1550,9 +2159,10 @@ export function TrackerClient({
                 setForm((prev) => ({ ...prev, dueAt: e.target.value }))
               }
             />
-            <input
+            <CategoryCombobox
               className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
               placeholder="Category"
+              suggestions={categorySuggestions}
               value={form.category}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, category: e.target.value }))
@@ -1609,6 +2219,12 @@ export function TrackerClient({
               {progressCompleted} / {progressTotal} completed
             </div>
           </div>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <InsightMetric label="Completed Today" value={dayInsights.completedToday} />
+            <InsightMetric label="Created Today" value={dayInsights.createdToday} />
+            <InsightMetric label="Open Today" value={dayInsights.openToday} />
+            <InsightMetric label="Rolled Over" value={dayInsights.rolledOver} />
+          </div>
           <div className="h-3 overflow-hidden rounded-full bg-white/10">
             <div
               key={selectedDay}
@@ -1620,118 +2236,207 @@ export function TrackerClient({
       )}
 
       {viewMode === "week" && (
-        <section className="rounded-md border border-white/10 bg-white/5 p-4">
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Week</h2>
-              <div className="text-sm opacity-70">
-                {formatLongDate(weekStartValue)} to {formatLongDate(weekEndValue)}
+        <div className="space-y-4">
+          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Week Summary</h2>
+                <div className="text-sm opacity-70">
+                  {formatLongDate(weekStartValue)} to {formatLongDate(weekEndValue)}
+                </div>
+              </div>
+              <div className="text-right text-sm opacity-70">Week starts Monday</div>
+            </div>
+            <div className="mb-4 text-sm opacity-70">
+              Avg/day basis:{" "}
+              {averageBasis === "calendar-days"
+                ? `${weekInsights.basisDays} calendar days`
+                : `${weekInsights.basisDays} work week days`}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <InsightMetric
+                label="Completed This Week"
+                value={weekInsights.completedCount}
+              />
+              <InsightMetric
+                label="Avg / Day"
+                value={weekInsights.avgPerDay.toFixed(1)}
+              />
+              <InsightMetric
+                label="Best Day"
+                value={`${weekInsights.bestDay.date.toLocaleDateString(undefined, {
+                  weekday: "short",
+                })} (${weekInsights.bestDay.count})`}
+              />
+              <InsightMetric label="Backlog" value={weekInsights.backlogCount} />
+            </div>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-2">
+            <BreakdownList title="Top Projects" items={weekBreakdowns.topProjects} />
+            <BreakdownList title="Top Categories" items={weekBreakdowns.topCategories} />
+          </section>
+
+          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Week</h2>
+                <div className="text-sm opacity-70">
+                  {formatLongDate(weekStartValue)} to {formatLongDate(weekEndValue)}
+                </div>
+              </div>
+              <div className="text-right text-sm opacity-70">
+                <div>Week starts Monday</div>
+                <div className="text-xs opacity-70">
+                  Legend: X active • +Y new • Z due
+                </div>
               </div>
             </div>
-            <div className="text-right text-sm opacity-70">
-              <div>Week starts Monday</div>
-              <div className="text-xs opacity-70">
-                Legend: X active • +Y new • Z due
+            <div className="overflow-x-auto">
+              <div className="grid min-w-[42rem] grid-cols-7 gap-3">
+                {weekDays.map((day, index) => (
+                  <button
+                    key={day.key}
+                    className={`rounded-md border bg-black/10 p-3 text-left hover:bg-white/10 ${
+                      day.openNewCount > 0
+                        ? "border-emerald-300/40"
+                        : day.openDueCount > 0
+                          ? "border-amber-300/40"
+                          : "border-white/10"
+                    }`}
+                    type="button"
+                    onClick={() => jumpToDay(day.dateValue)}
+                  >
+                    <div className="text-xs uppercase tracking-wide opacity-60">
+                      {WEEKDAY_LABELS[index]}
+                    </div>
+                    <div className="mt-2 text-lg font-semibold">{day.date.getDate()}</div>
+                    <div className="mt-3 text-sm opacity-70">
+                      {day.openActiveCount} active
+                    </div>
+                    {day.openNewCount > 0 && (
+                      <div className="mt-1 inline-flex rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
+                        +{day.openNewCount} new
+                      </div>
+                    )}
+                    {day.openDueCount > 0 && (
+                      <div className="mt-1 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
+                        {day.openDueCount} due
+                      </div>
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="grid min-w-[42rem] grid-cols-7 gap-3">
-              {weekDays.map((day, index) => (
-                <button
-                  key={day.key}
-                  className={`rounded-md border bg-black/10 p-3 text-left hover:bg-white/10 ${
-                    day.openNewCount > 0
-                      ? "border-emerald-300/40"
-                      : day.openDueCount > 0
-                        ? "border-amber-300/40"
-                        : "border-white/10"
-                  }`}
-                  type="button"
-                  onClick={() => jumpToDay(day.dateValue)}
-                >
-                  <div className="text-xs uppercase tracking-wide opacity-60">
-                    {WEEKDAY_LABELS[index]}
-                  </div>
-                  <div className="mt-2 text-lg font-semibold">{day.date.getDate()}</div>
-                  <div className="mt-3 text-sm opacity-70">
-                    {day.openActiveCount} active
-                  </div>
-                  {day.openNewCount > 0 && (
-                    <div className="mt-1 inline-flex rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
-                      +{day.openNewCount} new
-                    </div>
-                  )}
-                  {day.openDueCount > 0 && (
-                    <div className="mt-1 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
-                      {day.openDueCount} due
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
       )}
 
       {viewMode === "month" && (
-        <section className="rounded-md border border-white/10 bg-white/5 p-4">
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Month</h2>
-              <div className="text-sm opacity-70">{formatMonthTitle(selectedDate)}</div>
+        <div className="space-y-4">
+          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Month Summary</h2>
+                <div className="text-sm opacity-70">{formatMonthTitle(selectedDate)}</div>
+              </div>
+              <div className="text-right text-sm opacity-70">Week starts Monday</div>
             </div>
-            <div className="text-right text-sm opacity-70">
-              <div>Week starts Monday</div>
-              <div className="text-xs opacity-70">
-                Legend: X active • +Y new • Z due
+            <div className="mb-4 text-sm opacity-70">
+              Avg/day basis:{" "}
+              {averageBasis === "calendar-days"
+                ? `${monthInsights.basisDays} calendar days`
+                : `${monthInsights.basisDays} work week days`}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <InsightMetric
+                label="Completed This Month"
+                value={monthInsights.completedCount}
+              />
+              <InsightMetric
+                label="Avg / Day"
+                value={monthInsights.avgPerDay.toFixed(1)}
+              />
+              <InsightMetric
+                label="Best Week"
+                value={`${monthInsights.bestWeek.start.toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}-${monthInsights.bestWeek.end.toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })} (${monthInsights.bestWeek.count})`}
+              />
+              <InsightMetric
+                label="Backlog Snapshot"
+                value={monthInsights.backlogSnapshotCount}
+              />
+            </div>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-2">
+            <BreakdownList title="Top Projects" items={monthBreakdowns.topProjects} />
+            <BreakdownList title="Top Categories" items={monthBreakdowns.topCategories} />
+          </section>
+
+          <section className="rounded-md border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Month</h2>
+                <div className="text-sm opacity-70">{formatMonthTitle(selectedDate)}</div>
+              </div>
+              <div className="text-right text-sm opacity-70">
+                <div>Week starts Monday</div>
+                <div className="text-xs opacity-70">
+                  Legend: X active • +Y new • Z due
+                </div>
               </div>
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="mb-3 grid min-w-[42rem] grid-cols-7 gap-2">
-              {WEEKDAY_LABELS.map((label) => (
-                <div
-                  key={label}
-                  className="px-2 text-xs uppercase tracking-wide opacity-60"
-                >
-                  {label}
-                </div>
-              ))}
-            </div>
-            <div className="grid min-w-[42rem] grid-cols-7 gap-2">
-              {monthDays.map((day) => (
-                <button
-                  key={day.key}
-                  className={`min-h-24 rounded-md border p-3 text-left hover:bg-white/10 ${
-                    day.openNewCount > 0
-                      ? "border-emerald-300/40"
-                      : day.openDueCount > 0
-                        ? "border-amber-300/40"
-                        : "border-white/10"
-                  } ${day.isCurrentMonth ? "bg-black/10" : "bg-black/5 opacity-50"}`}
-                  type="button"
-                  onClick={() => jumpToDay(day.dateValue)}
-                >
-                  <div className="text-sm font-semibold">{day.date.getDate()}</div>
-                  <div className="mt-3 text-sm opacity-70">
-                    {day.openActiveCount} active
+            <div className="overflow-x-auto">
+              <div className="mb-3 grid min-w-[42rem] grid-cols-7 gap-2">
+                {WEEKDAY_LABELS.map((label) => (
+                  <div
+                    key={label}
+                    className="px-2 text-xs uppercase tracking-wide opacity-60"
+                  >
+                    {label}
                   </div>
-                  {day.openNewCount > 0 && (
-                    <div className="mt-1 inline-flex rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
-                      +{day.openNewCount} new
+                ))}
+              </div>
+              <div className="grid min-w-[42rem] grid-cols-7 gap-2">
+                {monthDays.map((day) => (
+                  <button
+                    key={day.key}
+                    className={`min-h-24 rounded-md border p-3 text-left hover:bg-white/10 ${
+                      day.openNewCount > 0
+                        ? "border-emerald-300/40"
+                        : day.openDueCount > 0
+                          ? "border-amber-300/40"
+                          : "border-white/10"
+                    } ${day.isCurrentMonth ? "bg-black/10" : "bg-black/5 opacity-50"}`}
+                    type="button"
+                    onClick={() => jumpToDay(day.dateValue)}
+                  >
+                    <div className="text-sm font-semibold">{day.date.getDate()}</div>
+                    <div className="mt-3 text-sm opacity-70">
+                      {day.openActiveCount} active
                     </div>
-                  )}
-                  {day.openDueCount > 0 && (
-                    <div className="mt-1 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
-                      {day.openDueCount} due
-                    </div>
-                  )}
-                </button>
-              ))}
+                    {day.openNewCount > 0 && (
+                      <div className="mt-1 inline-flex rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
+                        +{day.openNewCount} new
+                      </div>
+                    )}
+                    {day.openDueCount > 0 && (
+                      <div className="mt-1 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
+                        {day.openDueCount} due
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       )}
 
       {viewMode === "day" ? (
@@ -1781,6 +2486,23 @@ export function TrackerClient({
                 />
                 <span>{searchActive ? "Include archived" : "Show archived"}</span>
               </label>
+              <button
+                className={`rounded-md border px-3 py-2 text-sm ${
+                  selectMode ? "border-white bg-white text-black" : "border-white/10"
+                }`}
+                type="button"
+                onClick={() => {
+                  setSelectMode((prev) => {
+                    if (prev) {
+                      setSelectedTaskIds([]);
+                    }
+
+                    return !prev;
+                  });
+                }}
+              >
+                {selectMode ? "Done Selecting" : "Select"}
+              </button>
             </div>
           </div>
 
@@ -1824,6 +2546,103 @@ export function TrackerClient({
                 {(dayOpenTasks.length + dayDoneTasks.length) === 1 ? "" : "s"}.
               </div>
             </>
+          )}
+
+          {selectMode && (
+            <div className="mb-4 rounded-xl border border-white/10 bg-black/10 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm opacity-70">
+                  {selectedTaskIds.length === 0
+                    ? "Select tasks to apply bulk actions."
+                    : `${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} selected.`}
+                </div>
+                {selectedTaskIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() =>
+                        requestBulkAction({
+                          action: "mark-done",
+                          completedOn: selectedDay,
+                        })
+                      }
+                    >
+                      Mark done
+                    </button>
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => requestBulkAction({ action: "mark-open" })}
+                    >
+                      Mark open
+                    </button>
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => {
+                        setBulkProjectValue("");
+                        setBulkProjectModalOpen(true);
+                      }}
+                    >
+                      Move to project
+                    </button>
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => {
+                        setBulkCategoryValue("");
+                        setBulkCategoryModalOpen(true);
+                      }}
+                    >
+                      Set category
+                    </button>
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => {
+                        setBulkDateValue(selectedDay);
+                        setBulkDateModal("startDate");
+                      }}
+                    >
+                      Set start date
+                    </button>
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => {
+                        setBulkDateValue(selectedDay);
+                        setBulkDateModal("dueAt");
+                      }}
+                    >
+                      Set due date
+                    </button>
+                    <button
+                      className="rounded-md border border-white/10 px-3 py-1 text-sm"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => requestBulkAction({ action: "clear-due-date" })}
+                    >
+                      Clear due date
+                    </button>
+                    <button
+                      className="rounded-md border border-red-500/30 px-3 py-1 text-sm text-red-200"
+                      disabled={bulkSaving}
+                      type="button"
+                      onClick={() => requestBulkAction({ action: "delete" })}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {loading ? (
@@ -1926,12 +2745,22 @@ export function TrackerClient({
                               : false
                           }
                           completionPending={completionPendingTaskIds.includes(task.id)}
+                          selectMode={selectMode}
+                          selected={selectedTaskIds.includes(task.id)}
                           editingTitleTaskId={editingTitleTaskId}
                           editingTitleValue={editingTitleValue}
+                          editingCategoryTaskId={editingCategoryTaskId}
+                          editingCategoryValue={editingCategoryValue}
+                          categorySuggestions={categorySuggestions}
                           onStartTitleEdit={startTitleEdit}
                           onChangeTitleEdit={setEditingTitleValue}
                           onCancelTitleEdit={cancelTitleEdit}
                           onSaveTitleEdit={() => void saveTitleEdit()}
+                          onToggleSelected={toggleTaskSelected}
+                          onStartCategoryEdit={startCategoryEdit}
+                          onChangeCategoryEdit={setEditingCategoryValue}
+                          onCancelCategoryEdit={cancelCategoryEdit}
+                          onSaveCategoryEdit={() => void saveCategoryEdit()}
                           onOpenEditModal={openTaskEditor}
                           onToggleCompleted={(nextTask, completed) =>
                             void toggleTaskCompleted(nextTask.id, completed).catch(
@@ -2057,12 +2886,22 @@ export function TrackerClient({
                                   completionPending={completionPendingTaskIds.includes(
                                     task.id
                                   )}
+                                  selectMode={selectMode}
+                                  selected={selectedTaskIds.includes(task.id)}
                                   editingTitleTaskId={editingTitleTaskId}
                                   editingTitleValue={editingTitleValue}
+                                  editingCategoryTaskId={editingCategoryTaskId}
+                                  editingCategoryValue={editingCategoryValue}
+                                  categorySuggestions={categorySuggestions}
                                   onStartTitleEdit={startTitleEdit}
                                   onChangeTitleEdit={setEditingTitleValue}
                                   onCancelTitleEdit={cancelTitleEdit}
                                   onSaveTitleEdit={() => void saveTitleEdit()}
+                                  onToggleSelected={toggleTaskSelected}
+                                  onStartCategoryEdit={startCategoryEdit}
+                                  onChangeCategoryEdit={setEditingCategoryValue}
+                                  onCancelCategoryEdit={cancelCategoryEdit}
+                                  onSaveCategoryEdit={() => void saveCategoryEdit()}
                                   onOpenEditModal={openTaskEditor}
                                   onToggleCompleted={(nextTask, completed) =>
                                     void toggleTaskCompleted(nextTask.id, completed).catch(
@@ -2094,12 +2933,22 @@ export function TrackerClient({
                                   completionPending={completionPendingTaskIds.includes(
                                     task.id
                                   )}
+                                  selectMode={selectMode}
+                                  selected={selectedTaskIds.includes(task.id)}
                                   editingTitleTaskId={editingTitleTaskId}
                                   editingTitleValue={editingTitleValue}
+                                  editingCategoryTaskId={editingCategoryTaskId}
+                                  editingCategoryValue={editingCategoryValue}
+                                  categorySuggestions={categorySuggestions}
                                   onStartTitleEdit={startTitleEdit}
                                   onChangeTitleEdit={setEditingTitleValue}
                                   onCancelTitleEdit={cancelTitleEdit}
                                   onSaveTitleEdit={() => void saveTitleEdit()}
+                                  onToggleSelected={toggleTaskSelected}
+                                  onStartCategoryEdit={startCategoryEdit}
+                                  onChangeCategoryEdit={setEditingCategoryValue}
+                                  onCancelCategoryEdit={cancelCategoryEdit}
+                                  onSaveCategoryEdit={() => void saveCategoryEdit()}
                                   onOpenEditModal={openTaskEditor}
                                   onToggleCompleted={(nextTask, completed) =>
                                     void toggleTaskCompleted(nextTask.id, completed).catch(
@@ -2138,14 +2987,30 @@ export function TrackerClient({
                   Calendar indicators and task lists use the same archived filter.
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  checked={showArchived}
-                  type="checkbox"
-                  onChange={(e) => setShowArchived(e.target.checked)}
-                />
-                <span>Show archived</span>
-              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <span className="opacity-70">Average basis</span>
+                  <select
+                    className="rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+                    value={averageBasis}
+                    onChange={(e) => setAverageBasis(e.target.value as AverageBasis)}
+                  >
+                    {AVERAGE_BASIS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value} className="text-black">
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    checked={showArchived}
+                    type="checkbox"
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                  />
+                  <span>Show archived</span>
+                </label>
+              </div>
             </div>
           </section>
 
@@ -2172,7 +3037,7 @@ export function TrackerClient({
 
             <div className="mb-3 text-sm opacity-70">
               Showing {openTasks.length} task{openTasks.length === 1 ? "" : "s"} for{" "}
-              {formatLongDate(selectedDay)}
+              {nonDayOpenListLabel}
             </div>
             {openFilter === "today" && (
               <div className="mb-3 text-xs opacity-60">
@@ -2190,6 +3055,7 @@ export function TrackerClient({
                   <thead className="text-left opacity-70">
                     <tr>
                       <th className="pb-2 pr-4 font-medium">Task</th>
+                      <th className="pb-2 pr-4 font-medium">Project</th>
                       <th className="pb-2 pr-4 font-medium">Category</th>
                       <th className="pb-2 pr-4 font-medium">Due</th>
                       <th className="pb-2 pr-4 font-medium">Start</th>
@@ -2200,7 +3066,17 @@ export function TrackerClient({
                   <tbody>
                     {openTasks.map((task) => (
                       <tr key={task.id} className="border-t border-white/10">
-                        <td className="py-3 pr-4">{task.title}</td>
+                        <td className="py-3 pr-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{task.title}</span>
+                            {showStartChipInTables && (
+                              <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs opacity-70">
+                                Start: {formatShortDate(toDateOnly(task.startDate))}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4">{getTaskProjectLabel(task, projectById)}</td>
                         <td className="py-3 pr-4">{task.category ?? "—"}</td>
                         <td className="py-3 pr-4">{toDateOnly(task.dueAt) || "—"}</td>
                         <td className="py-3 pr-4">{toDateOnly(task.startDate)}</td>
@@ -2271,6 +3147,7 @@ export function TrackerClient({
                   <thead className="text-left opacity-70">
                     <tr>
                       <th className="pb-2 pr-4 font-medium">Task</th>
+                      <th className="pb-2 pr-4 font-medium">Project</th>
                       <th className="pb-2 pr-4 font-medium">Category</th>
                       <th className="pb-2 pr-4 font-medium">Due</th>
                       <th className="pb-2 pr-4 font-medium">Start</th>
@@ -2281,7 +3158,17 @@ export function TrackerClient({
                   <tbody>
                     {doneTasks.map((task) => (
                       <tr key={task.id} className="border-t border-white/10 opacity-80">
-                        <td className="py-3 pr-4">{task.title}</td>
+                        <td className="py-3 pr-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{task.title}</span>
+                            {showStartChipInTables && (
+                              <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs opacity-70">
+                                Start: {formatShortDate(toDateOnly(task.startDate))}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4">{getTaskProjectLabel(task, projectById)}</td>
                         <td className="py-3 pr-4">{task.category ?? "—"}</td>
                         <td className="py-3 pr-4">{toDateOnly(task.dueAt) || "—"}</td>
                         <td className="py-3 pr-4">{toDateOnly(task.startDate)}</td>
@@ -2321,6 +3208,222 @@ export function TrackerClient({
           </section>
         </div>
       )}
+
+      <Modal
+        open={Boolean(bulkScopeAction)}
+        title="Recurring bulk action"
+        onClose={() => {
+          if (bulkSaving) return;
+          setBulkScopeAction(null);
+          setBulkActionScope("this");
+        }}
+      >
+        {bulkScopeAction && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void executeBulkAction({
+                ...bulkScopeAction,
+                scope: bulkActionScope,
+              }).catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : "Could not run bulk action")
+              );
+            }}
+          >
+            <div className="text-sm opacity-70">
+              Recurring tasks are selected. Choose how broadly this action should apply.
+            </div>
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+                <input
+                  checked={bulkActionScope === "this"}
+                  disabled={bulkSaving}
+                  name="bulk-scope"
+                  type="radio"
+                  value="this"
+                  onChange={() => setBulkActionScope("this")}
+                />
+                <div className="font-medium">This task only</div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3">
+                <input
+                  checked={bulkActionScope === "future"}
+                  disabled={bulkSaving}
+                  name="bulk-scope"
+                  type="radio"
+                  value="future"
+                  onChange={() => setBulkActionScope("future")}
+                />
+                <div className="font-medium">This and future</div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                <input
+                  checked={bulkActionScope === "series"}
+                  disabled={bulkSaving}
+                  name="bulk-scope"
+                  type="radio"
+                  value="series"
+                  onChange={() => setBulkActionScope("series")}
+                />
+                <div className="font-medium text-red-200">Entire series</div>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-md border border-white/10 px-4 py-2 text-sm"
+                disabled={bulkSaving}
+                type="button"
+                onClick={() => {
+                  setBulkScopeAction(null);
+                  setBulkActionScope("this");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-white px-4 py-2 text-sm text-black disabled:opacity-50"
+                disabled={bulkSaving}
+                type="submit"
+              >
+                Continue
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={bulkProjectModalOpen}
+        title="Move tasks to project"
+        onClose={() => {
+          if (bulkSaving) return;
+          setBulkProjectModalOpen(false);
+          setBulkProjectValue("");
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setBulkProjectModalOpen(false);
+            requestBulkAction({
+              action: "move-project",
+              projectId: bulkProjectValue || null,
+            });
+          }}
+        >
+          <label className="space-y-1 text-sm">
+            <div className="opacity-70">Project</div>
+            <select
+              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              value={bulkProjectValue}
+              onChange={(e) => setBulkProjectValue(e.target.value)}
+            >
+              <option value="" className="text-black">
+                Unassigned
+              </option>
+              {assignableProjects.map((project) => (
+                <option key={project.id} value={project.id} className="text-black">
+                  {project.name}
+                  {project.archived ? " (Archived)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+            disabled={bulkSaving}
+            type="submit"
+          >
+            Apply
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        open={bulkCategoryModalOpen}
+        title="Set task category"
+        onClose={() => {
+          if (bulkSaving) return;
+          setBulkCategoryModalOpen(false);
+          setBulkCategoryValue("");
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setBulkCategoryModalOpen(false);
+            requestBulkAction({
+              action: "set-category",
+              category: bulkCategoryValue.trim() || null,
+            });
+          }}
+        >
+          <CategoryCombobox
+            autoFocus
+            className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+            placeholder="Category"
+            suggestions={categorySuggestions}
+            value={bulkCategoryValue}
+            onChange={(e) => setBulkCategoryValue(e.target.value)}
+          />
+          <button
+            className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+            disabled={bulkSaving}
+            type="submit"
+          >
+            Apply
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        open={bulkDateModal !== null}
+        title={bulkDateModal === "startDate" ? "Set start date" : "Set due date"}
+        onClose={() => {
+          if (bulkSaving) return;
+          setBulkDateModal(null);
+          setBulkDateValue("");
+        }}
+      >
+        {bulkDateModal && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setBulkDateModal(null);
+              requestBulkAction(
+                bulkDateModal === "startDate"
+                  ? {
+                      action: "set-start-date",
+                      startDate: bulkDateValue,
+                    }
+                  : {
+                      action: "set-due-date",
+                      dueAt: bulkDateValue,
+                    }
+              );
+            }}
+          >
+            <DateInput
+              autoFocus
+              className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
+              required
+              value={bulkDateValue}
+              onChange={(e) => setBulkDateValue(e.target.value)}
+            />
+            <button
+              className="rounded-md bg-white px-4 py-2 text-black disabled:opacity-50"
+              disabled={bulkSaving}
+              type="submit"
+            >
+              Apply
+            </button>
+          </form>
+        )}
+      </Modal>
 
       <Modal
         open={Boolean(deleteTaskModalTask)}
@@ -2501,9 +3604,10 @@ export function TrackerClient({
                 />
               </label>
             </div>
-            <input
+            <CategoryCombobox
               className="w-full rounded-md border border-white/10 bg-transparent px-3 py-2 outline-none"
               placeholder="Category"
+              suggestions={categorySuggestions}
               value={editTaskForm.category}
               onChange={(e) =>
                 setEditTaskForm((prev) =>
