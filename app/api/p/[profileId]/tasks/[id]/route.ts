@@ -4,6 +4,7 @@ import {
   addDays,
   ensureProfile,
   ensureProject,
+  getNextTaskOrderIndex,
   nextOccurrenceDate,
   normalizeRepeatSettings,
   parseOptionalBooleanInput,
@@ -39,6 +40,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       recurrenceSeriesId: true,
       completedAt: true,
       completedOn: true,
+      orderIndex: true,
       repeatEnabled: true,
       repeatPattern: true,
       repeatDays: true,
@@ -61,6 +63,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     recurrenceSeriesId?: string | null;
     completedAt?: Date | null;
     completedOn?: Date | null;
+    orderIndex?: number | null;
     repeatEnabled?: boolean;
     repeatPattern?: string | null;
     repeatDays?: number | null;
@@ -246,6 +249,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
       }
       completionTransitionSucceeded = true;
     } else if (isUncompletingTask) {
+      if (existingTask.orderIndex === null) {
+        data.orderIndex = await getNextTaskOrderIndex(tx, profileId);
+      }
+
       const markedUndone = await tx.task.updateMany({
         where: { id, profileId, completedOn: { not: null } },
         data,
@@ -296,6 +303,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         projectId:
           data.projectId !== undefined ? data.projectId : existingTask.projectId,
         profileId,
+        orderIndex: await getNextTaskOrderIndex(tx, profileId),
         recurrenceSeriesId,
         startDate: dayStart,
         dueAt: null,
@@ -444,7 +452,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
         const nextStartDate = nextOccurrenceDate({
           baseDate: task.startDate,
-          recurrenceType: task.repeatPattern,
+          recurrenceType: task.repeatPattern as "daily" | "weekly" | "monthly",
           repeatDays: task.repeatDays,
           weeklyDay: task.repeatWeeklyDay,
           monthlyDay: task.repeatMonthlyDay,
@@ -469,6 +477,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
                 category: task.category,
                 startDate: nextStartDate,
                 profileId,
+                orderIndex: await getNextTaskOrderIndex(tx, profileId),
                 projectId: task.projectId,
                 recurrenceSeriesId: task.recurrenceSeriesId,
                 repeatEnabled: task.repeatEnabled,

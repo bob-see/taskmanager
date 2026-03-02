@@ -1,6 +1,3 @@
-Task Manager
-
-A profile-based productivity tracker designed to manage real-world workflows across multiple contexts (e.g. Work, Personal, Projects).
 
 The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
 
@@ -488,6 +485,65 @@ It should answer instantly:
 	•	What needs attention?
 	•	What’s slipping?
 	•	Where is time going?
+
+____
+
+🧭 PR12 — Profile Ordering (DB Persisted)
+
+Profiles can now be manually reordered via drag and drop on the home screen.
+The order is persisted in the database so it remains consistent across sessions.
+
+Highlights
+	•	Added order field to Profile model
+	•	Drag and drop UI on home screen
+	•	Bulk reorder endpoint (/api/profiles/reorder)
+	•	Optimistic UI updates with rollback on failure
+
+Result
+
+Profiles now behave like a configurable workspace list rather than a fixed menu.
+
+⸻
+
+🧩 PR13 — Tracker Matrix Layout & Reporting Mode
+
+The tracker UI was refactored to adopt a DREAM-style matrix layout with tasks as the primary surface.
+
+Key changes
+	•	Introduced sticky command bar with unified controls
+	•	Moved analytics and summaries to a dedicated Reporting page
+	•	Reduced vertical density and card clutter
+	•	Converted task lists into structured matrix tables
+	•	Added collapsible advanced add section
+
+UX impact
+
+The tracker now loads directly into a working state with tasks visible immediately, reducing cognitive load and aligning the experience with a matrix workflow model.
+
+⸻
+
+🗂 PR14 — Drag & Drop Task Ordering
+
+Tasks can now be manually reordered within the Open list, with order persisted per profile.
+
+Implementation
+	•	Added orderIndex to Task model
+	•	Migration backfilled deterministic ordering
+	•	New reorder endpoint (/tasks/reorder)
+	•	Native drag and drop interaction
+	•	Optimistic updates with persistence on drop
+
+Behaviour
+	•	Manual ordering applies when Sort = Manual
+	•	Other sort modes remain unaffected
+	•	Order persists across refresh and restarts
+
+⸻
+
+⚙️ Default Sort Update
+
+Manual sorting is now the default tracker sort mode, ensuring tasks open in the user-defined priority order immediately.
+
 
 ____
 

@@ -14,6 +14,7 @@ model Task {
   dueAt            DateTime?
   completedAt      DateTime?
   completedOn      DateTime?
+  orderIndex       Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   startDate        DateTime @default(now())
@@ -33,6 +34,7 @@ model Task {
   @@index([profileId, startDate])
   @@index([profileId, dueAt])
   @@index([profileId, completedOn])
+  @@index([profileId, completedOn, orderIndex])
   @@index([profileId, recurrenceSeriesId])
   @@index([projectId])
   @@unique([profileId, recurrenceSeriesId, startDate])

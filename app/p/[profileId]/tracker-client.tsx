@@ -47,6 +47,7 @@ type Task = {
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
   createdAt: string;
+  orderIndex: number | null;
 };
 
 type Project = {
@@ -103,6 +104,7 @@ type EditTaskFormState = RepeatFormState & {
 type ViewMode = "day" | "week" | "month";
 type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
 type DoneRange = "today" | "week" | "month" | "all";
+type SortMode = "start-date" | "due-date" | "manual";
 type DeleteMode = "this" | "future" | "series";
 type BulkAction =
   | "mark-done"
@@ -158,6 +160,11 @@ const DONE_RANGE_OPTIONS: Array<{ value: DoneRange; label: string }> = [
   { value: "week", label: "This Week" },
   { value: "month", label: "This Month" },
   { value: "all", label: "All" },
+];
+const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
+  { value: "manual", label: "Manual" },
+  { value: "start-date", label: "Start date" },
+  { value: "due-date", label: "Due date" },
 ];
 const AVERAGE_BASIS_OPTIONS: Array<{ value: AverageBasis; label: string }> = [
   { value: "calendar-days", label: "Calendar days" },
@@ -484,6 +491,87 @@ function compareTasksByStartDate(
     : right.id.localeCompare(left.id);
 }
 
+function compareTasksByCreatedAt(left: Task, right: Task) {
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt.localeCompare(right.createdAt);
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function compareTasksForStartDateSort(left: Task, right: Task) {
+  const leftStart = toDateOnly(left.startDate);
+  const rightStart = toDateOnly(right.startDate);
+
+  if (leftStart !== rightStart) {
+    return leftStart.localeCompare(rightStart);
+  }
+
+  return compareTasksByCreatedAt(left, right);
+}
+
+function compareTasksForDueDateSort(left: Task, right: Task) {
+  const leftDue = toDateOnly(left.dueAt);
+  const rightDue = toDateOnly(right.dueAt);
+
+  if (leftDue !== rightDue) {
+    if (!leftDue) return 1;
+    if (!rightDue) return -1;
+    return leftDue.localeCompare(rightDue);
+  }
+
+  return compareTasksForStartDateSort(left, right);
+}
+
+function compareTasksForManualSort(left: Task, right: Task) {
+  const leftOrder = left.orderIndex ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.orderIndex ?? Number.MAX_SAFE_INTEGER;
+
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  return compareTasksForStartDateSort(left, right);
+}
+
+function sortTasks(tasks: Task[], sortMode: SortMode) {
+  const sorted = [...tasks];
+  sorted.sort((left, right) => {
+    if (sortMode === "due-date") {
+      return compareTasksForDueDateSort(left, right);
+    }
+
+    if (sortMode === "manual") {
+      return compareTasksForManualSort(left, right);
+    }
+
+    return compareTasksForStartDateSort(left, right);
+  });
+  return sorted;
+}
+
+function reorderTaskIds(
+  orderedIds: string[],
+  draggedId: string,
+  targetId: string,
+  position: "before" | "after"
+) {
+  if (draggedId === targetId) {
+    return orderedIds;
+  }
+
+  const nextIds = orderedIds.filter((id) => id !== draggedId);
+  const targetIndex = nextIds.indexOf(targetId);
+
+  if (targetIndex === -1) {
+    return orderedIds;
+  }
+
+  const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+  nextIds.splice(insertIndex, 0, draggedId);
+  return nextIds;
+}
+
 function projectTasksBySeries(tasks: Task[], pick: "earliest" | "latest") {
   const projected = new Map<string, Task>();
 
@@ -629,7 +717,10 @@ function filterTasksByArchivedVisibility(
   );
 }
 
-function getTaskProjectLabel(task: Task, projectById: Map<string, Project>) {
+function getTaskProjectLabel(
+  task: { projectId: string | null },
+  projectById: Map<string, Project>
+) {
   return task.projectId ? projectById.get(task.projectId)?.name ?? "Unassigned" : "Unassigned";
 }
 
@@ -1134,6 +1225,13 @@ function TaskRow({
   onSnoozePreset,
   onPickSnoozeDate,
   onDelete,
+  draggable = false,
+  dragActive = false,
+  dragOverPosition,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
 }: {
   task: Task;
   projectName?: string;
@@ -1162,6 +1260,13 @@ function TaskRow({
   onSnoozePreset: (task: Task, preset: SnoozePreset) => void;
   onPickSnoozeDate: (task: Task) => void;
   onDelete: (task: Task) => void;
+  draggable?: boolean;
+  dragActive?: boolean;
+  dragOverPosition?: "before" | "after" | null;
+  onDragStart?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
 }) {
   const isEditing = editingTitleTaskId === task.id;
   const isEditingCategory = editingCategoryTaskId === task.id;
@@ -1173,7 +1278,18 @@ function TaskRow({
         projectArchived
           ? "border-amber-300/20 bg-amber-200/5"
           : "tm-card"
+      } ${draggable ? "cursor-grab" : ""} ${dragActive ? "opacity-60" : ""} ${
+        dragOverPosition === "before"
+          ? "border-t-2 border-t-[color:var(--tm-text)]"
+          : dragOverPosition === "after"
+            ? "border-b-2 border-b-[color:var(--tm-text)]"
+            : ""
       }`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       <div className="flex flex-wrap items-start justify-between gap-2.5">
         {selectMode && (
@@ -1428,6 +1544,7 @@ export function TrackerClient({
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
   const quickAddInputRef = useRef<HTMLInputElement | null>(null);
+  const dragOrderSnapshotRef = useRef<Task[] | null>(null);
   const lastSavedPreferencesRef = useRef<{
     profileId: string;
     defaultView: ViewMode;
@@ -1443,6 +1560,7 @@ export function TrackerClient({
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [openFilter, setOpenFilter] = useState<OpenFilter>("all-active");
   const [doneRange, setDoneRange] = useState<DoneRange>("today");
+  const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
@@ -1482,6 +1600,9 @@ export function TrackerClient({
   const [singleSnoozeTask, setSingleSnoozeTask] = useState<Task | null>(null);
   const [singleSnoozeDateValue, setSingleSnoozeDateValue] = useState("");
   const [bulkSnoozeDateValue, setBulkSnoozeDateValue] = useState("");
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<"before" | "after" | null>(null);
   const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
   const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
     createEmptyProjectForm
@@ -1546,6 +1667,7 @@ export function TrackerClient({
     setSelectedDay(todayInputValue());
     setOpenFilter("all-active");
     setDoneRange("today");
+    setSortMode("manual");
     setSearchQuery("");
     setShowArchived(false);
     setNewProjectOpen(false);
@@ -1567,6 +1689,10 @@ export function TrackerClient({
     setSingleSnoozeTask(null);
     setSingleSnoozeDateValue("");
     setBulkSnoozeDateValue("");
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverPosition(null);
+    dragOrderSnapshotRef.current = null;
     preferenceSyncProfileIdRef.current = null;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
@@ -1775,6 +1901,7 @@ export function TrackerClient({
           ? "upcoming"
           : "overdue"
   ];
+  const sortedOpenTasks = sortTasks(openTasks, sortMode);
 
   const doneTasks = visibleTasks.filter((task) => {
     if (!task.completedOn) return false;
@@ -1802,7 +1929,7 @@ export function TrackerClient({
     return project ? showArchived || !project.archived : true;
   }
 
-  const dayOpenTasks = openTasks.filter(
+  const dayOpenTasks = sortedOpenTasks.filter(
     (task) =>
       isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
@@ -1817,15 +1944,21 @@ export function TrackerClient({
     {
       key: "active",
       label: "Active",
-      tasks: searchResults.filter(
-        (task) => !isTaskCompleted(task) && toDateOnly(task.startDate) <= selectedDay
+      tasks: sortTasks(
+        searchResults.filter(
+          (task) => !isTaskCompleted(task) && toDateOnly(task.startDate) <= selectedDay
+        ),
+        sortMode
       ),
     },
     {
       key: "upcoming",
       label: "Upcoming",
-      tasks: searchResults.filter(
-        (task) => !isTaskCompleted(task) && isTaskUpcomingAfterDate(task, selectedDay)
+      tasks: sortTasks(
+        searchResults.filter(
+          (task) => !isTaskCompleted(task) && isTaskUpcomingAfterDate(task, selectedDay)
+        ),
+        sortMode
       ),
     },
     {
@@ -1992,6 +2125,21 @@ export function TrackerClient({
   );
   const newTaskProjectOptions = assignableProjects;
   const isReportingPage = pageMode === "reporting";
+  const manualReorderEnabled =
+    viewMode === "day" &&
+    !searchActive &&
+    openFilter === "all-active" &&
+    sortMode === "manual" &&
+    !selectMode;
+
+  useEffect(() => {
+    if (manualReorderEnabled) return;
+
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverPosition(null);
+    dragOrderSnapshotRef.current = null;
+  }, [manualReorderEnabled]);
 
   function shiftSelectedDay(direction: -1 | 1) {
     const nextDate =
@@ -2187,6 +2335,67 @@ export function TrackerClient({
     } finally {
       completionPendingTaskIdsRef.current.delete(taskId);
       setCompletionPendingTaskIds((prev) => prev.filter((id) => id !== taskId));
+    }
+  }
+
+  function applyManualOrder(orderedIds: string[]) {
+    const orderById = new Map(orderedIds.map((id, index) => [id, (index + 1) * 10]));
+
+    setTasks((prev) =>
+      prev.map((task) =>
+        orderById.has(task.id)
+          ? { ...task, orderIndex: orderById.get(task.id) ?? task.orderIndex }
+          : task
+      )
+    );
+  }
+
+  async function reorderVisibleOpenTasks(orderedIds: string[]) {
+    const res = await fetch(`/api/p/${profileId}/tasks/reorder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds }),
+    });
+
+    if (!res.ok) {
+      const responseBody = await res.json().catch(() => ({}));
+      throw new Error(responseBody?.error ?? "Could not reorder tasks");
+    }
+  }
+
+  function finishDragState() {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverPosition(null);
+  }
+
+  async function handleTaskDrop(targetTaskId: string, position: "before" | "after") {
+    if (!manualReorderEnabled || !draggedTaskId) {
+      finishDragState();
+      return;
+    }
+
+    const orderedIds = dayOpenTasks.map((task) => task.id);
+    const nextOrderedIds = reorderTaskIds(orderedIds, draggedTaskId, targetTaskId, position);
+
+    if (nextOrderedIds.every((id, index) => id === orderedIds[index])) {
+      finishDragState();
+      return;
+    }
+
+    dragOrderSnapshotRef.current = tasks;
+    applyManualOrder(nextOrderedIds);
+    finishDragState();
+
+    try {
+      await reorderVisibleOpenTasks(nextOrderedIds);
+      dragOrderSnapshotRef.current = null;
+    } catch (err) {
+      if (dragOrderSnapshotRef.current) {
+        setTasks(dragOrderSnapshotRef.current);
+        dragOrderSnapshotRef.current = null;
+      }
+      window.alert(err instanceof Error ? err.message : "Could not reorder tasks");
     }
   }
 
@@ -3177,6 +3386,17 @@ export function TrackerClient({
                 ))}
                 <select
                   className={`${inputClass} py-1 text-sm`}
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="text-black">
+                      Sort: {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className={`${inputClass} py-1 text-sm`}
                   value={doneRange}
                   onChange={(e) => setDoneRange(e.target.value as DoneRange)}
                 >
@@ -3191,6 +3411,7 @@ export function TrackerClient({
               <div className="tm-muted mb-4 text-sm">
                 Showing {dayOpenTasks.length} open and {dayDoneTasks.length} done task
                 {(dayOpenTasks.length + dayDoneTasks.length) === 1 ? "" : "s"}.
+                {manualReorderEnabled ? " Drag open rows to reorder them." : ""}
               </div>
             </>
           )}
@@ -3556,6 +3777,11 @@ export function TrackerClient({
                                 <TaskRow
                                   key={task.id}
                                   task={task}
+                                  draggable={manualReorderEnabled}
+                                  dragActive={draggedTaskId === task.id}
+                                  dragOverPosition={
+                                    dragOverTaskId === task.id ? dragOverPosition : null
+                                  }
                                   completionPending={completionPendingTaskIds.includes(
                                     task.id
                                   )}
@@ -3591,6 +3817,38 @@ export function TrackerClient({
                                   showSnoozeAction
                                   snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
+                                  onDragStart={(event) => {
+                                    if (!manualReorderEnabled) return;
+                                    event.dataTransfer.effectAllowed = "move";
+                                    event.dataTransfer.setData("text/plain", task.id);
+                                    setDraggedTaskId(task.id);
+                                    setDragOverTaskId(null);
+                                    setDragOverPosition(null);
+                                  }}
+                                  onDragEnd={finishDragState}
+                                  onDragOver={(event) => {
+                                    if (!manualReorderEnabled || draggedTaskId === task.id) {
+                                      return;
+                                    }
+
+                                    event.preventDefault();
+                                    const bounds = event.currentTarget.getBoundingClientRect();
+                                    const position =
+                                      event.clientY >= bounds.top + bounds.height / 2
+                                        ? "after"
+                                        : "before";
+                                    setDragOverTaskId(task.id);
+                                    setDragOverPosition(position);
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault();
+                                    void handleTaskDrop(
+                                      task.id,
+                                      dragOverTaskId === task.id && dragOverPosition === "after"
+                                        ? "after"
+                                        : "before"
+                                    );
+                                  }}
                                 />
                               ))}
                             </div>
@@ -3678,6 +3936,20 @@ export function TrackerClient({
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <label className="flex items-center gap-2 text-sm">
+                  <span className="tm-muted">Sort</span>
+                  <select
+                    className={`${inputClass} min-w-[10rem]`}
+                    value={sortMode}
+                    onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value} className="text-black">
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
                   <span className="tm-muted">Average basis</span>
                   <select
                     className={`${inputClass} min-w-[10rem]`}
@@ -3712,7 +3984,7 @@ export function TrackerClient({
 
             {loading ? (
               <div className="text-sm opacity-60">Loading tasks…</div>
-            ) : openTasks.length === 0 ? (
+            ) : sortedOpenTasks.length === 0 ? (
               <div className="text-sm opacity-60">No matching open tasks.</div>
             ) : (
               <div className="relative max-h-[520px] overflow-y-auto overflow-x-auto">
@@ -3729,7 +4001,7 @@ export function TrackerClient({
                     </tr>
                   </thead>
                   <tbody>
-                    {openTasks.map((task) => (
+                    {sortedOpenTasks.map((task) => (
                       <tr key={task.id} className="tm-table-row border-t align-top">
                         <td className={matrixCellClass}>
                           <div className="min-w-0">

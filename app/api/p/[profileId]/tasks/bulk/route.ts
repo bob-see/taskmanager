@@ -4,6 +4,7 @@ import {
   addDays,
   ensureProfile,
   ensureProject,
+  getNextTaskOrderIndex,
   nextOccurrenceDate,
   parseDateInput,
   parseOptionalTextInput,
@@ -23,6 +24,7 @@ type TaskRecord = {
   startDate: Date;
   dueAt: Date | null;
   completedOn: Date | null;
+  orderIndex: number | null;
   category: string | null;
   notes: string | null;
   projectId: string | null;
@@ -41,6 +43,7 @@ const TASK_SELECT = {
   startDate: true,
   dueAt: true,
   completedOn: true,
+  orderIndex: true,
   category: true,
   notes: true,
   projectId: true,
@@ -183,6 +186,7 @@ async function markTaskDone(
     notes: task.notes,
     projectId: task.projectId,
     profileId: task.profileId,
+    orderIndex: await getNextTaskOrderIndex(tx, task.profileId),
     recurrenceSeriesId: task.recurrenceSeriesId,
     startDate: dayStart,
     dueAt: null,
@@ -244,11 +248,15 @@ async function markTaskDone(
 }
 
 async function markTaskOpen(tx: Prisma.TransactionClient, task: TaskRecord) {
+  const orderIndex =
+    task.orderIndex === null ? await getNextTaskOrderIndex(tx, task.profileId) : task.orderIndex;
+
   await tx.task.updateMany({
     where: { id: task.id, profileId: task.profileId, completedOn: { not: null } },
     data: {
       completedAt: null,
       completedOn: null,
+      orderIndex,
     },
   });
 }
@@ -316,6 +324,7 @@ async function deleteSingleTask(tx: Prisma.TransactionClient, task: TaskRecord) 
         category: task.category,
         startDate: nextStartDate,
         profileId: task.profileId,
+        orderIndex: await getNextTaskOrderIndex(tx, task.profileId),
         projectId: task.projectId,
         recurrenceSeriesId: task.recurrenceSeriesId,
         repeatEnabled: task.repeatEnabled,

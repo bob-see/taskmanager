@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import {
   ensureProfile,
   ensureProject,
+  getNextTaskOrderIndex,
   normalizeRepeatSettings,
   parseOptionalBooleanInput,
   parseOptionalIntInput,
@@ -120,11 +121,13 @@ export async function POST(req: Request, ctx: Ctx) {
     : startDate.value;
 
   const task = await prisma.$transaction(async (tx) => {
+    const orderIndex = await getNextTaskOrderIndex(tx, profileId);
     const createdTask = await tx.task.create({
       data: {
         title,
         startDate: normalizedStartDate,
         profileId,
+        orderIndex,
         ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
         ...(category.value !== undefined ? { category: category.value } : {}),
         ...(notes.value !== undefined ? { notes: notes.value } : {}),
