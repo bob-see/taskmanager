@@ -5,6 +5,7 @@ const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const REPEAT_PATTERNS = ["daily", "weekly", "monthly"] as const;
 export const ALL_REPEAT_DAYS_MASK = 0b1111111;
 export const TASK_ORDER_GAP = 10;
+export const PROJECT_ORDER_GAP = 10;
 
 export type RepeatPattern = (typeof REPEAT_PATTERNS)[number];
 
@@ -379,6 +380,18 @@ export async function getNextTaskOrderIndex(
   });
 
   return (aggregate._max.orderIndex ?? 0) + TASK_ORDER_GAP;
+}
+
+export async function getNextProjectOrderIndex(
+  tx: Prisma.TransactionClient | typeof prisma,
+  profileId: string
+) {
+  const aggregate = await tx.project.aggregate({
+    where: { profileId },
+    _max: { orderIndex: true },
+  });
+
+  return (aggregate._max.orderIndex ?? 0) + PROJECT_ORDER_GAP;
 }
 
 export async function ensureProfile(profileId: string) {

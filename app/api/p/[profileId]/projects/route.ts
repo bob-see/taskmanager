@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import {
   ensureProfile,
+  getNextProjectOrderIndex,
   parseDateInput,
   parseOptionalTextInput,
 } from "@/app/api/p/tasks-shared";
@@ -19,7 +20,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const projects = await prisma.project.findMany({
     where: { profileId },
-    orderBy: [{ createdAt: "desc" }],
+    orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
   });
 
   return Response.json(projects);
@@ -56,6 +57,7 @@ export async function POST(req: Request, ctx: Ctx) {
     data: {
       name,
       profileId,
+      orderIndex: await getNextProjectOrderIndex(prisma, profileId),
       startDate: startDate.value ?? defaultStartDate,
       ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
       ...(category.value !== undefined ? { category: category.value } : {}),

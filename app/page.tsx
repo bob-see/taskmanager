@@ -235,13 +235,21 @@ export default function Home() {
 
           {/* Add profile */}
           <div className="mt-10 flex flex-col items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setShowForm((prev) => !prev)}
-              className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium shadow-sm hover:shadow"
-            >
-              + Add profile
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/overview"
+                className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium shadow-sm hover:shadow"
+              >
+                Overview
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowForm((prev) => !prev)}
+                className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium shadow-sm hover:shadow"
+              >
+                + Add profile
+              </button>
+            </div>
 
             {showForm && (
               <form

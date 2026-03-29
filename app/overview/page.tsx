@@ -66,11 +66,13 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         select: {
           id: true,
           title: true,
+          notes: true,
           startDate: true,
           dueAt: true,
           category: true,
           createdAt: true,
           orderIndex: true,
+          recurrenceSeriesId: true,
           projectId: true,
           project: {
             select: {
@@ -80,11 +82,13 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         },
       },
       projects: {
-        orderBy: [{ createdAt: "desc" }],
+        orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
           name: true,
           archived: true,
+          orderIndex: true,
+          createdAt: true,
         },
       },
     },
@@ -166,10 +170,13 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         id: project.id,
         name: project.name,
         archived: project.archived,
+        orderIndex: project.orderIndex,
+        createdAt: project.createdAt.toISOString(),
       })),
       openTasks: sortedOpenTasks.map((task) => ({
         id: task.id,
         title: task.title,
+        notes: task.notes,
         projectId: task.projectId,
         projectName: task.project?.name ?? null,
         category: task.category,
@@ -177,6 +184,7 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         dueAt: toDateOnly(task.dueAt),
         createdAt: task.createdAt.toISOString(),
         orderIndex: task.orderIndex,
+        recurrenceSeriesId: task.recurrenceSeriesId,
       })),
       initialTaskLimit: DEFAULT_TASKS_TO_SHOW,
     };

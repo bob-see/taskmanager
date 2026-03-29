@@ -718,9 +718,13 @@ function filterTasksByArchivedVisibility(
 }
 
 function getTaskProjectLabel(
-  task: { projectId: string | null },
+  task: { projectId: string | null; recurrenceSeriesId?: string | null; repeatEnabled?: boolean; repeatPattern?: string | null },
   projectById: Map<string, Project>
 ) {
+  if (isRecurringTask(task as Task)) {
+    return "Recurring";
+  }
+
   return task.projectId ? projectById.get(task.projectId)?.name ?? "Unassigned" : "Unassigned";
 }
 
@@ -2046,6 +2050,26 @@ export function TrackerClient({
         : formatMonthTitle(selectedDate);
 
   const groupedSections = [
+    {
+      key: "recurring",
+      label: "Recurring",
+      project: null,
+      collapsed: false,
+      openTasks: dayOpenTasks.filter((task) => isRecurringTask(task)),
+      doneTasks: dayDoneTasks.filter((task) => isRecurringTask(task)),
+      progressTotal: 0,
+      progressCompleted: 0,
+    },
+    {
+      key: "unassigned",
+      label: "Unassigned",
+      project: null,
+      collapsed: false,
+      openTasks: dayOpenTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
+      doneTasks: dayDoneTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
+      progressTotal: 0,
+      progressCompleted: 0,
+    },
     ...visibleProjects.map((project) => ({
       key: project.id,
       label: project.name,
@@ -2062,16 +2086,6 @@ export function TrackerClient({
           isTaskCompletedOnDate(task, selectedDay)
       ).length,
     })),
-    {
-      key: "unassigned",
-      label: "Unassigned",
-      project: null,
-      collapsed: false,
-      openTasks: dayOpenTasks.filter((task) => !task.projectId),
-      doneTasks: dayDoneTasks.filter((task) => !task.projectId),
-      progressTotal: 0,
-      progressCompleted: 0,
-    },
   ];
   const visibleDayTaskIds = Array.from(
     new Set(
@@ -3625,9 +3639,7 @@ export function TrackerClient({
                           key={task.id}
                           task={task}
                           projectName={
-                            task.projectId
-                              ? projectById.get(task.projectId)?.name ?? "Unknown"
-                              : "Unassigned"
+                            getTaskProjectLabel(task, projectById)
                           }
                           projectArchived={
                             task.projectId

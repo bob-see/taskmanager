@@ -574,6 +574,95 @@ Key Features
 _____
 
 
+## Overview Dashboard
+
+The Overview page provides a matrix-style dashboard showing all profiles and their active tasks in one place.
+
+### Overview features
+- View all profiles side-by-side
+- Tasks grouped by:
+  - Recurring
+  - Unassigned
+  - Project
+- Drag and drop:
+  - Reorder profile cards
+  - Reorder project groups
+  - Reorder tasks within groups
+- Quick actions per profile:
+  - Add Task
+  - Add Project
+  - Collapse
+  - Open Tracker
+- Right-click context menu on tasks:
+  - Edit
+  - Done / Open
+  - Delete
+  - Recurring delete options when applicable
+- Right-click context menu on projects:
+  - Edit
+  - Archive
+- Hover over a task to preview notes
+- "Show more" to expand long task lists
+
+### Global filters (Overview)
+Filters apply across all profiles:
+- All open — active tasks (not future upcoming)
+- Today — tasks due or starting today
+- Overdue — tasks past due
+- Upcoming — future tasks
+
+Profiles remain visible even if no tasks match the selected filter.
+
+---
+
+## Task Grouping Rules
+
+Tasks are grouped using the following logic:
+
+1. Recurring — all recurring tasks
+2. Unassigned — tasks with no project
+3. Projects — tasks assigned to a project (manual order)
+
+"Recurring" and "Unassigned" are virtual groups and are not stored as projects in the database.
+
+---
+
+## Navigation
+
+Home screen:
+- Select a profile to open its Tracker
+- Open the Overview dashboard
+- Add and reorder profiles
+
+Overview:
+- High-level dashboard across all profiles
+
+Tracker:
+- Detailed task management (Day / Week / Month)
+
+Reporting:
+- Summary and reporting view (per profile)
+
+---
+
+## Installed App
+
+TaskManager can be installed as a local web app and opened from the dock like a desktop app.
+
+The app uses a web app manifest with:
+- Standalone display mode
+- Start URL: `/`
+- Scope: `/`
+
+This allows Home, Overview, Tracker, and Reporting pages to function inside the installed app without browser UI.
+
+
+
+____
+
+
+
+
 🗺️ ROADMAP
 
 Short Term
