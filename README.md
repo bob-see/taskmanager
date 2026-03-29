@@ -548,6 +548,32 @@ Manual sorting is now the default tracker sort mode, ensuring tasks open in the 
 ____
 
 
+🧭 PR17 — Overview Page (All Profiles Dashboard)
+
+Summary
+
+A new Overview page has been introduced to provide a high-level view of all profiles and their active tasks in one place. This allows the user to see workload across all areas (e.g. Simon, Sales, DREAM, Personal) without switching between profiles.
+
+The Overview page acts as a command centre for the system.
+
+Key Features
+	•	Displays all profiles on one screen
+	•	Tasks are grouped by Project
+	•	Tasks without a project are grouped under Unassigned
+	•	Each profile shows summary counts:
+	•	Open
+	•	Done
+	•	Overdue
+	•	Quick Add task bar available directly from Overview
+	•	Ability to:
+	•	Collapse/expand each profile
+	•	Jump directly into a profile’s Tracker via Open tracker
+	•	“Show more” used to keep long lists compact
+
+
+_____
+
+
 🗺️ ROADMAP
 
 Short Term
