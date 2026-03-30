@@ -3,11 +3,24 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ProjectEditorModal,
+  TaskEditorModal,
+  createEditTaskForm,
+  createProjectForm,
+  type EditTaskFormState,
+  type ProjectFormState,
+  type RepeatPattern,
+} from "@/app/components/editors";
 
 type OverviewProject = {
   id: string;
   name: string;
+  startDate: string;
+  dueAt: string | null;
+  category: string | null;
   archived: boolean;
+  collapsed: boolean;
   orderIndex: number | null;
   createdAt: string;
 };
@@ -24,6 +37,11 @@ type OverviewTask = {
   createdAt: string;
   orderIndex: number | null;
   recurrenceSeriesId: string | null;
+  repeatEnabled: boolean;
+  repeatPattern: RepeatPattern | null;
+  repeatDays: number | null;
+  repeatWeeklyDay: number | null;
+  repeatMonthlyDay: number | null;
 };
 
 type ProfileCounts = {
@@ -58,10 +76,7 @@ type TaskDraftState = {
   dueAt: string;
 };
 
-type ProjectDraftState = {
-  name: string;
-  startDate: string;
-};
+type ProjectDraftState = ProjectFormState;
 
 type TaskGroup = {
   key: string;
@@ -189,10 +204,7 @@ function createEmptyTaskDraftState(): TaskDraftState {
 }
 
 function createEmptyProjectDraftState(): ProjectDraftState {
-  return {
-    name: "",
-    startDate: todayInputValue(),
-  };
+  return createProjectForm();
 }
 
 function isTaskOverdue(dueAt: string) {
@@ -356,6 +368,12 @@ function ProfileCard({
   const [projectSaving, setProjectSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  const [editTaskForm, setEditTaskForm] = useState<EditTaskFormState | null>(null);
+  const [editTaskSaving, setEditTaskSaving] = useState(false);
+  const [editProjectId, setEditProjectId] = useState<string | null>(null);
+  const [editProjectForm, setEditProjectForm] = useState<ProjectFormState | null>(null);
+  const [editProjectSaving, setEditProjectSaving] = useState(false);
   const [taskReordering, setTaskReordering] = useState(false);
   const [projectReordering, setProjectReordering] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
@@ -383,6 +401,17 @@ function ProfileCard({
   const projectSnapshotRef = useRef<OverviewProject[] | null>(null);
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects]
+  );
+  const projectOptions = useMemo(
+    () =>
+      [...projects]
+        .sort(compareProjectsForManualSort)
+        .map((project) => ({
+          id: project.id,
+          name: project.name,
+          archived: project.archived,
+        })),
     [projects]
   );
 
@@ -561,6 +590,18 @@ function ProfileCard({
     setProjectDraft(createEmptyProjectDraftState());
   }
 
+  function closeTaskEditor() {
+    if (editTaskSaving) return;
+    setEditTaskId(null);
+    setEditTaskForm(null);
+  }
+
+  function closeProjectEditor() {
+    if (editProjectSaving) return;
+    setEditProjectId(null);
+    setEditProjectForm(null);
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const title = taskDraft.title.trim();
@@ -663,6 +704,8 @@ function ProfileCard({
         body: JSON.stringify({
           name,
           startDate: projectDraft.startDate || todayInputValue(),
+          dueAt: projectDraft.dueAt || null,
+          category: projectDraft.category.trim() || null,
         }),
       });
 
@@ -906,6 +949,27 @@ function ProfileCard({
     });
   }
 
+  function openTaskEditor(task: OverviewTask) {
+    setContextMenu(null);
+    setEditTaskId(task.id);
+    setEditTaskForm(createEditTaskForm(task));
+  }
+
+  function openProjectEditor(group: TaskGroup) {
+    if (!group.projectId) {
+      return;
+    }
+
+    const project = projects.find((item) => item.id === group.projectId);
+    if (!project) {
+      return;
+    }
+
+    setContextMenu(null);
+    setEditProjectId(project.id);
+    setEditProjectForm(createProjectForm(project));
+  }
+
   async function patchTask(taskId: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/p/${profile.id}/tasks/${taskId}`, {
       method: "PATCH",
@@ -925,10 +989,17 @@ function ProfileCard({
         startDate: string;
         dueAt: string | null;
         category: string | null;
+        notes: string | null;
         createdAt: string;
         orderIndex: number | null;
         projectId: string | null;
         completedOn: string | null;
+        recurrenceSeriesId: string | null;
+        repeatEnabled: boolean;
+        repeatPattern: RepeatPattern | null;
+        repeatDays: number | null;
+        repeatWeeklyDay: number | null;
+        repeatMonthlyDay: number | null;
       };
     };
   }
@@ -976,54 +1047,77 @@ function ProfileCard({
       const responseBody = await res.json().catch(() => ({}));
       throw new Error(responseBody?.error ?? "Could not update project");
     }
+
+    return (await res.json()) as OverviewProject;
   }
 
-  async function handleEditTask(task: OverviewTask) {
-    const nextTitle = window.prompt("Edit task title", task.title)?.trim();
-    setContextMenu(null);
+  async function submitTaskEditor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editTaskId || !editTaskForm) return;
 
-    if (nextTitle === undefined || nextTitle === null) {
-      return;
-    }
-
-    if (!nextTitle) {
-      alert("Title is required");
-      return;
-    }
-
-    setBusyAction(true);
+    setEditTaskSaving(true);
 
     try {
-      const response = await patchTask(task.id, { title: nextTitle });
+      const response = await patchTask(editTaskId, {
+        title: editTaskForm.title.trim(),
+        startDate: editTaskForm.startDate,
+        dueAt: editTaskForm.dueAt || null,
+        category: editTaskForm.category || null,
+        notes: editTaskForm.notes || null,
+        projectId: editTaskForm.projectId || null,
+        repeatEnabled: editTaskForm.repeatEnabled,
+        repeatPattern: editTaskForm.repeatEnabled ? editTaskForm.repeatPattern : null,
+        repeatDays:
+          editTaskForm.repeatEnabled &&
+          (editTaskForm.repeatPattern === "daily" ||
+            editTaskForm.repeatPattern === "weekly")
+            ? editTaskForm.repeatDays
+            : null,
+        repeatWeeklyDay:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPattern === "weekly"
+            ? editTaskForm.repeatWeeklyDay
+            : null,
+        repeatMonthlyDay:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPattern === "monthly"
+            ? editTaskForm.repeatMonthlyDay
+            : null,
+      });
       const savedTask = response.task;
 
       if (savedTask) {
         setOpenTasks((prev) =>
           prev.map((item) =>
-            item.id === task.id
+            item.id === editTaskId
               ? {
                   ...item,
                   title: savedTask.title,
+                  notes: savedTask.notes,
                   category: savedTask.category,
                   startDate: toDateOnly(savedTask.startDate),
                   dueAt: toDateOnly(savedTask.dueAt),
                   orderIndex: savedTask.orderIndex,
                   projectId: savedTask.projectId,
-                  projectName:
-                    savedTask.projectId
-                      ? projectNameById.get(savedTask.projectId) ?? item.projectName
-                      : null,
+                  projectName: savedTask.projectId
+                    ? projectNameById.get(savedTask.projectId) ?? item.projectName
+                    : null,
+                  recurrenceSeriesId: savedTask.recurrenceSeriesId,
+                  repeatEnabled: savedTask.repeatEnabled,
+                  repeatPattern: savedTask.repeatPattern,
+                  repeatDays: savedTask.repeatDays,
+                  repeatWeeklyDay: savedTask.repeatWeeklyDay,
+                  repeatMonthlyDay: savedTask.repeatMonthlyDay,
                 }
               : item
           )
         );
       }
 
+      closeTaskEditor();
       router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update task");
     } finally {
-      setBusyAction(false);
+      setEditTaskSaving(false);
     }
   }
 
@@ -1091,42 +1185,31 @@ function ProfileCard({
     }
   }
 
-  async function handleEditProject(group: TaskGroup) {
-    if (!group.projectId) {
-      return;
-    }
+  async function submitProjectEditor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editProjectId || !editProjectForm) return;
 
-    const nextName = window.prompt("Edit project name", group.label)?.trim();
-    setContextMenu(null);
-
-    if (nextName === undefined || nextName === null) {
-      return;
-    }
-
-    if (!nextName) {
-      alert("Name is required");
-      return;
-    }
-
-    setBusyAction(true);
+    setEditProjectSaving(true);
 
     try {
-      await patchProject(group.projectId, { name: nextName });
-      setProjects((prev) =>
-        prev.map((project) =>
-          project.id === group.projectId ? { ...project, name: nextName } : project
-        )
-      );
+      const project = await patchProject(editProjectId, {
+        name: editProjectForm.name.trim(),
+        startDate: editProjectForm.startDate,
+        dueAt: editProjectForm.dueAt || null,
+        category: editProjectForm.category || null,
+      });
+      setProjects((prev) => prev.map((item) => (item.id === editProjectId ? project : item)));
       setOpenTasks((prev) =>
         prev.map((task) =>
-          task.projectId === group.projectId ? { ...task, projectName: nextName } : task
+          task.projectId === editProjectId ? { ...task, projectName: project.name } : task
         )
       );
+      closeProjectEditor();
       router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update project");
     } finally {
-      setBusyAction(false);
+      setEditProjectSaving(false);
     }
   }
 
@@ -1502,83 +1585,42 @@ function ProfileCard({
         </div>
       )}
 
-      {projectDialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6"
-          onClick={closeProjectDialog}
-        >
-          <div
-            className="tm-card w-full max-w-lg rounded-[16px] border p-5 shadow-xl md:p-6"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold tracking-tight">Add Project</h3>
-                <p className="mt-1 text-sm text-[color:var(--tm-muted)]">{profile.name}</p>
-              </div>
-              <button
-                type="button"
-                className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-                onClick={closeProjectDialog}
-                disabled={projectSaving}
-              >
-                Cancel
-              </button>
-            </div>
+      <ProjectEditorModal
+        open={projectDialogOpen}
+        form={projectDraft}
+        saving={projectSaving}
+        title="Add Project"
+        submitLabel={projectSaving ? "Creating…" : "Create Project"}
+        onClose={closeProjectDialog}
+        onSubmit={onProjectSubmit}
+        onFormChange={(updater) => setProjectDraft((prev) => updater(prev))}
+      />
 
-            <form onSubmit={onProjectSubmit} className="mt-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor={`overview-project-name-${profile.id}`}>
-                  Project name
-                </label>
-                <input
-                  id={`overview-project-name-${profile.id}`}
-                  className={`${inputClass} w-full`}
-                  placeholder="Project name"
-                  value={projectDraft.name}
-                  onChange={(event) =>
-                    setProjectDraft((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  autoFocus
-                />
-              </div>
+      <TaskEditorModal
+        open={Boolean(editTaskId && editTaskForm)}
+        form={editTaskForm}
+        saving={editTaskSaving}
+        categorySuggestions={categorySuggestions}
+        projectOptions={projectOptions}
+        onClose={closeTaskEditor}
+        onSubmit={submitTaskEditor}
+        onFormChange={(updater) =>
+          setEditTaskForm((prev) => (prev ? updater(prev) : prev))
+        }
+      />
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor={`overview-project-start-${profile.id}`}>
-                  Start date
-                </label>
-                <input
-                  id={`overview-project-start-${profile.id}`}
-                  type="date"
-                  className={`${inputClass} w-full`}
-                  value={projectDraft.startDate}
-                  onChange={(event) =>
-                    setProjectDraft((prev) => ({ ...prev, startDate: event.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-                  onClick={closeProjectDialog}
-                  disabled={projectSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={buttonClass}
-                  disabled={projectSaving || !projectDraft.name.trim()}
-                >
-                  {projectSaving ? "Creating…" : "Create Project"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ProjectEditorModal
+        open={Boolean(editProjectId && editProjectForm)}
+        form={editProjectForm}
+        saving={editProjectSaving}
+        title="Edit Project"
+        submitLabel={editProjectSaving ? "Saving…" : "Save Project"}
+        onClose={closeProjectEditor}
+        onSubmit={submitProjectEditor}
+        onFormChange={(updater) =>
+          setEditProjectForm((prev) => (prev ? updater(prev) : prev))
+        }
+      />
 
       {deleteTaskModalTask && (
         <div
@@ -1707,8 +1749,8 @@ function ProfileCard({
               <button
                 type="button"
                 className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
-                onClick={() => void handleEditTask(contextMenu.task)}
-                disabled={busyAction}
+                onClick={() => openTaskEditor(contextMenu.task)}
+                disabled={busyAction || editTaskSaving || editProjectSaving}
               >
                 Edit
               </button>
@@ -1731,14 +1773,16 @@ function ProfileCard({
             </>
           ) : (
             <>
-              <button
-                type="button"
-                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
-                onClick={() => void handleEditProject(contextMenu.group)}
-                disabled={busyAction}
-              >
-                Edit
-              </button>
+              {contextMenu.group.projectId && (
+                <button
+                  type="button"
+                  className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                  onClick={() => openProjectEditor(contextMenu.group)}
+                  disabled={busyAction || editTaskSaving || editProjectSaving}
+                >
+                  Edit
+                </button>
+              )}
               {!contextMenu.group.isUnassigned && (
                 <button
                   type="button"

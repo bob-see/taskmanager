@@ -11,6 +11,14 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  TaskEditorModal,
+  createEditTaskForm,
+  type EditTaskFormState,
+  type ProjectFormState,
+  type RepeatFormState,
+  type RepeatPattern,
+} from "@/app/components/editors";
+import {
   type AverageBasis,
   endOfMonth,
   endOfWeekSun,
@@ -67,37 +75,11 @@ type TrackerClientProps = {
   profileName: string;
 };
 
-type RepeatPattern = "daily" | "weekly" | "monthly";
-
-type RepeatFormState = {
-  repeatEnabled: boolean;
-  repeatPattern: RepeatPattern;
-  repeatDays: number;
-  repeatWeeklyDay: number;
-  repeatMonthlyDay: number;
-};
-
 type TaskFormState = RepeatFormState & {
   title: string;
   startDate: string;
   dueAt: string;
   category: string;
-  projectId: string;
-};
-
-type ProjectFormState = {
-  name: string;
-  startDate: string;
-  dueAt: string;
-  category: string;
-};
-
-type EditTaskFormState = RepeatFormState & {
-  title: string;
-  startDate: string;
-  dueAt: string;
-  category: string;
-  notes: string;
   projectId: string;
 };
 
@@ -993,29 +975,6 @@ function createEmptyTaskForm(dateValue = todayInputValue()): TaskFormState {
     category: "",
     projectId: "",
     ...createRepeatDefaults(dateValue),
-  };
-}
-
-function createEditTaskForm(task: Task): EditTaskFormState {
-  const startDate = toDateOnly(task.startDate) || todayInputValue();
-  const repeatWeeklyDay = task.repeatWeeklyDay ?? getWeekdayNumber(startDate);
-
-  return {
-    title: task.title,
-    startDate,
-    dueAt: toDateOnly(task.dueAt),
-    category: task.category ?? "",
-    notes: task.notes ?? "",
-    projectId: task.projectId ?? "",
-    repeatEnabled: task.repeatEnabled,
-    repeatPattern: task.repeatPattern ?? "daily",
-    repeatDays:
-      task.repeatDays ??
-      (task.repeatPattern === "weekly"
-        ? getRepeatDayBit(repeatWeeklyDay)
-        : ALL_REPEAT_DAYS_MASK),
-    repeatWeeklyDay,
-    repeatMonthlyDay: task.repeatMonthlyDay ?? getDayOfMonth(startDate),
   };
 }
 
@@ -4705,104 +4664,18 @@ export function TrackerClient({
         </form>
       </Modal>
 
-      <Modal open={Boolean(editTaskId && editTaskForm)} title="Edit Task" onClose={closeTaskEditor}>
-        {editTaskForm && (
-          <form className="space-y-3" onSubmit={submitTaskEditor}>
-            <input
-              className={`w-full ${inputClass}`}
-              placeholder="Task title"
-              value={editTaskForm.title}
-              onChange={(e) =>
-                setEditTaskForm((prev) =>
-                  prev ? { ...prev, title: e.target.value } : prev
-                )
-              }
-            />
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <div className="tm-muted">Start date</div>
-                <DateInput
-                  className={`w-full ${inputClass}`}
-                  required
-                  value={editTaskForm.startDate}
-                  onChange={(e) =>
-                    setEditTaskForm((prev) =>
-                      prev ? { ...prev, startDate: e.target.value } : prev
-                    )
-                  }
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <div className="tm-muted">Due date</div>
-                <DateInput
-                  className={`w-full ${inputClass}`}
-                  value={editTaskForm.dueAt}
-                  onChange={(e) =>
-                    setEditTaskForm((prev) =>
-                      prev ? { ...prev, dueAt: e.target.value } : prev
-                    )
-                  }
-                />
-              </label>
-            </div>
-            <CategoryCombobox
-              className={`w-full ${inputClass}`}
-              placeholder="Category"
-              suggestions={categorySuggestions}
-              value={editTaskForm.category}
-              onChange={(value) =>
-                setEditTaskForm((prev) => (prev ? { ...prev, category: value } : prev))
-              }
-            />
-            <textarea
-              className={`min-h-28 w-full ${inputClass}`}
-              placeholder="Notes"
-              value={editTaskForm.notes}
-              onChange={(e) =>
-                setEditTaskForm((prev) =>
-                  prev ? { ...prev, notes: e.target.value } : prev
-                )
-              }
-            />
-            <label className="space-y-1 text-sm">
-              <div className="tm-muted">Project</div>
-              <select
-                className={`w-full ${inputClass}`}
-                value={editTaskForm.projectId}
-                onChange={(e) =>
-                  setEditTaskForm((prev) =>
-                    prev ? { ...prev, projectId: e.target.value } : prev
-                  )
-                }
-              >
-                <option value="" className="text-black">
-                  Unassigned
-                </option>
-                {projectOptions.map((project) => (
-                  <option key={project.id} value={project.id} className="text-black">
-                    {project.name}
-                    {project.archived ? " (Archived)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <RepeatFields
-              form={editTaskForm}
-              defaultDateValue={editTaskForm.startDate}
-              onChange={(updater) =>
-                setEditTaskForm((prev) => (prev ? updater(prev) : prev))
-              }
-            />
-            <button
-              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
-              disabled={editTaskSaving}
-              type="submit"
-            >
-              Save Task
-            </button>
-          </form>
-        )}
-      </Modal>
+      <TaskEditorModal
+        open={Boolean(editTaskId && editTaskForm)}
+        form={editTaskForm}
+        saving={editTaskSaving}
+        categorySuggestions={categorySuggestions}
+        projectOptions={projectOptions}
+        onClose={closeTaskEditor}
+        onSubmit={submitTaskEditor}
+        onFormChange={(updater) =>
+          setEditTaskForm((prev) => (prev ? updater(prev) : prev))
+        }
+      />
     </section>
   );
 }

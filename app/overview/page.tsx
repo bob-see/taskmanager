@@ -73,6 +73,11 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
           createdAt: true,
           orderIndex: true,
           recurrenceSeriesId: true,
+          repeatEnabled: true,
+          repeatPattern: true,
+          repeatDays: true,
+          repeatWeeklyDay: true,
+          repeatMonthlyDay: true,
           projectId: true,
           project: {
             select: {
@@ -86,7 +91,11 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         select: {
           id: true,
           name: true,
+          startDate: true,
+          dueAt: true,
+          category: true,
           archived: true,
+          collapsed: true,
           orderIndex: true,
           createdAt: true,
         },
@@ -169,7 +178,11 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
       projects: profile.projects.map((project) => ({
         id: project.id,
         name: project.name,
+        startDate: toDateOnly(project.startDate),
+        dueAt: toDateOnly(project.dueAt),
+        category: project.category,
         archived: project.archived,
+        collapsed: project.collapsed,
         orderIndex: project.orderIndex,
         createdAt: project.createdAt.toISOString(),
       })),
@@ -185,6 +198,11 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         createdAt: task.createdAt.toISOString(),
         orderIndex: task.orderIndex,
         recurrenceSeriesId: task.recurrenceSeriesId,
+        repeatEnabled: task.repeatEnabled,
+        repeatPattern: task.repeatPattern,
+        repeatDays: task.repeatDays,
+        repeatWeeklyDay: task.repeatWeeklyDay,
+        repeatMonthlyDay: task.repeatMonthlyDay,
       })),
       initialTaskLimit: DEFAULT_TASKS_TO_SHOW,
     };
