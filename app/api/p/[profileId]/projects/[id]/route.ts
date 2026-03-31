@@ -34,6 +34,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     category?: string | null;
     archived?: boolean;
     collapsed?: boolean;
+    isPriority?: boolean;
   } = {};
 
   if (body?.name !== undefined) {
@@ -79,11 +80,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
     data.collapsed = body.collapsed;
   }
 
+  if (body?.isPriority !== undefined) {
+    if (typeof body.isPriority !== "boolean") {
+      return Response.json({ error: "isPriority must be a boolean" }, { status: 400 });
+    }
+    data.isPriority = body.isPriority;
+  }
+
   if (Object.keys(data).length === 0) {
     return Response.json(
       {
         error:
-          "Body must include at least one of name, startDate, dueAt, category, archived, or collapsed",
+          "Body must include at least one of name, startDate, dueAt, category, archived, collapsed, or isPriority",
       },
       { status: 400 }
     );

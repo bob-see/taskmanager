@@ -15,6 +15,7 @@ model Task {
   completedAt      DateTime?
   completedOn      DateTime?
   orderIndex       Int?
+  isPriority       Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   startDate        DateTime @default(now())
@@ -61,6 +62,7 @@ model Project {
   orderIndex Int?
   archived  Boolean   @default(false)
   collapsed Boolean   @default(false)
+  isPriority Boolean  @default(false)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   profileId String

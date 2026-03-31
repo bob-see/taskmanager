@@ -38,12 +38,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
       notes: true,
       projectId: true,
       recurrenceSeriesId: true,
-      completedAt: true,
-      completedOn: true,
-      orderIndex: true,
-      repeatEnabled: true,
-      repeatPattern: true,
-      repeatDays: true,
+    completedAt: true,
+    completedOn: true,
+    orderIndex: true,
+    isPriority: true,
+    repeatEnabled: true,
+    repeatPattern: true,
+    repeatDays: true,
       repeatWeeklyDay: true,
       repeatMonthlyDay: true,
     },
@@ -64,6 +65,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     completedAt?: Date | null;
     completedOn?: Date | null;
     orderIndex?: number | null;
+    isPriority?: boolean;
     repeatEnabled?: boolean;
     repeatPattern?: string | null;
     repeatDays?: number | null;
@@ -117,6 +119,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
       }
     }
     data.projectId = projectId.value ?? null;
+  }
+
+  if (body?.isPriority !== undefined) {
+    const isPriority = parseOptionalBooleanInput(body.isPriority, "isPriority");
+    if (isPriority.error) return isPriority.error;
+    if (isPriority.value === undefined) {
+      return Response.json({ error: "isPriority must be a boolean" }, { status: 400 });
+    }
+    data.isPriority = isPriority.value;
   }
 
   const repeatEnabled = parseOptionalBooleanInput(
@@ -204,7 +215,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return Response.json(
       {
         error:
-          "Body must include at least one of title, startDate, dueAt, category, notes, projectId, repeat settings, or completed",
+          "Body must include at least one of title, startDate, dueAt, category, notes, projectId, isPriority, repeat settings, or completed",
       },
       { status: 400 }
     );

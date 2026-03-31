@@ -21,6 +21,7 @@ type OverviewProject = {
   category: string | null;
   archived: boolean;
   collapsed: boolean;
+  isPriority: boolean;
   orderIndex: number | null;
   createdAt: string;
 };
@@ -32,8 +33,10 @@ type OverviewTask = {
   projectId: string | null;
   projectName: string | null;
   category: string | null;
+  isPriority: boolean;
   startDate: string;
   dueAt: string;
+  completedOn: string | null;
   createdAt: string;
   orderIndex: number | null;
   recurrenceSeriesId: string | null;
@@ -84,6 +87,7 @@ type TaskGroup = {
   projectId: string | null;
   isRecurring: boolean;
   isUnassigned: boolean;
+  isPriority: boolean;
   taskCount: number;
   tasks: OverviewTask[];
 };
@@ -500,6 +504,7 @@ function ProfileCard({
         projectId: null,
         isRecurring: true,
         isUnassigned: false,
+        isPriority: false,
         taskCount: taskCountByGroupKey.get("recurring") ?? 0,
         tasks: recurringTasks,
       });
@@ -512,6 +517,7 @@ function ProfileCard({
         projectId: null,
         isRecurring: false,
         isUnassigned: true,
+        isPriority: false,
         taskCount: taskCountByGroupKey.get("unassigned") ?? 0,
         tasks: unassignedTasks,
       });
@@ -535,6 +541,7 @@ function ProfileCard({
         projectId: project.id,
         isRecurring: false,
         isUnassigned: false,
+        isPriority: project.isPriority,
         taskCount: taskCountByGroupKey.get(groupKey) ?? 0,
         tasks: projectTasks,
       });
@@ -556,6 +563,7 @@ function ProfileCard({
         projectId,
         isRecurring: false,
         isUnassigned: false,
+        isPriority: false,
         taskCount: taskCountByGroupKey.get(groupKey) ?? 0,
         tasks: groupTasks,
       });
@@ -652,11 +660,18 @@ function ProfileCard({
         projectId: createdTask.projectId,
         projectName,
         category: createdTask.category,
+        isPriority: false,
         startDate: toDateOnly(createdTask.startDate),
         dueAt: toDateOnly(createdTask.dueAt),
+        completedOn: null,
         createdAt: createdTask.createdAt,
         orderIndex: createdTask.orderIndex,
         recurrenceSeriesId: createdTask.recurrenceSeriesId,
+        repeatEnabled: false,
+        repeatPattern: null,
+        repeatDays: null,
+        repeatWeeklyDay: null,
+        repeatMonthlyDay: null,
       };
 
       setOpenTasks((prev) => [...prev, nextTask].sort(compareTasksForManualSort));
@@ -1000,6 +1015,7 @@ function ProfileCard({
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
+        isPriority: boolean;
       };
     };
   }
@@ -1106,6 +1122,8 @@ function ProfileCard({
                   repeatDays: savedTask.repeatDays,
                   repeatWeeklyDay: savedTask.repeatWeeklyDay,
                   repeatMonthlyDay: savedTask.repeatMonthlyDay,
+                  isPriority: savedTask.isPriority,
+                  completedOn: toDateOnly(savedTask.completedOn),
                 }
               : item
           )
@@ -1236,6 +1254,44 @@ function ProfileCard({
     }
   }
 
+  async function handleToggleTaskPriority(task: OverviewTask) {
+    setContextMenu(null);
+    setBusyAction(true);
+
+    try {
+      await patchTask(task.id, { isPriority: !task.isPriority });
+      setOpenTasks((prev) =>
+        prev.map((item) =>
+          item.id === task.id ? { ...item, isPriority: !item.isPriority } : item
+        )
+      );
+      router.refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not update task");
+    } finally {
+      setBusyAction(false);
+    }
+  }
+
+  async function handleToggleProjectPriority(group: TaskGroup) {
+    if (!group.projectId) {
+      return;
+    }
+
+    setContextMenu(null);
+    setBusyAction(true);
+
+    try {
+      const project = await patchProject(group.projectId, { isPriority: !group.isPriority });
+      setProjects((prev) => prev.map((item) => (item.id === project.id ? project : item)));
+      router.refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not update project");
+    } finally {
+      setBusyAction(false);
+    }
+  }
+
   return (
     <article
       className={`${cardClass} h-full transition ${
@@ -1330,6 +1386,10 @@ function ProfileCard({
                       <Fragment key={group.key}>
                         <tr
                           className={`border-b border-[color:var(--tm-border)] bg-white/30 ${
+                            group.isPriority
+                              ? "bg-[rgba(243,225,220,0.9)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.8)]"
+                              : ""
+                          } ${
                             isProjectGroup ? "cursor-grab active:cursor-grabbing" : ""
                           } ${
                             groupDragPosition === "before"
@@ -1383,6 +1443,10 @@ function ProfileCard({
                             <tr
                               key={task.id}
                               className={`tm-table-row border-b border-[color:var(--tm-border)] align-top ${
+                                task.isPriority
+                                  ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
+                                  : ""
+                              } ${
                                 taskReordering ? "cursor-grabbing" : "cursor-grab"
                               } ${
                                 draggedTaskId === task.id ? "opacity-60" : ""
@@ -1757,10 +1821,12 @@ function ProfileCard({
               <button
                 type="button"
                 className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
-                onClick={() => void handleToggleTask(contextMenu.task, true)}
+                onClick={() =>
+                  void handleToggleTask(contextMenu.task, !Boolean(contextMenu.task.completedOn))
+                }
                 disabled={busyAction}
               >
-                Done
+                {contextMenu.task.completedOn ? "Open" : "Done"}
               </button>
               <button
                 type="button"
@@ -1769,6 +1835,14 @@ function ProfileCard({
                 disabled={busyAction}
               >
                 Delete
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                onClick={() => void handleToggleTaskPriority(contextMenu.task)}
+                disabled={busyAction}
+              >
+                {contextMenu.task.isPriority ? "Unprioritise" : "Prioritise"}
               </button>
             </>
           ) : (
@@ -1791,6 +1865,16 @@ function ProfileCard({
                   disabled={busyAction}
                 >
                   Archive
+                </button>
+              )}
+              {contextMenu.group.projectId && (
+                <button
+                  type="button"
+                  className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                  onClick={() => void handleToggleProjectPriority(contextMenu.group)}
+                  disabled={busyAction}
+                >
+                  {contextMenu.group.isPriority ? "Unprioritise" : "Prioritise"}
                 </button>
               )}
             </>
