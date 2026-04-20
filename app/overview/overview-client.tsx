@@ -5,12 +5,16 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ProjectEditorModal,
+  RepeatFields,
   TaskEditorModal,
+  createRepeatDefaults,
   createEditTaskForm,
+  createTaskPayload,
   createProjectForm,
   type EditTaskFormState,
   type ProjectFormState,
   type RepeatPattern,
+  type TaskCreateFormState,
 } from "@/app/components/editors";
 
 type OverviewProject = {
@@ -71,7 +75,7 @@ type ReorderResponseProfile = {
   id: string;
 };
 
-type TaskDraftState = {
+type TaskDraftState = TaskCreateFormState & {
   title: string;
   category: string;
   projectId: string;
@@ -108,6 +112,7 @@ type ContextMenuState =
 
 type DeleteMode = "this" | "future" | "series";
 type OverviewTaskFilter = "all-open" | "today" | "overdue" | "upcoming";
+type OverviewGroupingMode = "project" | "category";
 
 const cardClass = "tm-card rounded-[12px] border p-4 shadow-sm md:p-5";
 const inputClass =
@@ -119,6 +124,7 @@ const modalChoiceClass = "tm-choice flex cursor-pointer items-start gap-3 rounde
 const segmentedTabSetClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentedTabClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
+const OVERVIEW_GROUPING_STORAGE_KEY = "tm-overview-grouping-mode";
 
 function todayInputValue() {
   const date = new Date();
@@ -198,12 +204,15 @@ function compareProjectsForManualSort(
 }
 
 function createEmptyTaskDraftState(): TaskDraftState {
+  const startDate = todayInputValue();
+
   return {
     title: "",
     category: "",
     projectId: "",
-    startDate: todayInputValue(),
+    startDate,
     dueAt: "",
+    ...createRepeatDefaults(startDate),
   };
 }
 
@@ -248,9 +257,23 @@ function isRecurringOverviewTask(task: OverviewTask) {
   return Boolean(task.recurrenceSeriesId);
 }
 
-function getOverviewTaskGroupKey(task: OverviewTask) {
+function getTaskCategoryLabel(task: OverviewTask) {
+  return task.category?.trim() || "Unassigned";
+}
+
+function getOverviewTaskGroupKey(
+  task: OverviewTask,
+  groupingMode: OverviewGroupingMode
+) {
   if (isRecurringOverviewTask(task)) {
     return "recurring";
+  }
+
+  if (groupingMode === "category") {
+    const normalizedCategory = getTaskCategoryLabel(task).toLocaleLowerCase();
+    return normalizedCategory === "unassigned"
+      ? "category:unassigned"
+      : `category:${normalizedCategory}`;
   }
 
   return task.projectId ? `project:${task.projectId}` : "unassigned";
@@ -342,6 +365,7 @@ function applyOrderIndex<T extends { id: string; orderIndex: number | null }>(
 type ProfileCardProps = {
   profile: OverviewProfileData;
   selectedFilter: OverviewTaskFilter;
+  groupingMode: OverviewGroupingMode;
   draggable?: boolean;
   dragActive?: boolean;
   dragOverPosition?: "before" | "after" | null;
@@ -354,6 +378,7 @@ type ProfileCardProps = {
 function ProfileCard({
   profile,
   selectedFilter,
+  groupingMode,
   draggable = false,
   dragActive = false,
   dragOverPosition = null,
@@ -468,18 +493,18 @@ function ProfileCard({
     const countsByGroup = new Map<string, number>();
 
     for (const task of filteredOpenTasks) {
-      const groupKey = getOverviewTaskGroupKey(task);
+      const groupKey = getOverviewTaskGroupKey(task, groupingMode);
       countsByGroup.set(groupKey, (countsByGroup.get(groupKey) ?? 0) + 1);
     }
 
     return countsByGroup;
-  }, [filteredOpenTasks]);
+  }, [filteredOpenTasks, groupingMode]);
 
   const tasksByGroupKey = useMemo(() => {
     const groups = new Map<string, OverviewTask[]>();
 
     for (const task of [...filteredOpenTasks].sort(compareTasksForManualSort)) {
-      const groupKey = getOverviewTaskGroupKey(task);
+      const groupKey = getOverviewTaskGroupKey(task, groupingMode);
       const existing = groups.get(groupKey);
 
       if (existing) {
@@ -490,12 +515,11 @@ function ProfileCard({
     }
 
     return groups;
-  }, [filteredOpenTasks]);
+  }, [filteredOpenTasks, groupingMode]);
 
-  const orderedProjectGroups = useMemo(() => {
+  const orderedTaskGroups = useMemo(() => {
     const groups: TaskGroup[] = [];
     const recurringTasks = tasksByGroupKey.get("recurring") ?? [];
-    const unassignedTasks = tasksByGroupKey.get("unassigned") ?? [];
 
     if (recurringTasks.length > 0) {
       groups.push({
@@ -509,6 +533,35 @@ function ProfileCard({
         tasks: recurringTasks,
       });
     }
+
+    if (groupingMode === "category") {
+      const categoryGroups = [...tasksByGroupKey.entries()]
+        .filter(([groupKey]) => groupKey !== "recurring")
+        .map(([groupKey, groupTasks]) => ({
+          key: groupKey,
+          label: groupTasks[0] ? getTaskCategoryLabel(groupTasks[0]) : "Unassigned",
+          projectId: null,
+          isRecurring: false,
+          isUnassigned: groupKey === "category:unassigned",
+          isPriority: false,
+          taskCount: taskCountByGroupKey.get(groupKey) ?? 0,
+          tasks: groupTasks,
+        }))
+        .sort((left, right) => {
+          if (left.isUnassigned !== right.isUnassigned) {
+            return left.isUnassigned ? -1 : 1;
+          }
+
+          return left.label.localeCompare(right.label, undefined, {
+            sensitivity: "base",
+          });
+        });
+
+      groups.push(...categoryGroups);
+      return groups;
+    }
+
+    const unassignedTasks = tasksByGroupKey.get("unassigned") ?? [];
 
     if (unassignedTasks.length > 0) {
       groups.push({
@@ -570,21 +623,21 @@ function ProfileCard({
     }
 
     return groups;
-  }, [orderedProjects, projectNameById, taskCountByGroupKey, tasksByGroupKey]);
+  }, [groupingMode, orderedProjects, projectNameById, taskCountByGroupKey, tasksByGroupKey]);
 
   const groupedVisibleTasks = useMemo(() => {
-    const orderedTaskIds = orderedProjectGroups.flatMap((group) => group.tasks.map((task) => task.id));
+    const orderedTaskIds = orderedTaskGroups.flatMap((group) => group.tasks.map((task) => task.id));
     const visibleTaskIds = new Set(
       (showAll ? orderedTaskIds : orderedTaskIds.slice(0, profile.initialTaskLimit)).map((id) => id)
     );
 
-    return orderedProjectGroups
+    return orderedTaskGroups
       .map((group) => ({
         ...group,
         tasks: group.tasks.filter((task) => visibleTaskIds.has(task.id)),
       }))
       .filter((group) => group.tasks.length > 0);
-  }, [orderedProjectGroups, profile.initialTaskLimit, showAll]);
+  }, [orderedTaskGroups, profile.initialTaskLimit, showAll]);
 
   function closeDialog() {
     if (saving) return;
@@ -621,13 +674,13 @@ function ProfileCard({
       const res = await fetch(`/api/p/${profile.id}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          startDate: taskDraft.startDate || todayInputValue(),
-          dueAt: taskDraft.dueAt || null,
-          category: taskDraft.category.trim() || null,
-          projectId: taskDraft.projectId || null,
-        }),
+        body: JSON.stringify(
+          createTaskPayload({
+            ...taskDraft,
+            title,
+            startDate: taskDraft.startDate || todayInputValue(),
+          })
+        ),
       });
 
       if (!res.ok) {
@@ -646,6 +699,11 @@ function ProfileCard({
         orderIndex: number | null;
         recurrenceSeriesId: string | null;
         projectId: string | null;
+        repeatEnabled: boolean;
+        repeatPattern: RepeatPattern | null;
+        repeatDays: number | null;
+        repeatWeeklyDay: number | null;
+        repeatMonthlyDay: number | null;
       };
 
       const projectName = createdTask.projectId
@@ -667,11 +725,11 @@ function ProfileCard({
         createdAt: createdTask.createdAt,
         orderIndex: createdTask.orderIndex,
         recurrenceSeriesId: createdTask.recurrenceSeriesId,
-        repeatEnabled: false,
-        repeatPattern: null,
-        repeatDays: null,
-        repeatWeeklyDay: null,
-        repeatMonthlyDay: null,
+        repeatEnabled: createdTask.repeatEnabled,
+        repeatPattern: createdTask.repeatPattern,
+        repeatDays: createdTask.repeatDays,
+        repeatWeeklyDay: createdTask.repeatWeeklyDay,
+        repeatMonthlyDay: createdTask.repeatMonthlyDay,
       };
 
       setOpenTasks((prev) => [...prev, nextTask].sort(compareTasksForManualSort));
@@ -836,7 +894,7 @@ function ProfileCard({
     }
 
     const position = dragOverTaskPosition ?? "after";
-    const group = orderedProjectGroups.find((item) => item.key === groupKey);
+    const group = orderedTaskGroups.find((item) => item.key === groupKey);
     const orderedIds = group?.tasks.map((task) => task.id) ?? [];
     const nextOrderedIds = reorderIds(orderedIds, draggedTaskId, targetTaskId, position);
 
@@ -901,7 +959,7 @@ function ProfileCard({
       return;
     }
 
-    const visibleProjectIds = orderedProjectGroups
+    const visibleProjectIds = orderedTaskGroups
       .filter((group) => !group.isUnassigned && group.projectId)
       .map((group) => group.projectId as string);
     const nextVisibleProjectIds = reorderIds(
@@ -1378,7 +1436,8 @@ function ProfileCard({
                 ) : (
                   groupedVisibleTasks.map((group) => {
                     const isGroupCollapsed = collapsedGroups[group.key] ?? false;
-                    const isProjectGroup = !group.isUnassigned && Boolean(group.projectId);
+                    const isProjectGroup =
+                      groupingMode === "project" && !group.isUnassigned && Boolean(group.projectId);
                     const groupDragPosition =
                       dragOverProjectId === group.projectId ? dragOverProjectPosition : null;
 
@@ -1626,6 +1685,12 @@ function ProfileCard({
                   />
                 </div>
               </div>
+
+              <RepeatFields
+                form={taskDraft}
+                defaultDateValue={taskDraft.startDate || todayInputValue()}
+                onChange={(updater) => setTaskDraft((prev) => updater(prev))}
+              />
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
@@ -1891,6 +1956,7 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
   const [orderedProfiles, setOrderedProfiles] = useState(profiles);
   const [query, setQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<OverviewTaskFilter>("all-open");
+  const [groupingMode, setGroupingMode] = useState<OverviewGroupingMode>("project");
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
@@ -1901,10 +1967,33 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
     { value: "overdue", label: "Overdue" },
     { value: "upcoming", label: "Upcoming" },
   ];
+  const groupingOptions: Array<{ value: OverviewGroupingMode; label: string }> = [
+    { value: "project", label: "Project" },
+    { value: "category", label: "Category" },
+  ];
 
   useEffect(() => {
     setOrderedProfiles(profiles);
   }, [profiles]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedGroupingMode = window.localStorage.getItem(OVERVIEW_GROUPING_STORAGE_KEY);
+    if (storedGroupingMode === "project" || storedGroupingMode === "category") {
+      setGroupingMode(storedGroupingMode);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(OVERVIEW_GROUPING_STORAGE_KEY, groupingMode);
+  }, [groupingMode]);
 
   const filteredProfiles = useMemo(() => {
     const trimmedQuery = query.trim().toLocaleLowerCase();
@@ -2026,21 +2115,45 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
         </div>
 
         <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className={segmentedTabSetClass}>
-            {filterOptions.map((option) => {
-              const active = selectedFilter === option.value;
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            <div className={segmentedTabSetClass}>
+              {filterOptions.map((option) => {
+                const active = selectedFilter === option.value;
 
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={active ? segmentedActiveTabClass : segmentedTabClass}
-                  onClick={() => setSelectedFilter(option.value)}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={active ? segmentedActiveTabClass : segmentedTabClass}
+                    onClick={() => setSelectedFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                Group by
+              </span>
+              <div className={segmentedTabSetClass}>
+                {groupingOptions.map((option) => {
+                  const active = groupingMode === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={active ? segmentedActiveTabClass : segmentedTabClass}
+                      onClick={() => setGroupingMode(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <input
@@ -2062,6 +2175,7 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
                 key={profile.id}
                 profile={profile}
                 selectedFilter={selectedFilter}
+                groupingMode={groupingMode}
                 draggable={!reordering}
                 dragActive={draggedId === profile.id}
                 dragOverPosition={

@@ -3023,7 +3023,7 @@ export function TrackerClient({
         </div>
       )}
 
-      {pageMode === "reporting" && viewMode === "day" && (
+      {isReportingPage && viewMode === "day" && (
         <section className={sectionCardClass}>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -3084,7 +3084,7 @@ export function TrackerClient({
         </section>
       )}
 
-      {pageMode === "reporting" && viewMode === "week" && (
+      {isReportingPage && viewMode === "week" && (
         <div className="space-y-4">
           <section className={sectionCardClass}>
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -3181,7 +3181,7 @@ export function TrackerClient({
         </div>
       )}
 
-      {pageMode === "reporting" && viewMode === "month" && (
+      {isReportingPage && viewMode === "month" && (
         <div className="space-y-4">
           <section className={sectionCardClass}>
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

@@ -51,6 +51,7 @@ model Profile {
   updatedAt     DateTime  @updatedAt
   tasks         Task[]
   projects      Project[]
+  timeEntries   TimeEntry[]
 }
 
 model Project {
@@ -72,4 +73,25 @@ model Project {
 
   @@index([profileId, createdAt])
   @@index([profileId, orderIndex])
+}
+
+model TimeEntry {
+  id              String   @id @default(cuid())
+  profileId       String
+  entryDate       DateTime
+  startTime       DateTime
+  endTime         DateTime?
+  durationMinutes Int?
+  loggedMinutes   Int?
+  roundingMode    String?
+  notes           String?
+  source          String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, entryDate])
+  @@index([entryDate])
+  @@index([endTime])
 }

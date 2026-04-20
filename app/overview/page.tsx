@@ -1,5 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { OverviewClient, type OverviewProfileData } from "@/app/overview/overview-client";
+import type { RepeatPattern } from "@/app/components/editors";
 
 const DEFAULT_TASKS_TO_SHOW = 8;
 
@@ -205,7 +206,7 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
         orderIndex: task.orderIndex,
         recurrenceSeriesId: task.recurrenceSeriesId,
         repeatEnabled: task.repeatEnabled,
-        repeatPattern: task.repeatPattern,
+        repeatPattern: task.repeatPattern as RepeatPattern | null,
         repeatDays: task.repeatDays,
         repeatWeeklyDay: task.repeatWeeklyDay,
         repeatMonthlyDay: task.repeatMonthlyDay,

@@ -35,6 +35,14 @@ export type ProjectFormState = {
   category: string;
 };
 
+export type TaskCreateFormState = RepeatFormState & {
+  title: string;
+  startDate: string;
+  dueAt: string;
+  category: string;
+  projectId: string;
+};
+
 type EditableTask = {
   title: string;
   startDate: string;
@@ -258,7 +266,44 @@ function Modal({
   );
 }
 
-function RepeatFields<T extends RepeatFormState>({
+export function createRepeatDefaults(dateValue: string): RepeatFormState {
+  const repeatWeeklyDay = getWeekdayNumber(dateValue);
+
+  return {
+    repeatEnabled: false,
+    repeatPattern: "daily",
+    repeatDays: ALL_REPEAT_DAYS_MASK,
+    repeatWeeklyDay,
+    repeatMonthlyDay: getDayOfMonth(dateValue),
+  };
+}
+
+export function createTaskPayload<T extends TaskCreateFormState>(form: T) {
+  return {
+    title: form.title.trim(),
+    startDate: form.startDate,
+    dueAt: form.dueAt || null,
+    category: form.category.trim() || null,
+    projectId: form.projectId || null,
+    repeatEnabled: form.repeatEnabled,
+    repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
+    repeatDays:
+      form.repeatEnabled &&
+      (form.repeatPattern === "daily" || form.repeatPattern === "weekly")
+        ? form.repeatDays
+        : null,
+    repeatWeeklyDay:
+      form.repeatEnabled && form.repeatPattern === "weekly"
+        ? form.repeatWeeklyDay
+        : null,
+    repeatMonthlyDay:
+      form.repeatEnabled && form.repeatPattern === "monthly"
+        ? form.repeatMonthlyDay
+        : null,
+  };
+}
+
+export function RepeatFields<T extends RepeatFormState>({
   form,
   onChange,
   defaultDateValue,
@@ -406,7 +451,8 @@ function RepeatFields<T extends RepeatFormState>({
 
 export function createEditTaskForm(task: EditableTask): EditTaskFormState {
   const startDate = toDateOnly(task.startDate) || todayInputValue();
-  const repeatWeeklyDay = task.repeatWeeklyDay ?? getWeekdayNumber(startDate);
+  const repeatDefaults = createRepeatDefaults(startDate);
+  const repeatWeeklyDay = task.repeatWeeklyDay ?? repeatDefaults.repeatWeeklyDay;
 
   return {
     title: task.title,
@@ -421,9 +467,9 @@ export function createEditTaskForm(task: EditableTask): EditTaskFormState {
       task.repeatDays ??
       (task.repeatPattern === "weekly"
         ? getRepeatDayBit(repeatWeeklyDay)
-        : ALL_REPEAT_DAYS_MASK),
+        : repeatDefaults.repeatDays),
     repeatWeeklyDay,
-    repeatMonthlyDay: task.repeatMonthlyDay ?? getDayOfMonth(startDate),
+    repeatMonthlyDay: task.repeatMonthlyDay ?? repeatDefaults.repeatMonthlyDay,
   };
 }
 

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { prisma } from "@/app/lib/prisma";
+import { AppShell } from "@/app/components/app-shell";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,17 +30,25 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const profiles = await prisma.profile.findMany({
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <AppShell profiles={profiles}>{children}</AppShell>
       </body>
     </html>
   );

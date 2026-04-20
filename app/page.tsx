@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -160,7 +161,13 @@ export default function Home() {
       <div className="mx-auto flex max-w-5xl flex-col items-center px-6 pt-16">
         {/* Header */}
         <div className="flex flex-col items-center gap-4">
-          <img src="/logo.png" alt="TaskManager logo" className="h-14 w-14" />
+          <Image
+            src="/logo.png"
+            alt="TaskManager logo"
+            width={56}
+            height={56}
+            className="h-14 w-14"
+          />
           <div className="text-center">
             <h1 className="text-4xl font-semibold tracking-tight">
               TaskManager
@@ -185,7 +192,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="flex flex-nowrap justify-center gap-6 overflow-x-auto pb-2">
+          <div className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {profiles.map((profile, index) => {
               const isDragged = draggedId === profile.id;
               const showLeftIndicator = dragOverIndex === index;
@@ -200,7 +207,7 @@ export default function Home() {
                   onDragEnd={handleDragEnd}
                   onDragOver={(event) => handleDragOver(event, index)}
                   onDrop={handleDrop}
-                  className={`relative shrink-0 transition ${
+                  className={`relative w-full transition ${
                     isDragged ? "opacity-60" : ""
                   }`}
                 >
@@ -214,7 +221,7 @@ export default function Home() {
 
                   <Link
                     href={`/p/${profile.id}`}
-                    className="group flex h-44 w-44 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    className="group flex h-44 w-full items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className="px-4 text-center">
                       <div className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-gray-400">
