@@ -3,7 +3,7 @@ import { toDateOnly } from "@/app/timesheets/timesheet-utils";
 import { ReportsClient } from "@/app/reports/reports-client";
 import {
   formatBestPeriodLabel,
-  getCompletedTaskDetails,
+  getTaskDetailReport,
   getBestEfficiencyPeriods,
   getBestTaskPeriods,
   getBestTimePeriods,
@@ -62,6 +62,7 @@ export default async function ReportsPage({
         dueAt: true,
         completedAt: true,
         completedOn: true,
+        updatedAt: true,
         category: true,
         projectId: true,
         profile: {
@@ -107,6 +108,7 @@ export default async function ReportsPage({
     dueAt: task.dueAt ? toDateOnly(task.dueAt) : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     completedOn: task.completedOn ? toDateOnly(task.completedOn) : null,
+    updatedAt: toDateOnly(task.updatedAt),
     createdAt: toDateOnly(task.createdAt),
     category: task.category,
     projectId: task.projectId,
@@ -155,7 +157,7 @@ export default async function ReportsPage({
         tasksPerHour,
         hoursPerTask,
       }}
-      completedTaskDetails={getCompletedTaskDetails(reportTasks, selectedDate, selectedPeriod)}
+      taskDetailReport={getTaskDetailReport(reportTasks, selectedDate, selectedPeriod, "both")}
       profileComparisons={profileComparisons}
       bestTaskPeriods={getBestTaskPeriods(reportTasks)}
       bestTimePeriods={getBestTimePeriods(reportTimeEntries)}

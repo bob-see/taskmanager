@@ -22,6 +22,7 @@ export type ReportTask = InsightTask & {
   profileId: string;
   profileName: string;
   projectName: string | null;
+  updatedAt: string;
 };
 
 export type ReportTimeEntry = {
@@ -41,17 +42,21 @@ export type TimeBreakdownItem = {
   minutes: number;
 };
 
-export type CompletedTaskDetail = {
+export type TaskDetailStatusScope = "completed" | "incomplete-with-notes" | "both";
+
+export type TaskDetailReportItem = {
   id: string;
   title: string;
   notes: string | null;
   profileName: string;
   projectName: string | null;
   category: string | null;
+  status: "completed" | "incomplete";
   startDate: string;
   dueAt: string | null;
-  completedOn: string;
+  completedOn: string | null;
   completedAt: string | null;
+  activityDate: string;
 };
 
 export function normalizeSelectedDate(value: string | null | undefined) {
@@ -131,24 +136,54 @@ export function getCompletedTaskDetails(
   selectedDate: string,
   period: ReportPeriod
 ) {
-  return getCompletedTasksInPeriod(tasks, selectedDate, period)
+  return getTaskDetailReport(tasks, selectedDate, period, "completed");
+}
+
+export function getTaskDetailReport(
+  tasks: ReportTask[],
+  selectedDate: string,
+  period: ReportPeriod,
+  statusScope: TaskDetailStatusScope = "completed"
+) {
+  const { startValue, endValue } = getPeriodRange(selectedDate, period, true);
+  const includeCompleted = statusScope === "completed" || statusScope === "both";
+  const includeIncompleteWithNotes =
+    statusScope === "incomplete-with-notes" || statusScope === "both";
+
+  return tasks
+    .filter((task) => {
+      if (includeCompleted && task.completedOn && task.completedOn >= startValue && task.completedOn <= endValue) {
+        return true;
+      }
+
+      const notes = task.notes?.trim();
+      if (!includeIncompleteWithNotes || task.completedAt || task.completedOn || !notes) {
+        return false;
+      }
+
+      // Task notes do not have their own timestamp, so updatedAt is the best
+      // available proxy for note activity within the reporting period.
+      return task.updatedAt >= startValue && task.updatedAt <= endValue;
+    })
     .map(
-      (task): CompletedTaskDetail => ({
+      (task): TaskDetailReportItem => ({
         id: task.id,
         title: task.title,
         notes: task.notes?.trim() || null,
         profileName: task.profileName,
         projectName: task.projectName,
         category: task.category,
+        status: task.completedOn ? "completed" : "incomplete",
         startDate: task.startDate,
         dueAt: task.dueAt,
-        completedOn: task.completedOn ?? "",
+        completedOn: task.completedOn,
         completedAt: task.completedAt,
+        activityDate: task.completedAt ?? task.completedOn ?? task.updatedAt,
       })
     )
     .sort((left, right) => {
-      const leftKey = left.completedAt ?? left.completedOn;
-      const rightKey = right.completedAt ?? right.completedOn;
+      const leftKey = left.activityDate;
+      const rightKey = right.activityDate;
       return rightKey.localeCompare(leftKey) || right.title.localeCompare(left.title);
     });
 }

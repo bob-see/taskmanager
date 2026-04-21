@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
-  type CompletedTaskDetail,
   formatBestPeriodLabel,
   formatEfficiency,
   formatHoursFromMinutes,
   type BreakdownItem,
   type ReportPeriod,
+  type TaskDetailReportItem,
+  type TaskDetailStatusScope,
   type TimeBreakdownItem,
 } from "@/app/reports/reporting-utils";
 
@@ -44,7 +45,7 @@ type ReportsClientProps = {
     tasksPerHour: number | null;
     hoursPerTask: number | null;
   };
-  completedTaskDetails: CompletedTaskDetail[];
+  taskDetailReport: TaskDetailReportItem[];
   profileComparisons: Array<{
     profileId: string;
     label: string;
@@ -78,7 +79,12 @@ const buttonClass =
 const segmentClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentButtonClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentButtonActiveClass = "tm-tab-active rounded-full px-3 py-1.5";
-type CompletedTasksFilter = "all" | "notes-only";
+
+const taskDetailStatusOptions: Array<{ value: TaskDetailStatusScope; label: string }> = [
+  { value: "completed", label: "Completed tasks" },
+  { value: "incomplete-with-notes", label: "Incomplete tasks with notes" },
+  { value: "both", label: "Both" },
+];
 
 function formatDailyReportDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -92,38 +98,73 @@ function formatDailyReportDate(value: string) {
 function buildDailyReportText(input: {
   scopeLabel: string;
   selectedDate: string;
-  completedTasks: CompletedTaskDetail[];
+  taskDetails: TaskDetailReportItem[];
+  statusScope: TaskDetailStatusScope;
   totalMinutes: number;
 }) {
+  const completedTasks = input.taskDetails.filter((task) => task.status === "completed");
+  const incompleteTasks = input.taskDetails.filter((task) => task.status === "incomplete");
   const lines = [
     "Daily Report",
     `Scope: ${input.scopeLabel}`,
     `Date: ${formatDailyReportDate(input.selectedDate)}`,
     "",
-    `Completed tasks: ${input.completedTasks.length}`,
+    `Completed tasks: ${completedTasks.length}`,
   ];
+
+  if (input.statusScope !== "completed") {
+    lines.push(`Incomplete tasks with notes: ${incompleteTasks.length}`);
+  }
 
   if (input.totalMinutes > 0) {
     lines.push(`Logged hours: ${formatHoursFromMinutes(input.totalMinutes)}`);
   }
 
-  if (input.completedTasks.length === 0) {
-    lines.push("No tasks were completed on this day.");
+  if (input.taskDetails.length === 0) {
+    lines.push(
+      input.statusScope === "incomplete-with-notes"
+        ? "No incomplete tasks with notes were updated on this day."
+        : input.statusScope === "both"
+          ? "No completed tasks or incomplete tasks with notes were found for this day."
+          : "No tasks were completed on this day."
+    );
     return lines.join("\n");
   }
 
-  lines.push("");
-
-  input.completedTasks.forEach((task, index) => {
+  function pushTask(task: TaskDetailReportItem, index: number) {
     lines.push(`${index + 1}. ${task.title}`);
+    lines.push(`   Status: ${task.status === "completed" ? "Completed" : "Incomplete"}`);
     lines.push(`   Profile: ${task.profileName}`);
     lines.push(`   Project: ${task.projectName?.trim() || "Unassigned"}`);
     lines.push(`   Category: ${task.category?.trim() || "Uncategorized"}`);
+    if (task.startDate) {
+      lines.push(`   Start: ${task.startDate}`);
+    }
+    if (task.dueAt) {
+      lines.push(`   Due: ${task.dueAt}`);
+    }
+    if (task.status === "completed" && task.completedOn) {
+      lines.push(`   Completed: ${task.completedOn}`);
+    }
     if (task.notes) {
       lines.push(`   Notes: ${task.notes}`);
     }
     lines.push("");
-  });
+  }
+
+  if (input.statusScope === "both") {
+    if (completedTasks.length > 0) {
+      lines.push("", `Completed tasks (${completedTasks.length})`);
+      completedTasks.forEach(pushTask);
+    }
+    if (incompleteTasks.length > 0) {
+      lines.push("", `Incomplete tasks with notes (${incompleteTasks.length})`);
+      incompleteTasks.forEach(pushTask);
+    }
+  } else {
+    lines.push("");
+    input.taskDetails.forEach(pushTask);
+  }
 
   return lines.join("\n").trimEnd();
 }
@@ -140,17 +181,24 @@ function escapeHtml(value: string) {
 function buildDailyReportHTML(input: {
   scopeLabel: string;
   selectedDate: string;
-  completedTasks: CompletedTaskDetail[];
+  taskDetails: TaskDetailReportItem[];
+  statusScope: TaskDetailStatusScope;
   totalMinutes: number;
 }) {
+  const completedTasks = input.taskDetails.filter((task) => task.status === "completed");
+  const incompleteTasks = input.taskDetails.filter((task) => task.status === "incomplete");
   const header = `<p><strong>Daily Report</strong></p>`;
   const scopeBlock = `<p>Scope: ${escapeHtml(input.scopeLabel)}<br/>Date: ${escapeHtml(
     formatDailyReportDate(input.selectedDate)
   )}</p>`;
 
   const summaryLines = [
-    `<strong>Completed tasks:</strong> ${input.completedTasks.length}`,
+    `<strong>Completed tasks:</strong> ${completedTasks.length}`,
   ];
+
+  if (input.statusScope !== "completed") {
+    summaryLines.push(`<strong>Incomplete tasks with notes:</strong> ${incompleteTasks.length}`);
+  }
 
   if (input.totalMinutes > 0) {
     summaryLines.push(
@@ -160,19 +208,36 @@ function buildDailyReportHTML(input: {
 
   const summaryBlock = `<p>${summaryLines.join("<br/>")}</p>`;
 
-  if (input.completedTasks.length === 0) {
-    return `${header}${scopeBlock}${summaryBlock}<p>No tasks were completed on this day.</p>`;
+  if (input.taskDetails.length === 0) {
+    const emptyMessage =
+      input.statusScope === "incomplete-with-notes"
+        ? "No incomplete tasks with notes were updated on this day."
+        : input.statusScope === "both"
+          ? "No completed tasks or incomplete tasks with notes were found for this day."
+          : "No tasks were completed on this day.";
+    return `${header}${scopeBlock}${summaryBlock}<p>${escapeHtml(emptyMessage)}</p>`;
   }
 
-  const items = input.completedTasks
+  function buildTaskList(tasks: TaskDetailReportItem[]) {
+    const items = tasks
     .map((task) => {
       const lines = [
         `<strong>${escapeHtml(task.title)}</strong>`,
+        `Status: ${task.status === "completed" ? "Completed" : "Incomplete"}`,
         `Profile: ${escapeHtml(task.profileName)}`,
         `Project: ${escapeHtml(task.projectName?.trim() || "Unassigned")}`,
         `Category: ${escapeHtml(task.category?.trim() || "Uncategorized")}`,
       ];
 
+      if (task.startDate) {
+        lines.push(`Start: ${escapeHtml(task.startDate)}`);
+      }
+      if (task.dueAt) {
+        lines.push(`Due: ${escapeHtml(task.dueAt)}`);
+      }
+      if (task.status === "completed" && task.completedOn) {
+        lines.push(`Completed: ${escapeHtml(task.completedOn)}`);
+      }
       if (task.notes) {
         lines.push(`Notes: ${escapeHtml(task.notes)}`);
       }
@@ -181,7 +246,22 @@ function buildDailyReportHTML(input: {
     })
     .join("");
 
-  return `${header}${scopeBlock}${summaryBlock}<ol>${items}</ol>`;
+    return `<ol>${items}</ol>`;
+  }
+
+  if (input.statusScope === "both") {
+    const completedBlock =
+      completedTasks.length > 0
+        ? `<p><strong>Completed tasks (${completedTasks.length})</strong></p>${buildTaskList(completedTasks)}`
+        : "";
+    const incompleteBlock =
+      incompleteTasks.length > 0
+        ? `<p><strong>Incomplete tasks with notes (${incompleteTasks.length})</strong></p>${buildTaskList(incompleteTasks)}`
+        : "";
+    return `${header}${scopeBlock}${summaryBlock}${completedBlock}${incompleteBlock}`;
+  }
+
+  return `${header}${scopeBlock}${summaryBlock}${buildTaskList(input.taskDetails)}`;
 }
 
 function SummaryCard({
@@ -269,12 +349,73 @@ function InsightBlock({
   );
 }
 
+function TaskDetailCard({ task }: { task: TaskDetailReportItem }) {
+  return (
+    <div className="rounded-[12px] border border-[color:var(--tm-border)] bg-white/45 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold tracking-tight">{task.title}</h3>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--tm-muted)]">
+            <span className="tm-chip rounded-full border px-2 py-0.5">
+              {task.profileName}
+            </span>
+            <span className="tm-chip rounded-full border px-2 py-0.5">
+              {task.projectName?.trim() || "Unassigned project"}
+            </span>
+            <span className="tm-chip rounded-full border px-2 py-0.5">
+              {task.category?.trim() || "Uncategorized"}
+            </span>
+            <span className="tm-chip rounded-full border px-2 py-0.5">
+              {task.status === "completed" ? "Completed" : "Incomplete"}
+            </span>
+          </div>
+        </div>
+        <div className="text-sm text-[color:var(--tm-muted)]">
+          {task.status === "completed" ? "Completed" : "Updated"}{" "}
+          <span className="font-medium text-[color:var(--tm-text)]">
+            {task.status === "completed" && task.completedAt
+              ? new Date(task.completedAt).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : task.activityDate}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-sm text-[color:var(--tm-muted)] md:grid-cols-3">
+        <div>
+          <span className="font-medium text-[color:var(--tm-text)]">Start:</span>{" "}
+          {task.startDate || "—"}
+        </div>
+        <div>
+          <span className="font-medium text-[color:var(--tm-text)]">Due:</span>{" "}
+          {task.dueAt || "—"}
+        </div>
+        <div>
+          <span className="font-medium text-[color:var(--tm-text)]">Completed:</span>{" "}
+          {task.completedOn || "—"}
+        </div>
+      </div>
+
+      {task.notes && (
+        <div className="mt-3 rounded-[10px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/65 px-3 py-2 text-sm leading-6 text-[color:var(--tm-text)]">
+          {task.notes}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ReportsClient(props: ReportsClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [completedTasksFilter, setCompletedTasksFilter] =
-    useState<CompletedTasksFilter>("all");
+  const [taskDetailStatusScope, setTaskDetailStatusScope] =
+    useState<TaskDetailStatusScope>("completed");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   function updateQuery(next: Record<string, string>) {
@@ -294,29 +435,56 @@ export function ReportsClient(props: ReportsClientProps) {
     { value: "week", label: "Week" },
     { value: "month", label: "Month" },
   ];
-  const visibleCompletedTaskDetails =
-    completedTasksFilter === "notes-only"
-      ? props.completedTaskDetails.filter((task) => Boolean(task.notes))
-      : props.completedTaskDetails;
+  const visibleTaskDetails = useMemo(() => {
+    if (taskDetailStatusScope === "completed") {
+      return props.taskDetailReport.filter((task) => task.status === "completed");
+    }
+
+    if (taskDetailStatusScope === "incomplete-with-notes") {
+      return props.taskDetailReport.filter((task) => task.status === "incomplete");
+    }
+
+    return props.taskDetailReport;
+  }, [props.taskDetailReport, taskDetailStatusScope]);
+  const visibleCompletedTaskDetails = visibleTaskDetails.filter(
+    (task) => task.status === "completed"
+  );
+  const visibleIncompleteTaskDetails = visibleTaskDetails.filter(
+    (task) => task.status === "incomplete"
+  );
   const dailyReportText = useMemo(
     () =>
       buildDailyReportText({
         scopeLabel: props.scopeLabel,
         selectedDate: props.selectedDate,
-        completedTasks: props.completedTaskDetails,
+        taskDetails: visibleTaskDetails,
+        statusScope: taskDetailStatusScope,
         totalMinutes: props.time.totalMinutes,
       }),
-    [props.completedTaskDetails, props.scopeLabel, props.selectedDate, props.time.totalMinutes]
+    [
+      props.scopeLabel,
+      props.selectedDate,
+      props.time.totalMinutes,
+      taskDetailStatusScope,
+      visibleTaskDetails,
+    ]
   );
   const dailyReportHTML = useMemo(
     () =>
       buildDailyReportHTML({
         scopeLabel: props.scopeLabel,
         selectedDate: props.selectedDate,
-        completedTasks: props.completedTaskDetails,
+        taskDetails: visibleTaskDetails,
+        statusScope: taskDetailStatusScope,
         totalMinutes: props.time.totalMinutes,
       }),
-    [props.completedTaskDetails, props.scopeLabel, props.selectedDate, props.time.totalMinutes]
+    [
+      props.scopeLabel,
+      props.selectedDate,
+      props.time.totalMinutes,
+      taskDetailStatusScope,
+      visibleTaskDetails,
+    ]
   );
 
   async function handleCopyDailyReport() {
@@ -686,9 +854,9 @@ export function ReportsClient(props: ReportsClientProps) {
         <section className="mt-6">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Completed Tasks Detail</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Task Detail Report</h2>
               <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-                Completed tasks in the selected reporting period, including any task notes.
+                Detailed task activity for the selected scope and period. This filter only changes the detail report and daily copy output.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -702,101 +870,76 @@ export function ReportsClient(props: ReportsClientProps) {
                 </button>
               )}
               <span className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
-                Filter
+                Detail status
               </span>
               <div className={segmentClass}>
-                <button
-                  type="button"
-                  className={
-                    completedTasksFilter === "all"
-                      ? segmentButtonActiveClass
-                      : segmentButtonClass
-                  }
-                  onClick={() => setCompletedTasksFilter("all")}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className={
-                    completedTasksFilter === "notes-only"
-                      ? segmentButtonActiveClass
-                      : segmentButtonClass
-                  }
-                  onClick={() => setCompletedTasksFilter("notes-only")}
-                >
-                  Notes only
-                </button>
+                {taskDetailStatusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={
+                      taskDetailStatusScope === option.value
+                        ? segmentButtonActiveClass
+                        : segmentButtonClass
+                    }
+                    onClick={() => setTaskDetailStatusScope(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
           <article className="tm-card rounded-[12px] border p-4 shadow-sm">
-            {visibleCompletedTaskDetails.length === 0 ? (
+            {visibleTaskDetails.length === 0 ? (
               <p className="text-sm text-[color:var(--tm-muted)]">
-                {completedTasksFilter === "notes-only"
-                  ? "No completed tasks with notes in this period."
-                  : "No completed tasks in this period."}
+                {taskDetailStatusScope === "incomplete-with-notes"
+                  ? "No incomplete tasks with notes were updated in this period."
+                  : taskDetailStatusScope === "both"
+                    ? "No completed tasks or incomplete tasks with notes in this period."
+                    : "No completed tasks in this period."}
               </p>
+            ) : taskDetailStatusScope === "both" ? (
+              <div className="space-y-5">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                    Completed tasks ({visibleCompletedTaskDetails.length})
+                  </h3>
+                  {visibleCompletedTaskDetails.length === 0 ? (
+                    <p className="mt-3 text-sm text-[color:var(--tm-muted)]">
+                      No completed tasks in this period.
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {visibleCompletedTaskDetails.map((task) => (
+                        <TaskDetailCard key={task.id} task={task} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                    Incomplete tasks with notes ({visibleIncompleteTaskDetails.length})
+                  </h3>
+                  {visibleIncompleteTaskDetails.length === 0 ? (
+                    <p className="mt-3 text-sm text-[color:var(--tm-muted)]">
+                      No incomplete tasks with notes were updated in this period.
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {visibleIncompleteTaskDetails.map((task) => (
+                        <TaskDetailCard key={task.id} task={task} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <div className="space-y-3">
-                {visibleCompletedTaskDetails.map((task) => (
-                  <div
-                    key={task.id}
-                    className="rounded-[12px] border border-[color:var(--tm-border)] bg-white/45 p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-base font-semibold tracking-tight">{task.title}</h3>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--tm-muted)]">
-                          <span className="tm-chip rounded-full border px-2 py-0.5">
-                            {task.profileName}
-                          </span>
-                          <span className="tm-chip rounded-full border px-2 py-0.5">
-                            {task.projectName?.trim() || "Unassigned project"}
-                          </span>
-                          <span className="tm-chip rounded-full border px-2 py-0.5">
-                            {task.category?.trim() || "Uncategorized"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-sm text-[color:var(--tm-muted)]">
-                        Completed{" "}
-                        <span className="font-medium text-[color:var(--tm-text)]">
-                          {task.completedAt
-                            ? new Date(task.completedAt).toLocaleString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })
-                            : task.completedOn}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid gap-2 text-sm text-[color:var(--tm-muted)] md:grid-cols-3">
-                      <div>
-                        <span className="font-medium text-[color:var(--tm-text)]">Start:</span>{" "}
-                        {task.startDate || "—"}
-                      </div>
-                      <div>
-                        <span className="font-medium text-[color:var(--tm-text)]">Due:</span>{" "}
-                        {task.dueAt || "—"}
-                      </div>
-                      <div>
-                        <span className="font-medium text-[color:var(--tm-text)]">Completed:</span>{" "}
-                        {task.completedOn}
-                      </div>
-                    </div>
-
-                    {task.notes && (
-                      <div className="mt-3 rounded-[10px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/65 px-3 py-2 text-sm leading-6 text-[color:var(--tm-text)]">
-                        {task.notes}
-                      </div>
-                    )}
-                  </div>
+                {visibleTaskDetails.map((task) => (
+                  <TaskDetailCard key={task.id} task={task} />
                 ))}
               </div>
             )}
