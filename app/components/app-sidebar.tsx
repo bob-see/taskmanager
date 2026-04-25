@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 
 type SidebarProfile = {
   id: string;
@@ -95,6 +96,15 @@ export function AppSidebar({ profiles }: AppSidebarProps) {
               </Link>
             </nav>
           </section>
+        </div>
+        <div className="mt-auto border-t border-[color:var(--tm-border)] pt-4 pb-8 md:pb-4">
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/api/auth/signin" })}
+            className={itemClassName(false)}
+          >
+            Logout
+          </button>
         </div>
       </div>
     </aside>
