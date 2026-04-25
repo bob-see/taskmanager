@@ -9,13 +9,15 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.4.1",
     "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.4.1",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
     "mariadb": "^3.5.2",
+    "mysql2": "^3.22.2",
     "next": "16.1.6",
+    "next-auth": "^4.24.14",
     "prisma": "^7.4.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"

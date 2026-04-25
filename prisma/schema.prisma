@@ -6,6 +6,20 @@ generator client {
   engineType = "binary"
 }
 
+model User {
+  id           String    @id @default(cuid()) @db.VarChar(36)
+  name         String
+  email        String    @unique @db.VarChar(191)
+  passwordHash String
+  role         String    @default("user") @db.VarChar(32)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  profiles     Profile[]
+
+  @@index([email])
+}
+
 model Task {
   id               String   @id @default(cuid()) @db.VarChar(36)
   title            String
@@ -42,15 +56,18 @@ model Task {
 
 model Profile {
   id            String    @id @default(cuid()) @db.VarChar(36)
+  userId        String?   @db.VarChar(36)
   name          String
   order         Int
   defaultView   String?
   averageBasis  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks         Task[]
   projects      Project[]
   timeEntries   TimeEntry[]
+  @@index([userId])
 }
 
 model Project {
