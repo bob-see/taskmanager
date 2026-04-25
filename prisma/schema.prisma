@@ -1,14 +1,13 @@
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
 }
-
 generator client {
   provider = "prisma-client-js"
   engineType = "binary"
 }
 
 model Task {
-  id               String   @id @default(cuid())
+  id               String   @id @default(cuid()) @db.VarChar(36)
   title            String
   notes            String?
   dueAt            DateTime?
@@ -20,9 +19,9 @@ model Task {
   updatedAt        DateTime @updatedAt
   startDate        DateTime @default(now())
   category         String?
-  profileId        String   @default("default")
-  projectId        String?
-  recurrenceSeriesId String?
+  profileId        String   @default("default") @db.VarChar(36)
+  projectId        String?  @db.VarChar(36)
+  recurrenceSeriesId String? @db.VarChar(36)
   repeatEnabled    Boolean  @default(false)
   repeatPattern    String?
   repeatDays       Int?
@@ -42,7 +41,7 @@ model Task {
 }
 
 model Profile {
-  id            String    @id @default(cuid())
+  id            String    @id @default(cuid()) @db.VarChar(36)
   name          String
   order         Int
   defaultView   String?
@@ -55,7 +54,7 @@ model Profile {
 }
 
 model Project {
-  id        String    @id @default(cuid())
+  id        String    @id @default(cuid()) @db.VarChar(36)
   name      String
   startDate DateTime  @default(now())
   dueAt     DateTime?
@@ -66,7 +65,7 @@ model Project {
   isPriority Boolean  @default(false)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  profileId String
+  profileId String    @db.VarChar(36)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   tasks   Task[]
@@ -76,8 +75,8 @@ model Project {
 }
 
 model TimeEntry {
-  id              String   @id @default(cuid())
-  profileId       String
+  id              String   @id @default(cuid()) @db.VarChar(36)
+  profileId       String   @db.VarChar(36)
   entryDate       DateTime
   startTime       DateTime
   endTime         DateTime?
