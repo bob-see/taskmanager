@@ -13,6 +13,7 @@ type SidebarProfile = {
 type SidebarUser = {
   name?: string | null;
   email?: string | null;
+  role?: string | null;
 };
 
 type AppSidebarProps = {
@@ -89,6 +90,11 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
               <Link href="/timesheets" className={itemClassName(pathname === "/timesheets")}>
                 Timesheets
               </Link>
+              {currentUser.role === "admin" ? (
+                <Link href="/users" className={itemClassName(pathname === "/users")}>
+                  Users
+                </Link>
+              ) : null}
             </nav>
           </section>
 
@@ -119,7 +125,7 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
           </div>
           <button
             type="button"
-            onClick={() => signOut({ callbackUrl: "/api/auth/signin" })}
+            onClick={() => signOut({ callbackUrl: "/login" })}
             className={itemClassName(false)}
           >
             Logout

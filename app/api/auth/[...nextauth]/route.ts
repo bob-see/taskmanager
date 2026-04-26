@@ -5,7 +5,10 @@ import bcrypt from "bcryptjs";
 
 export const authOptions = {
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
+  },
+  pages: {
+    signIn: "/login",
   },
   providers: [
     CredentialsProvider({
@@ -19,18 +22,24 @@ export const authOptions = {
           return null;
         }
 
+        const email = credentials.email.trim().toLowerCase();
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
         });
 
-        if (!user) return null;
+        if (!user) {
+          return null;
+        }
 
         const valid = await bcrypt.compare(
           credentials.password,
           user.passwordHash
         );
 
-        if (!valid) return null;
+        if (!valid) {
+          return null;
+        }
 
         return {
           id: user.id,
@@ -40,6 +49,13 @@ export const authOptions = {
       },
     }),
   ],
+  callbacks: {
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (url.startsWith(baseUrl)) return url;
+      return `${baseUrl}/`;
+    },
+  },
   secret: process.env.NEXTAUTH_SECRET,
 };
 

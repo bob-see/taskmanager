@@ -19,10 +19,12 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email;
+
   const profiles = await prisma.profile.findMany({
     where: {
       user: {
-        email: session.user.email,
+        email,
       },
     },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email;
   const body = await req.json().catch(() => ({}));
   const name = typeof body?.name === "string" ? body.name.trim() : "";
 
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
     const result = await tx.profile.aggregate({
       where: {
         user: {
-          email: session.user.email,
+          email,
         },
       },
       _max: { order: true },
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
         order: (result._max.order ?? -1) + 1,
         user: {
           connect: {
-            email: session.user.email,
+            email,
           },
         },
       },

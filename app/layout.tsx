@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
 import { Geist, Geist_Mono } from "next/font/google";
 import { prisma } from "@/app/lib/prisma";
 import { AppShell } from "@/app/components/app-shell";
@@ -41,21 +40,43 @@ export default async function RootLayout({
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
-    redirect("/api/auth/signin");
+    return (
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          {children}
+        </body>
+      </html>
+    );
   }
 
-  const profiles = await prisma.profile.findMany({
-    where: {
-      user: {
-        email: session.user.email,
+  const email = session.user.email;
+
+  const [profiles, currentUser] = await Promise.all([
+    prisma.profile.findMany({
+      where: {
+        user: {
+          email,
+        },
       },
-    },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      name: true,
-    },
-  });
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+    prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        name: true,
+        email: true,
+        role: true,
+      },
+    }),
+  ]);
 
   return (
     <html lang="en">
@@ -65,8 +86,9 @@ export default async function RootLayout({
         <AppShell
           profiles={profiles}
           currentUser={{
-          name: session.user.name,
-          email: session.user.email,
+            name: currentUser?.name ?? session.user.name,
+            email: currentUser?.email ?? email,
+            role: currentUser?.role,
           }}
         >
           {children}

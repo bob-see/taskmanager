@@ -41,10 +41,12 @@ export default async function ReportsPage({
 
   if (!session?.user?.email) return notFound();
 
+  const email = session.user.email;
+
   const profiles = await prisma.profile.findMany({
     where: {
       user: {
-        email: session.user.email,
+        email,
       },
     },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -65,7 +67,7 @@ export default async function ReportsPage({
       ? {
           profile: {
             user: {
-              email: session.user.email,
+              email,
             },
           },
         }
@@ -73,7 +75,7 @@ export default async function ReportsPage({
           profileId: selectedScope,
           profile: {
             user: {
-              email: session.user.email,
+              email,
             },
           },
         };

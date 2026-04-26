@@ -15,6 +15,7 @@ export default async function TimesheetsPage() {
 
   if (!session?.user?.email) return notFound();
 
+  const email = session.user.email;
   const weekStart = parseWeekStartParam(null);
   const { weekStartDate, weekEndDate } = getWeekRange(weekStart);
 
@@ -22,7 +23,7 @@ export default async function TimesheetsPage() {
     prisma.profile.findMany({
       where: {
         user: {
-          email: session.user.email,
+          email,
         },
       },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -35,7 +36,7 @@ export default async function TimesheetsPage() {
       where: {
         profile: {
           user: {
-            email: session.user.email,
+            email,
           },
         },
         entryDate: {
@@ -53,7 +54,7 @@ export default async function TimesheetsPage() {
       where: {
         profile: {
           user: {
-            email: session.user.email,
+            email,
           },
         },
         endTime: null,

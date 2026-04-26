@@ -9,11 +9,13 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email;
+
   const tasks = await prisma.task.findMany({
     where: {
       profile: {
         user: {
-          email: session.user.email,
+          email,
         },
       },
     },
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email;
   const body = await req.json().catch(() => ({}));
   const title = typeof body?.title === "string" ? body.title.trim() : "";
   const dueAtInput = body?.dueAt;
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
     where: {
       id: profileId,
       user: {
-        email: session.user.email,
+        email,
       },
     },
     select: { id: true },

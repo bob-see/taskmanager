@@ -9,6 +9,7 @@ type ShellProfile = {
 type ShellUser = {
   name?: string | null;
   email?: string | null;
+  role?: string | null;
 };
 
 type AppShellProps = {

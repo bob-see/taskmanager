@@ -15,11 +15,13 @@ export default async function ReportingPage({ params }: Props) {
 
   if (!session?.user?.email) return notFound();
 
+  const email = session.user.email;
+
   const profile = await prisma.profile.findFirst({
     where: {
       id: profileId,
       user: {
-        email: session.user.email,
+        email,
       },
     },
     select: { id: true, name: true },
