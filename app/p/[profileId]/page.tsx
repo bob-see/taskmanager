@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
+import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { TrackerClient } from "@/app/p/[profileId]/tracker-client";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 type Props = {
   params: Promise<{ profileId: string }>;
@@ -9,8 +11,17 @@ type Props = {
 export default async function ProfilePage({ params }: Props) {
   const { profileId } = await params;
 
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) return notFound();
+
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId,
+      user: {
+        email: session.user.email,
+      },
+    },
     select: { id: true, name: true },
   });
 
