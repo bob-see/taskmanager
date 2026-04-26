@@ -1,4 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { notFound } from "next/navigation";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   getWeekRange,
   parseWeekStartParam,
@@ -8,11 +11,20 @@ import {
 import { TimesheetsClient } from "@/app/timesheets/timesheets-client";
 
 export default async function TimesheetsPage() {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) return notFound();
+
   const weekStart = parseWeekStartParam(null);
   const { weekStartDate, weekEndDate } = getWeekRange(weekStart);
 
   const [profiles, entries, activeTimer] = await Promise.all([
     prisma.profile.findMany({
+      where: {
+        user: {
+          email: session.user.email,
+        },
+      },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -21,6 +33,11 @@ export default async function TimesheetsPage() {
     }),
     prisma.timeEntry.findMany({
       where: {
+        profile: {
+          user: {
+            email: session.user.email,
+          },
+        },
         entryDate: {
           gte: weekStartDate,
           lt: weekEndDate,
@@ -34,6 +51,11 @@ export default async function TimesheetsPage() {
     }),
     prisma.timeEntry.findFirst({
       where: {
+        profile: {
+          user: {
+            email: session.user.email,
+          },
+        },
         endTime: null,
       },
       orderBy: {

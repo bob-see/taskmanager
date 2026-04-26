@@ -1,6 +1,9 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { notFound } from "next/navigation";
 import { toDateOnly } from "@/app/timesheets/timesheet-utils";
 import { ReportsClient } from "@/app/reports/reports-client";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   formatBestPeriodLabel,
   getTaskDetailReport,
@@ -33,7 +36,17 @@ export default async function ReportsPage({
   searchParams: SearchParams;
 }) {
   const resolvedSearchParams = await searchParams;
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) return notFound();
+
   const profiles = await prisma.profile.findMany({
+    where: {
+      user: {
+        email: session.user.email,
+      },
+    },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
@@ -47,7 +60,23 @@ export default async function ReportsPage({
       : "overview";
   const selectedPeriod = normalizePeriod(resolvedSearchParams.period);
   const selectedDate = normalizeSelectedDate(resolvedSearchParams.date);
-  const whereProfile = selectedScope === "overview" ? {} : { profileId: selectedScope };
+  const whereProfile =
+    selectedScope === "overview"
+      ? {
+          profile: {
+            user: {
+              email: session.user.email,
+            },
+          },
+        }
+      : {
+          profileId: selectedScope,
+          profile: {
+            user: {
+              email: session.user.email,
+            },
+          },
+        };
 
   const [tasks, timeEntries] = await Promise.all([
     prisma.task.findMany({
