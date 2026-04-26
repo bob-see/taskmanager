@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
-  ensureProfile,
   parseDateInput,
   parseOptionalTextInput,
 } from "@/app/api/p/tasks-shared";
@@ -12,7 +13,22 @@ type Ctx = {
 export async function PATCH(req: Request, ctx: Ctx) {
   const { profileId, id } = await ctx.params;
 
-  const profile = await ensureProfile(profileId);
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true },
+  });
+
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
