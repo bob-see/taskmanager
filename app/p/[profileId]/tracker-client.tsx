@@ -56,6 +56,7 @@ type Task = {
   repeatMonthlyDay: number | null;
   createdAt: string;
   orderIndex: number | null;
+  isPriority: boolean;
 };
 
 type Project = {
@@ -66,6 +67,7 @@ type Project = {
   category: string | null;
   archived: boolean;
   collapsed: boolean;
+  isPriority: boolean;
   createdAt: string;
 };
 
@@ -181,6 +183,8 @@ const compactButtonClass =
   "tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2.5 text-sm";
 const chipClass = "tm-chip rounded-full border px-2 py-0.5";
 const smallChipClass = "tm-chip rounded-full border px-2 py-0.5 text-xs";
+const priorityChipClass =
+  "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800";
 const tabSetClass = "tm-tabset inline-flex rounded-md border p-1 text-sm";
 const tabClass = "tm-tab rounded px-3 py-1";
 const activeTabClass = "tm-tab-active rounded px-3 py-1";
@@ -1187,6 +1191,7 @@ function TaskRow({
   onToggleCompleted,
   onSnoozePreset,
   onPickSnoozeDate,
+  onTogglePriority,
   onDelete,
   draggable = false,
   dragActive = false,
@@ -1222,6 +1227,7 @@ function TaskRow({
   onToggleCompleted: (task: Task, completed: boolean) => void;
   onSnoozePreset: (task: Task, preset: SnoozePreset) => void;
   onPickSnoozeDate: (task: Task) => void;
+  onTogglePriority: (task: Task) => void;
   onDelete: (task: Task) => void;
   draggable?: boolean;
   dragActive?: boolean;
@@ -1241,7 +1247,9 @@ function TaskRow({
         projectArchived
           ? "border-amber-300/20 bg-amber-200/5"
           : "tm-card"
-      } ${draggable ? "cursor-grab" : ""} ${dragActive ? "opacity-60" : ""} ${
+      } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
+        draggable ? "cursor-grab" : ""
+      } ${dragActive ? "opacity-60" : ""} ${
         dragOverPosition === "before"
           ? "border-t-2 border-t-[color:var(--tm-text)]"
           : dragOverPosition === "after"
@@ -1298,6 +1306,11 @@ function TaskRow({
           )}
           {task.notes && <p className="tm-muted mt-1.5 text-xs">{task.notes}</p>}
           <div className="tm-muted mt-2 flex flex-wrap gap-1.5 text-[11px]">
+            {task.isPriority && (
+              <span className={priorityChipClass}>
+                Priority
+              </span>
+            )}
             {projectArchived && (
               <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
                 Archived
@@ -1384,6 +1397,13 @@ function TaskRow({
           <button
             className={compactButtonClass}
             type="button"
+            onClick={() => onTogglePriority(task)}
+          >
+            {task.isPriority ? "Unprioritise" : "Prioritise"}
+          </button>
+          <button
+            className={compactButtonClass}
+            type="button"
             onClick={() => onOpenEditModal(task)}
           >
             Edit
@@ -1439,6 +1459,11 @@ function ProjectSearchRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-sm font-semibold">{project.name}</div>
+            {project.isPriority && (
+              <span className={priorityChipClass}>
+                Priority
+              </span>
+            )}
             {project.archived && (
               <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
                 Archived
@@ -2311,6 +2336,14 @@ export function TrackerClient({
     }
   }
 
+  async function toggleTaskPriority(task: Task) {
+    try {
+      await updateTask(task.id, { isPriority: !task.isPriority });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update task");
+    }
+  }
+
   function applyManualOrder(orderedIds: string[]) {
     const orderById = new Map(orderedIds.map((id, index) => [id, (index + 1) * 10]));
 
@@ -2676,6 +2709,14 @@ export function TrackerClient({
   async function toggleProjectArchived(project: Project) {
     try {
       await updateProject(project.id, { archived: !project.archived });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update project");
+    }
+  }
+
+  async function toggleProjectPriority(project: Project) {
+    try {
+      await updateProject(project.id, { isPriority: !project.isPriority });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update project");
     }
@@ -3635,6 +3676,7 @@ export function TrackerClient({
                           }
                           onSnoozePreset={snoozeTask}
                           onPickSnoozeDate={openSingleTaskSnoozeDate}
+                          onTogglePriority={toggleTaskPriority}
                           showSnoozeAction={!isTaskCompleted(task)}
                           snoozeDisabled={bulkSaving}
                           onDelete={requestDeleteTask}
@@ -3656,6 +3698,7 @@ export function TrackerClient({
                       section.project.category ? `Category ${section.project.category}` : null,
                       `Start ${toDateOnly(section.project.startDate)}`,
                       section.project.dueAt ? `Due ${toDateOnly(section.project.dueAt)}` : null,
+                      section.project.isPriority ? "Priority" : null,
                       section.project.archived ? "Archived" : null,
                     ]
                       .filter(Boolean)
@@ -3676,6 +3719,11 @@ export function TrackerClient({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-semibold">{section.label}</h3>
+                          {section.project?.isPriority && (
+                            <span className={priorityChipClass}>
+                              Priority
+                            </span>
+                          )}
                           {section.project?.archived && (
                             <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
                               Archived
@@ -3717,6 +3765,13 @@ export function TrackerClient({
                       <div className="flex flex-wrap items-center gap-2">
                         {section.project && (
                           <>
+                            <button
+                              className={buttonClass}
+                              type="button"
+                              onClick={() => void toggleProjectPriority(section.project)}
+                            >
+                              {section.project.isPriority ? "Unprioritise" : "Prioritise"}
+                            </button>
                             <button
                               className={buttonClass}
                               type="button"
@@ -3785,6 +3840,7 @@ export function TrackerClient({
                                   }
                                   onSnoozePreset={snoozeTask}
                                   onPickSnoozeDate={openSingleTaskSnoozeDate}
+                                  onTogglePriority={toggleTaskPriority}
                                   showSnoozeAction
                                   snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
@@ -3868,6 +3924,7 @@ export function TrackerClient({
                                   }
                                   onSnoozePreset={snoozeTask}
                                   onPickSnoozeDate={openSingleTaskSnoozeDate}
+                                  onTogglePriority={toggleTaskPriority}
                                   showSnoozeAction={false}
                                   snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
@@ -3968,12 +4025,20 @@ export function TrackerClient({
                       <th className={`${matrixHeaderCellClass} w-[120px]`}>Due</th>
                       <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
                       <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Done</th>
+                      <th className={`${matrixHeaderCellClass} w-[128px] text-center`}>Priority</th>
                       <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Delete</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedOpenTasks.map((task) => (
-                      <tr key={task.id} className="tm-table-row border-t align-top">
+                      <tr
+                        key={task.id}
+                        className={`tm-table-row border-t align-top ${
+                          task.isPriority
+                            ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
+                            : ""
+                        }`}
+                      >
                         <td className={matrixCellClass}>
                           <div className="min-w-0">
                             <div className="truncate font-semibold">{task.title}</div>
@@ -3981,6 +4046,11 @@ export function TrackerClient({
                               {showStartChipInTables && (
                                 <span className={smallChipClass}>
                                   Start {formatShortDate(toDateOnly(task.startDate))}
+                                </span>
+                              )}
+                              {task.isPriority && (
+                                <span className={priorityChipClass}>
+                                  Priority
                                 </span>
                               )}
                               {task.projectId && projectById.get(task.projectId)?.archived && (
@@ -4016,6 +4086,15 @@ export function TrackerClient({
                               )
                             }
                           />
+                        </td>
+                        <td className={`${matrixCellClass} text-center`}>
+                          <button
+                            className={compactButtonClass}
+                            type="button"
+                            onClick={() => void toggleTaskPriority(task)}
+                          >
+                            {task.isPriority ? "Unprioritise" : "Prioritise"}
+                          </button>
                         </td>
                         <td className={`${matrixCellClass} text-center`}>
                           <button
@@ -4084,6 +4163,9 @@ export function TrackerClient({
                         <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>
                           Open
                         </th>
+                        <th className={`${matrixHeaderCellClass} w-[128px] text-center`}>
+                          Priority
+                        </th>
                         <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>
                           Delete
                         </th>
@@ -4091,7 +4173,14 @@ export function TrackerClient({
                     </thead>
                     <tbody>
                       {doneTasks.map((task) => (
-                        <tr key={task.id} className="tm-table-row border-t align-top opacity-80">
+                        <tr
+                          key={task.id}
+                          className={`tm-table-row border-t align-top opacity-80 ${
+                            task.isPriority
+                              ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
+                              : ""
+                          }`}
+                        >
                           <td className={matrixCellClass}>
                             <div className="min-w-0">
                               <div className="truncate font-medium">{task.title}</div>
@@ -4099,6 +4188,11 @@ export function TrackerClient({
                                 {showStartChipInTables && (
                                   <span className={smallChipClass}>
                                     Start {formatShortDate(toDateOnly(task.startDate))}
+                                  </span>
+                                )}
+                                {task.isPriority && (
+                                  <span className={priorityChipClass}>
+                                    Priority
                                   </span>
                                 )}
                               </div>
@@ -4130,6 +4224,15 @@ export function TrackerClient({
                                 )
                               }
                             />
+                          </td>
+                          <td className={`${matrixCellClass} text-center`}>
+                            <button
+                              className={compactButtonClass}
+                              type="button"
+                              onClick={() => void toggleTaskPriority(task)}
+                            >
+                              {task.isPriority ? "Unprioritise" : "Prioritise"}
+                            </button>
                           </td>
                           <td className={`${matrixCellClass} text-center`}>
                             <button
