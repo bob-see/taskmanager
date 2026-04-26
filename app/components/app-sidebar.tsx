@@ -10,8 +10,14 @@ type SidebarProfile = {
   name: string;
 };
 
+type SidebarUser = {
+  name?: string | null;
+  email?: string | null;
+};
+
 type AppSidebarProps = {
   profiles: SidebarProfile[];
+  currentUser: SidebarUser;
 };
 
 function itemClassName(active: boolean, disabled = false) {
@@ -26,7 +32,7 @@ function itemClassName(active: boolean, disabled = false) {
     .join(" ");
 }
 
-export function AppSidebar({ profiles }: AppSidebarProps) {
+export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -97,7 +103,20 @@ export function AppSidebar({ profiles }: AppSidebarProps) {
             </nav>
           </section>
         </div>
-        <div className="mt-auto border-t border-[color:var(--tm-border)] pt-4 pb-8 md:pb-4">
+        <div className="mt-auto border-t border-[color:var(--tm-border)] pt-4 pb-12 md:pb-6">
+          <div className="mb-3 px-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+              Logged in as
+            </p>
+            <p className="mt-1 truncate text-sm font-medium text-[color:var(--tm-text)]">
+              {currentUser.name || "User"}
+            </p>
+            {currentUser.email ? (
+              <p className="truncate text-xs text-[color:var(--tm-muted)]">
+                {currentUser.email}
+              </p>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/api/auth/signin" })}

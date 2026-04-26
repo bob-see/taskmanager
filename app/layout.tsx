@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import { Geist, Geist_Mono } from "next/font/google";
 import { prisma } from "@/app/lib/prisma";
 import { AppShell } from "@/app/components/app-shell";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,7 +38,18 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    redirect("/api/auth/signin");
+  }
+
   const profiles = await prisma.profile.findMany({
+    where: {
+      user: {
+        email: session.user.email,
+      },
+    },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
@@ -48,7 +62,15 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AppShell profiles={profiles}>{children}</AppShell>
+        <AppShell
+          profiles={profiles}
+          currentUser={{
+          name: session.user.name,
+          email: session.user.email,
+          }}
+        >
+          {children}
+        </AppShell>
       </body>
     </html>
   );
