@@ -152,6 +152,7 @@ export function TimesheetsClient({
   const [savingManual, setSavingManual] = useState(false);
   const [savingTimer, setSavingTimer] = useState(false);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+  const [pendingDeleteEntryId, setPendingDeleteEntryId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const weekDays = useMemo(() => getWeekDays(selectedWeekStart), [selectedWeekStart]);
@@ -443,7 +444,7 @@ export function TimesheetsClient({
   }
 
   async function handleDeleteEntry(entryId: string) {
-    if (deletingEntryId || !window.confirm("Delete this time entry?")) {
+    if (deletingEntryId) {
       return;
     }
 
@@ -458,6 +459,7 @@ export function TimesheetsClient({
         throw new Error(body?.error ?? "Could not delete time entry");
       }
 
+      setPendingDeleteEntryId(null);
       await loadWeekData(selectedWeekStart);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not delete time entry");
@@ -882,7 +884,7 @@ export function TimesheetsClient({
                             <button
                               type="button"
                               className={buttonClass}
-                              onClick={() => void handleDeleteEntry(entry.id)}
+                              onClick={() => setPendingDeleteEntryId(entry.id)}
                               disabled={deletingEntryId === entry.id}
                             >
                               {deletingEntryId === entry.id ? "Deleting…" : "Delete"}
@@ -898,6 +900,35 @@ export function TimesheetsClient({
           )}
         </section>
       </div>
+      {pendingDeleteEntryId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+          <div className="tm-card w-full max-w-md rounded-[14px] border p-5 shadow-xl">
+            <h3 className="text-lg font-semibold tracking-tight">Delete time entry?</h3>
+            <p className="mt-2 text-sm text-[color:var(--tm-muted)]">
+              This will permanently remove this time entry.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => setPendingDeleteEntryId(null)}
+                disabled={Boolean(deletingEntryId)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={primaryButtonClass}
+                onClick={() => void handleDeleteEntry(pendingDeleteEntryId)}
+                disabled={Boolean(deletingEntryId)}
+              >
+                {deletingEntryId ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

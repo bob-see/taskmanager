@@ -1,4 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   buildCompletedTimeEntryData,
   ensureTimesheetProfile,
@@ -18,8 +20,22 @@ type Ctx = {
 
 export async function PATCH(req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const existing = await prisma.timeEntry.findUnique({
-    where: { id },
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const existing = await prisma.timeEntry.findFirst({
+    where: {
+      id,
+      profile: {
+        user: {
+          email: session.user.email,
+        },
+      },
+    },
     select: { id: true, endTime: true },
   });
 
@@ -37,6 +53,20 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const body = await req.json().catch(() => ({}));
   const profileId = await ensureTimesheetProfile(body?.profileId);
   if (profileId.error) return profileId.error;
+
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId.value,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!profile) {
+    return Response.json({ error: "Profile not found" }, { status: 404 });
+  }
 
   const entryDate = parseRequiredDate(body?.date, "date");
   if (entryDate.error) return entryDate.error;
@@ -77,8 +107,22 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 export async function DELETE(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const existing = await prisma.timeEntry.findUnique({
-    where: { id },
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const existing = await prisma.timeEntry.findFirst({
+    where: {
+      id,
+      profile: {
+        user: {
+          email: session.user.email,
+        },
+      },
+    },
     select: { id: true },
   });
 
