@@ -38,6 +38,11 @@ export default function Home() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [editingProfileName, setEditingProfileName] = useState("");
+  const [deletingProfile, setDeletingProfile] = useState<Profile | null>(null);
+  const [profileActionError, setProfileActionError] = useState("");
+  const [profileActionSaving, setProfileActionSaving] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -80,6 +85,80 @@ export default function Home() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openEditProfile(profile: Profile) {
+    setProfileActionError("");
+    setEditingProfile(profile);
+    setEditingProfileName(profile.name);
+  }
+
+  async function saveProfileEdit() {
+    if (!editingProfile) return;
+
+    const nextName = editingProfileName.trim();
+    if (!nextName) {
+      setProfileActionError("Profile name is required.");
+      return;
+    }
+
+    if (nextName === editingProfile.name) {
+      setEditingProfile(null);
+      setEditingProfileName("");
+      setProfileActionError("");
+      return;
+    }
+
+    setProfileActionSaving(true);
+    setProfileActionError("");
+
+    const res = await fetch(`/api/profiles/${editingProfile.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nextName }),
+    });
+
+    setProfileActionSaving(false);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setProfileActionError(err?.error ?? "Could not update profile.");
+      return;
+    }
+
+    const updatedProfile = (await res.json()) as Profile;
+    setProfiles((prev) =>
+      prev.map((item) => (item.id === updatedProfile.id ? updatedProfile : item))
+    );
+    setEditingProfile(null);
+    setEditingProfileName("");
+  }
+
+  function openDeleteProfile(profile: Profile) {
+    setProfileActionError("");
+    setDeletingProfile(profile);
+  }
+
+  async function confirmDeleteProfile() {
+    if (!deletingProfile) return;
+
+    setProfileActionSaving(true);
+    setProfileActionError("");
+
+    const res = await fetch(`/api/profiles/${deletingProfile.id}`, {
+      method: "DELETE",
+    });
+
+    setProfileActionSaving(false);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setProfileActionError(err?.error ?? "Could not delete profile.");
+      return;
+    }
+
+    setProfiles((prev) => prev.filter((item) => item.id !== deletingProfile.id));
+    setDeletingProfile(null);
   }
 
   async function persistOrder(nextProfiles: Profile[], previousProfiles: Profile[]) {
@@ -211,30 +290,41 @@ export default function Home() {
                     isDragged ? "opacity-60" : ""
                   }`}
                 >
-                  {showLeftIndicator && (
-                    <div className="absolute -left-3 top-4 h-28 w-1 rounded-full bg-gray-900" />
-                  )}
-
-                  {showRightIndicator && (
-                    <div className="absolute -right-3 top-4 h-28 w-1 rounded-full bg-gray-900" />
-                  )}
-
-                  <Link
-                    href={`/p/${profile.id}`}
-                    className="group flex h-44 w-full items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                  >
-                    <div className="px-4 text-center">
-                      <div className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-gray-400">
-                        Drag
-                      </div>
-                      <div className="text-lg font-medium text-gray-900">
-                        {profile.name}
-                      </div>
-                      <div className="mt-1 text-xs text-gray-500 opacity-0 transition group-hover:opacity-100">
-                        Open profile
-                      </div>
+                  <div className="group relative h-44 w-full rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <div className="absolute right-3 top-3 z-10 flex gap-2 opacity-0 transition group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => openEditProfile(profile)}
+                        className="rounded-lg border border-gray-200 bg-white/90 px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDeleteProfile(profile)}
+                        className="rounded-lg border border-red-100 bg-red-50/90 px-2 py-1 text-xs font-medium text-red-600 shadow-sm hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
                     </div>
-                  </Link>
+
+                    <Link
+                      href={`/p/${profile.id}`}
+                      className="flex h-full w-full items-center justify-center"
+                    >
+                      <div className="px-4 text-center">
+                        <div className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-gray-400">
+                          Drag
+                        </div>
+                        <div className="text-lg font-medium text-gray-900">
+                          {profile.name}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500 opacity-0 transition group-hover:opacity-100">
+                          Open profile
+                        </div>
+                      </div>
+                    </Link>
+                  </div>
                 </div>
               );
             })}
@@ -295,6 +385,108 @@ export default function Home() {
           </div>
         </section>
       </div>
+      {editingProfile ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/35 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-6 shadow-xl">
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                Edit profile
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">
+                Rename profile
+              </h2>
+              <p className="mt-2 text-sm text-gray-500">
+                Update how this profile appears throughout TaskManager.
+              </p>
+            </div>
+
+            <label className="text-sm font-medium text-gray-900">
+              Profile name
+              <input
+                value={editingProfileName}
+                onChange={(event) => setEditingProfileName(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                autoFocus
+              />
+            </label>
+
+            {profileActionError ? (
+              <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {profileActionError}
+              </p>
+            ) : null}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProfile(null);
+                  setEditingProfileName("");
+                  setProfileActionError("");
+                }}
+                className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={profileActionSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveProfileEdit()}
+                className="rounded-2xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={profileActionSaving}
+              >
+                {profileActionSaving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deletingProfile ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/35 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-red-100 bg-white p-6 shadow-xl">
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-500">
+                Delete profile
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">
+                Delete {deletingProfile.name}?
+              </h2>
+              <p className="mt-2 text-sm text-gray-500">
+                This will permanently delete related tasks, projects and time entries.
+              </p>
+            </div>
+
+            {profileActionError ? (
+              <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {profileActionError}
+              </p>
+            ) : null}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingProfile(null);
+                  setProfileActionError("");
+                }}
+                className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={profileActionSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteProfile()}
+                className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={profileActionSaving}
+              >
+                {profileActionSaving ? "Deleting..." : "Delete profile"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -163,3 +163,30 @@ export async function PATCH(
     throw error;
   }
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const deleted = await prisma.profile.deleteMany({
+    where: {
+      id,
+      user: {
+        email: session.user.email,
+      },
+    },
+  });
+
+  if (deleted.count === 0) {
+    return Response.json({ error: "Profile not found" }, { status: 404 });
+  }
+
+  return new Response(null, { status: 204 });
+}
