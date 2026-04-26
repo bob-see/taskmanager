@@ -1,9 +1,17 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const completed =
@@ -38,7 +46,23 @@ export async function PATCH(req: Request, ctx: Ctx) {
     );
   }
 
-  const task = await prisma.task.update({
+  const task = await prisma.task.findFirst({
+    where: {
+      id,
+      profile: {
+        user: {
+          email: session.user.email,
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!task) {
+    return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  const updatedTask = await prisma.task.update({
     where: { id },
     data: {
       ...(completed !== undefined
@@ -48,12 +72,32 @@ export async function PATCH(req: Request, ctx: Ctx) {
     },
   });
 
-  return Response.json(task);
+  return Response.json(updatedTask);
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
 
-  await prisma.task.delete({ where: { id } });
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const deleted = await prisma.task.deleteMany({
+    where: {
+      id,
+      profile: {
+        user: {
+          email: session.user.email,
+        },
+      },
+    },
+  });
+
+  if (deleted.count === 0) {
+    return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
   return new Response(null, { status: 204 });
 }
