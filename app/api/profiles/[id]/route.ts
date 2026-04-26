@@ -1,4 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const ALLOWED_VIEW_MODES = new Set(["day", "week", "month"]);
 const ALLOWED_AVERAGE_BASES = new Set(["calendar-days", "work-week"]);
@@ -72,6 +74,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = await req.json().catch(() => ({}));
   const nameResult = parseOptionalName(body?.name);
 
@@ -119,6 +126,20 @@ export async function PATCH(
       },
       { status: 400 }
     );
+  }
+
+  const existingProfile = await prisma.profile.findFirst({
+    where: {
+      id,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!existingProfile) {
+    return Response.json({ error: "Profile not found" }, { status: 404 });
   }
 
   try {
