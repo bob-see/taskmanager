@@ -1,4 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { notFound } from "next/navigation";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { OverviewClient, type OverviewProfileData } from "@/app/overview/overview-client";
 import type { RepeatPattern } from "@/app/components/editors";
 
@@ -51,11 +54,16 @@ function compareTasksForManualSort(
   return compareTasksForStartDateSort(left, right);
 }
 
-async function getOverviewData(): Promise<OverviewProfileData[]> {
+async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const profiles = await prisma.profile.findMany({
+    where: {
+      user: {
+        email: userEmail,
+      },
+    },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
@@ -217,7 +225,11 @@ async function getOverviewData(): Promise<OverviewProfileData[]> {
 }
 
 export default async function OverviewPage() {
-  const profiles = await getOverviewData();
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) return notFound();
+
+  const profiles = await getOverviewData(session.user.email);
 
   return <OverviewClient profiles={profiles} />;
 }

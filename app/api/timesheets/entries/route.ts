@@ -1,4 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   buildCompletedTimeEntryData,
   ensureTimesheetProfile,
@@ -13,9 +15,29 @@ import {
 import { combineDateAndTime } from "@/app/timesheets/timesheet-utils";
 
 export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const profileId = await ensureTimesheetProfile(body?.profileId);
   if (profileId.error) return profileId.error;
+
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId.value,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!profile) {
+    return Response.json({ error: "Profile not found" }, { status: 404 });
+  }
 
   const entryDate = parseRequiredDate(body?.date, "date");
   if (entryDate.error) return entryDate.error;
