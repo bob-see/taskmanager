@@ -1,8 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
-  ensureProfile,
   ensureProject,
   getNextTaskOrderIndex,
   normalizeRepeatSettings,
@@ -34,6 +34,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
+    select: { id: true, userId: true },
   });
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
@@ -164,16 +165,27 @@ export async function POST(req: Request, ctx: Ctx) {
       },
     });
 
-    if (!normalizedRepeat.value?.repeatEnabled) {
-      return createdTask;
+    const task = normalizedRepeat.value?.repeatEnabled
+      ? await tx.task.update({
+          where: { id: createdTask.id },
+          data: {
+            recurrenceSeriesId: createdTask.id,
+          },
+        })
+      : createdTask;
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId,
+        taskId: task.id,
+        projectId: task.projectId,
+        type: "task.create",
+        description: `Created task "${task.title}"`,
+      });
     }
 
-    return tx.task.update({
-      where: { id: createdTask.id },
-      data: {
-        recurrenceSeriesId: createdTask.id,
-      },
-    });
+    return task;
   });
 
   return Response.json(task, { status: 201 });

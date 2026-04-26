@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 const profileSelect = {
   id: true,
@@ -50,6 +51,15 @@ export async function POST(req: Request) {
   }
 
   const profile = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new Error("Authenticated user not found");
+    }
+
     const result = await tx.profile.aggregate({
       where: {
         user: {
@@ -59,7 +69,7 @@ export async function POST(req: Request) {
       _max: { order: true },
     });
 
-    return tx.profile.create({
+    const createdProfile = await tx.profile.create({
       data: {
         name,
         order: (result._max.order ?? -1) + 1,
@@ -69,8 +79,19 @@ export async function POST(req: Request) {
           },
         },
       },
-      select: profileSelect,
+      select: {
+        ...profileSelect,
+      },
     });
+
+    await createActivityLog(tx, {
+      userId: user.id,
+      profileId: createdProfile.id,
+      type: "profile.create",
+      description: `Created profile "${createdProfile.name}"`,
+    });
+
+    return createdProfile;
   });
 
   return Response.json(profile, { status: 201 });

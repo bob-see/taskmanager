@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -55,7 +56,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
         },
       },
     },
-    select: { id: true },
+    select: {
+      id: true,
+      title: true,
+      profileId: true,
+      projectId: true,
+      completedAt: true,
+      profile: {
+        select: {
+          userId: true,
+        },
+      },
+    },
   });
 
   if (!task) {
@@ -72,6 +84,22 @@ export async function PATCH(req: Request, ctx: Ctx) {
     },
   });
 
+  if (task.profile.userId && completed !== undefined) {
+    const didComplete = !task.completedAt && updatedTask.completedAt;
+    const didReopen = task.completedAt && !updatedTask.completedAt;
+
+    if (didComplete || didReopen) {
+      await createActivityLog(prisma, {
+        userId: task.profile.userId,
+        profileId: task.profileId,
+        taskId: task.id,
+        projectId: task.projectId,
+        type: didComplete ? "task.complete" : "task.reopen",
+        description: `${didComplete ? "Completed" : "Reopened"} task "${task.title}"`,
+      });
+    }
+  }
+
   return Response.json(updatedTask);
 }
 
@@ -84,7 +112,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const deleted = await prisma.task.deleteMany({
+  const task = await prisma.task.findFirst({
     where: {
       id,
       profile: {
@@ -93,11 +121,39 @@ export async function DELETE(_req: Request, ctx: Ctx) {
         },
       },
     },
+    select: {
+      id: true,
+      title: true,
+      profileId: true,
+      projectId: true,
+      profile: {
+        select: {
+          userId: true,
+        },
+      },
+    },
   });
 
-  if (deleted.count === 0) {
+  if (!task) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.task.delete({
+      where: { id: task.id },
+    });
+
+    if (task.profile.userId) {
+      await createActivityLog(tx, {
+        userId: task.profile.userId,
+        profileId: task.profileId,
+        taskId: task.id,
+        projectId: task.projectId,
+        type: "task.delete",
+        description: `Deleted task "${task.title}"`,
+      });
+    }
+  });
 
   return new Response(null, { status: 204 });
 }

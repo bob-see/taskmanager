@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   buildCompletedTimeEntryData,
   ensureTimesheetProfile,
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -59,17 +60,31 @@ export async function POST(req: Request) {
   const rangeError = validateTimeRange(startDateTime, endDateTime);
   if (rangeError) return rangeError;
 
-  const entry = await prisma.timeEntry.create({
-    data: buildCompletedTimeEntryData({
-      entryDate: entryDate.value,
-      startTime: startDateTime,
-      endTime: endDateTime,
-      notes: notes.value,
-      profileId: profileId.value,
-      roundingMode: roundingMode.value,
-      source: "manual",
-    }),
-    select: timeEntrySelect,
+  const entry = await prisma.$transaction(async (tx) => {
+    const createdEntry = await tx.timeEntry.create({
+      data: buildCompletedTimeEntryData({
+        entryDate: entryDate.value,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        notes: notes.value,
+        profileId: profileId.value,
+        roundingMode: roundingMode.value,
+        source: "manual",
+      }),
+      select: timeEntrySelect,
+    });
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId: profileId.value,
+        timeEntryId: createdEntry.id,
+        type: "time_entry.create",
+        description: "Created time entry",
+      });
+    }
+
+    return createdEntry;
   });
 
   return Response.json(serializeTimeEntry(entry), { status: 201 });

@@ -90,6 +90,9 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
               <Link href="/timesheets" className={itemClassName(pathname === "/timesheets")}>
                 Timesheets
               </Link>
+              <Link href="/activity" className={itemClassName(pathname === "/activity")}>
+                Activity
+              </Link>
               {currentUser.role === "admin" ? (
                 <Link href="/users" className={itemClassName(pathname === "/users")}>
                   Users

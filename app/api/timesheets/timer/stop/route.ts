@@ -1,4 +1,5 @@
 import { prisma } from "@/app/lib/prisma";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   calculateLoggedMinutes,
   isTimesheetRoundingMode,
@@ -29,6 +30,12 @@ export async function POST(req: Request) {
     select: {
       id: true,
       startTime: true,
+      profileId: true,
+      profile: {
+        select: {
+          userId: true,
+        },
+      },
     },
   });
 
@@ -43,17 +50,31 @@ export async function POST(req: Request) {
     roundingMode
   );
 
-  const entry = await prisma.timeEntry.update({
-    where: { id: activeTimer.id },
-    data: {
-      entryDate: toLocalDayStart(activeTimer.startTime),
-      endTime,
-      durationMinutes,
-      loggedMinutes,
-      roundingMode,
-      ...(notes.value !== null ? { notes: notes.value } : {}),
-    },
-    select: timeEntrySelect,
+  const entry = await prisma.$transaction(async (tx) => {
+    const updatedEntry = await tx.timeEntry.update({
+      where: { id: activeTimer.id },
+      data: {
+        entryDate: toLocalDayStart(activeTimer.startTime),
+        endTime,
+        durationMinutes,
+        loggedMinutes,
+        roundingMode,
+        ...(notes.value !== null ? { notes: notes.value } : {}),
+      },
+      select: timeEntrySelect,
+    });
+
+    if (activeTimer.profile.userId) {
+      await createActivityLog(tx, {
+        userId: activeTimer.profile.userId,
+        profileId: activeTimer.profileId,
+        timeEntryId: updatedEntry.id,
+        type: "time_entry.update",
+        description: "Stopped timer",
+      });
+    }
+
+    return updatedEntry;
   });
 
   return Response.json(serializeTimeEntry(entry));

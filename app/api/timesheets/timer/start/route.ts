@@ -1,4 +1,5 @@
 import { prisma } from "@/app/lib/prisma";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   ensureTimesheetProfile,
   parseOptionalNotes,
@@ -11,6 +12,11 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const profileId = await ensureTimesheetProfile(body?.profileId);
   if (profileId.error) return profileId.error;
+
+  const profile = await prisma.profile.findUnique({
+    where: { id: profileId.value },
+    select: { userId: true },
+  });
 
   const notes = parseOptionalNotes(body?.notes);
   if (notes.error) return notes.error;
@@ -37,19 +43,33 @@ export async function POST(req: Request) {
   }
 
   const now = new Date();
-  const entry = await prisma.timeEntry.create({
-    data: {
-      profileId: profileId.value,
-      entryDate: toLocalDayStart(now),
-      startTime: now,
-      endTime: null,
-      durationMinutes: null,
-      loggedMinutes: null,
-      roundingMode: null,
-      notes: notes.value,
-      source: "timer",
-    },
-    select: timeEntrySelect,
+  const entry = await prisma.$transaction(async (tx) => {
+    const createdEntry = await tx.timeEntry.create({
+      data: {
+        profileId: profileId.value,
+        entryDate: toLocalDayStart(now),
+        startTime: now,
+        endTime: null,
+        durationMinutes: null,
+        loggedMinutes: null,
+        roundingMode: null,
+        notes: notes.value,
+        source: "timer",
+      },
+      select: timeEntrySelect,
+    });
+
+    if (profile?.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId: profileId.value,
+        timeEntryId: createdEntry.id,
+        type: "time_entry.create",
+        description: "Started timer",
+      });
+    }
+
+    return createdEntry;
   });
 
   return Response.json(serializeTimeEntry(entry), { status: 201 });

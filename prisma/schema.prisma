@@ -111,3 +111,22 @@ model TimeEntry {
   @@index([entryDate])
   @@index([endTime])
 }
+
+model ActivityLog {
+  id          String   @id @default(cuid()) @db.VarChar(36)
+  userId      String   @db.VarChar(36)
+  profileId   String?  @db.VarChar(36)
+  taskId      String?  @db.VarChar(36)
+  projectId   String?  @db.VarChar(36)
+  timeEntryId String?  @db.VarChar(36)
+  type        String   @db.VarChar(64)
+  description String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type])
+  @@index([profileId])
+  @@index([taskId])
+  @@index([projectId])
+  @@index([timeEntryId])
+}

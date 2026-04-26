@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
         email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -81,12 +82,27 @@ export async function POST(req: Request) {
     );
   }
 
-  const task = await prisma.task.create({
-    data: {
-      title,
-      profileId,
-      ...(dueAt !== undefined ? { dueAt } : {}),
-    },
+  const task = await prisma.$transaction(async (tx) => {
+    const createdTask = await tx.task.create({
+      data: {
+        title,
+        profileId,
+        ...(dueAt !== undefined ? { dueAt } : {}),
+      },
+    });
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId,
+        taskId: createdTask.id,
+        projectId: createdTask.projectId,
+        type: "task.create",
+        description: `Created task "${createdTask.title}"`,
+      });
+    }
+
+    return createdTask;
   });
 
   return Response.json(task, { status: 201 });

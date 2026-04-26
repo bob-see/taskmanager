@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   addDays,
   ensureProject,
@@ -363,7 +364,7 @@ export async function POST(req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -520,6 +521,16 @@ export async function POST(req: Request, ctx: Ctx) {
         for (const taskId of taskIds) {
           const task = await ensureTaskRecord(tx, profileId, taskId);
           await markTaskDone(tx, task, completionDate);
+          if (profile.userId && !task.completedOn) {
+            await createActivityLog(tx, {
+              userId: profile.userId,
+              profileId,
+              taskId: task.id,
+              projectId: task.projectId,
+              type: "task.complete",
+              description: `Completed task "${task.title}"`,
+            });
+          }
         }
         return;
       }
@@ -531,6 +542,19 @@ export async function POST(req: Request, ctx: Ctx) {
           completedOn: completionDate,
         },
       });
+
+      if (profile.userId) {
+        for (const task of targetTasks.filter((item) => !item.completedOn)) {
+          await createActivityLog(tx, {
+            userId: profile.userId,
+            profileId,
+            taskId: task.id,
+            projectId: task.projectId,
+            type: "task.complete",
+            description: `Completed task "${task.title}"`,
+          });
+        }
+      }
     });
 
     return Response.json({ ok: true });
@@ -542,6 +566,16 @@ export async function POST(req: Request, ctx: Ctx) {
         for (const taskId of taskIds) {
           const task = await ensureTaskRecord(tx, profileId, taskId);
           await markTaskOpen(tx, task);
+          if (profile.userId && task.completedOn) {
+            await createActivityLog(tx, {
+              userId: profile.userId,
+              profileId,
+              taskId: task.id,
+              projectId: task.projectId,
+              type: "task.reopen",
+              description: `Reopened task "${task.title}"`,
+            });
+          }
         }
         return;
       }
@@ -553,6 +587,19 @@ export async function POST(req: Request, ctx: Ctx) {
           completedOn: null,
         },
       });
+
+      if (profile.userId) {
+        for (const task of targetTasks.filter((item) => item.completedOn)) {
+          await createActivityLog(tx, {
+            userId: profile.userId,
+            profileId,
+            taskId: task.id,
+            projectId: task.projectId,
+            type: "task.reopen",
+            description: `Reopened task "${task.title}"`,
+          });
+        }
+      }
     });
 
     return Response.json({ ok: true });
@@ -563,6 +610,16 @@ export async function POST(req: Request, ctx: Ctx) {
       for (const taskId of taskIds) {
         const task = await ensureTaskRecord(tx, profileId, taskId);
         await deleteSingleTask(tx, task);
+        if (profile.userId) {
+          await createActivityLog(tx, {
+            userId: profile.userId,
+            profileId,
+            taskId: task.id,
+            projectId: task.projectId,
+            type: "task.delete",
+            description: `Deleted task "${task.title}"`,
+          });
+        }
       }
       return;
     }
@@ -570,6 +627,19 @@ export async function POST(req: Request, ctx: Ctx) {
     await tx.task.deleteMany({
       where: { profileId, id: { in: targetIds } },
     });
+
+    if (profile.userId) {
+      for (const task of targetTasks) {
+        await createActivityLog(tx, {
+          userId: profile.userId,
+          profileId,
+          taskId: task.id,
+          projectId: task.projectId,
+          type: "task.delete",
+          description: `Deleted task "${task.title}"`,
+        });
+      }
+    }
   });
 
   return Response.json({ ok: true });

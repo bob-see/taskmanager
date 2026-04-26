@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   parseDateInput,
   parseOptionalTextInput,
@@ -26,7 +27,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -35,7 +36,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   const existingProject = await prisma.project.findFirst({
     where: { id, profileId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (!existingProject) {
@@ -113,10 +114,80 @@ export async function PATCH(req: Request, ctx: Ctx) {
     );
   }
 
-  const project = await prisma.project.update({
-    where: { id },
-    data,
+  const project = await prisma.$transaction(async (tx) => {
+    const updatedProject = await tx.project.update({
+      where: { id },
+      data,
+    });
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId,
+        projectId: updatedProject.id,
+        type: "project.update",
+        description: `Updated project "${updatedProject.name}"`,
+      });
+    }
+
+    return updatedProject;
   });
 
   return Response.json(project);
+}
+
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const { profileId, id } = await ctx.params;
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true, userId: true },
+  });
+
+  if (!profile) {
+    return Response.json({ error: "Profile not found" }, { status: 404 });
+  }
+
+  const existingProject = await prisma.project.findFirst({
+    where: { id, profileId },
+    select: { id: true, name: true },
+  });
+
+  if (!existingProject) {
+    return Response.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.task.updateMany({
+      where: { projectId: id, profileId },
+      data: { projectId: null },
+    });
+
+    await tx.project.delete({
+      where: { id },
+    });
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId,
+        projectId: existingProject.id,
+        type: "project.delete",
+        description: `Deleted project "${existingProject.name}"`,
+      });
+    }
+  });
+
+  return new Response(null, { status: 204 });
 }

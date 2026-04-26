@@ -1,8 +1,8 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
-  ensureProfile,
   getNextProjectOrderIndex,
   parseDateInput,
   parseOptionalTextInput,
@@ -28,6 +28,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
+    select: { id: true, userId: true },
   });
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
@@ -81,15 +82,29 @@ export async function POST(req: Request, ctx: Ctx) {
   const defaultStartDate = new Date();
   defaultStartDate.setHours(0, 0, 0, 0);
 
-  const project = await prisma.project.create({
-    data: {
-      name,
-      profileId,
-      orderIndex: await getNextProjectOrderIndex(prisma, profileId),
-      startDate: startDate.value ?? defaultStartDate,
-      ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
-      ...(category.value !== undefined ? { category: category.value } : {}),
-    },
+  const project = await prisma.$transaction(async (tx) => {
+    const createdProject = await tx.project.create({
+      data: {
+        name,
+        profileId,
+        orderIndex: await getNextProjectOrderIndex(tx, profileId),
+        startDate: startDate.value ?? defaultStartDate,
+        ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
+        ...(category.value !== undefined ? { category: category.value } : {}),
+      },
+    });
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId,
+        projectId: createdProject.id,
+        type: "project.create",
+        description: `Created project "${createdProject.name}"`,
+      });
+    }
+
+    return createdProject;
   });
 
   return Response.json(project, { status: 201 });

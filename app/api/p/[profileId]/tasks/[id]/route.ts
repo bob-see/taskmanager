@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   addDays,
   ensureProject,
@@ -35,7 +36,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -401,6 +402,46 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return { task, createdTask };
   });
 
+  if (profile.userId) {
+    const updatedTask = result.task;
+
+    if (updatedTask) {
+      if (!existingTask.completedOn && updatedTask.completedOn) {
+        await createActivityLog(prisma, {
+          userId: profile.userId,
+          profileId,
+          taskId: updatedTask.id,
+          projectId: updatedTask.projectId,
+          type: "task.complete",
+          description: `Completed task "${updatedTask.title}"`,
+        });
+      } else if (existingTask.completedOn && !updatedTask.completedOn) {
+        await createActivityLog(prisma, {
+          userId: profile.userId,
+          profileId,
+          taskId: updatedTask.id,
+          projectId: updatedTask.projectId,
+          type: "task.reopen",
+          description: `Reopened task "${updatedTask.title}"`,
+        });
+      }
+
+      if (
+        body?.isPriority !== undefined &&
+        existingTask.isPriority !== updatedTask.isPriority
+      ) {
+        await createActivityLog(prisma, {
+          userId: profile.userId,
+          profileId,
+          taskId: updatedTask.id,
+          projectId: updatedTask.projectId,
+          type: "task.priority_toggle",
+          description: `${updatedTask.isPriority ? "Prioritised" : "Unprioritised"} task "${updatedTask.title}"`,
+        });
+      }
+    }
+  }
+
   return Response.json(result);
 }
 
@@ -422,7 +463,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -566,6 +607,17 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   if (deleted.count === 0) {
     return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  if (profile.userId) {
+    await createActivityLog(prisma, {
+      userId: profile.userId,
+      profileId,
+      taskId: task.id,
+      projectId: task.projectId,
+      type: "task.delete",
+      description: `Deleted task "${task.title}"`,
+    });
   }
 
   return new Response(null, { status: 204 });

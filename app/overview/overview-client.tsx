@@ -124,6 +124,8 @@ const modalChoiceClass = "tm-choice flex cursor-pointer items-start gap-3 rounde
 const segmentedTabSetClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentedTabClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
+const priorityChipClass =
+  "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800";
 const OVERVIEW_GROUPING_STORAGE_KEY = "tm-overview-grouping-mode";
 
 function todayInputValue() {
@@ -1493,6 +1495,9 @@ function ProfileCard({
                             >
                               <span>{isGroupCollapsed ? "▸" : "▾"}</span>
                               <span>{group.label}</span>
+                              {isProjectGroup && group.isPriority ? (
+                                <span className={priorityChipClass}>Priority</span>
+                              ) : null}
                               <span className="text-[color:var(--tm-muted)]">({group.taskCount})</span>
                             </button>
                           </td>

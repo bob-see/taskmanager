@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 import {
   buildCompletedTimeEntryData,
   ensureTimesheetProfile,
@@ -36,7 +37,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
         },
       },
     },
-    select: { id: true, endTime: true },
+    select: {
+      id: true,
+      endTime: true,
+      profileId: true,
+      profile: {
+        select: {
+          userId: true,
+        },
+      },
+    },
   });
 
   if (!existing) {
@@ -61,7 +71,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   if (!profile) {
@@ -88,18 +98,32 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const rangeError = validateTimeRange(startDateTime, endDateTime);
   if (rangeError) return rangeError;
 
-  const updated = await prisma.timeEntry.update({
-    where: { id },
-    data: buildCompletedTimeEntryData({
-      entryDate: entryDate.value,
-      startTime: startDateTime,
-      endTime: endDateTime,
-      notes: notes.value,
-      profileId: profileId.value,
-      roundingMode: roundingMode.value,
-      source: "manual",
-    }),
-    select: timeEntrySelect,
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedEntry = await tx.timeEntry.update({
+      where: { id },
+      data: buildCompletedTimeEntryData({
+        entryDate: entryDate.value,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        notes: notes.value,
+        profileId: profileId.value,
+        roundingMode: roundingMode.value,
+        source: "manual",
+      }),
+      select: timeEntrySelect,
+    });
+
+    if (profile.userId) {
+      await createActivityLog(tx, {
+        userId: profile.userId,
+        profileId: profileId.value,
+        timeEntryId: updatedEntry.id,
+        type: "time_entry.update",
+        description: "Updated time entry",
+      });
+    }
+
+    return updatedEntry;
   });
 
   return Response.json(serializeTimeEntry(updated));
@@ -123,15 +147,35 @@ export async function DELETE(_req: Request, ctx: Ctx) {
         },
       },
     },
-    select: { id: true },
+    select: {
+      id: true,
+      profileId: true,
+      profile: {
+        select: {
+          userId: true,
+        },
+      },
+    },
   });
 
   if (!existing) {
     return Response.json({ error: "Time entry not found" }, { status: 404 });
   }
 
-  await prisma.timeEntry.delete({
-    where: { id },
+  await prisma.$transaction(async (tx) => {
+    await tx.timeEntry.delete({
+      where: { id },
+    });
+
+    if (existing.profile.userId) {
+      await createActivityLog(tx, {
+        userId: existing.profile.userId,
+        profileId: existing.profileId,
+        timeEntryId: existing.id,
+        type: "time_entry.delete",
+        description: "Deleted time entry",
+      });
+    }
   });
 
   return Response.json({ ok: true });

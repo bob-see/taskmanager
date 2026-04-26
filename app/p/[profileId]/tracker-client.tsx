@@ -11,7 +11,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ProjectEditorModal,
   TaskEditorModal,
+  createProjectForm,
   createEditTaskForm,
   type EditTaskFormState,
   type ProjectFormState,
@@ -69,6 +71,7 @@ type Project = {
   collapsed: boolean;
   isPriority: boolean;
   createdAt: string;
+  orderIndex: number | null;
 };
 
 type TrackerClientProps = {
@@ -90,6 +93,7 @@ type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
 type DoneRange = "today" | "week" | "month" | "all";
 type SortMode = "start-date" | "due-date" | "manual";
 type DeleteMode = "this" | "future" | "series";
+type DragPosition = "before" | "after";
 type BulkAction =
   | "mark-done"
   | "mark-open"
@@ -201,6 +205,27 @@ const matrixHeaderCellClass =
 const matrixCellClass = "px-3 py-2.5 align-top";
 const iconButtonClass =
   "tm-button inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-sm";
+
+function reorderIds(
+  orderedIds: string[],
+  draggedId: string,
+  targetId: string,
+  position: DragPosition
+) {
+  const withoutDragged = orderedIds.filter((id) => id !== draggedId);
+  const targetIndex = withoutDragged.indexOf(targetId);
+
+  if (targetIndex === -1) {
+    return orderedIds;
+  }
+
+  const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+  return [
+    ...withoutDragged.slice(0, insertIndex),
+    draggedId,
+    ...withoutDragged.slice(insertIndex),
+  ];
+}
 
 function dateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -518,6 +543,24 @@ function compareTasksForManualSort(left: Task, right: Task) {
   }
 
   return compareTasksForStartDateSort(left, right);
+}
+
+function compareProjectsForManualSort(
+  left: { orderIndex: number | null; createdAt: string; id: string },
+  right: { orderIndex: number | null; createdAt: string; id: string }
+) {
+  const leftOrder = left.orderIndex ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.orderIndex ?? Number.MAX_SAFE_INTEGER;
+
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt.localeCompare(right.createdAt);
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
 function sortTasks(tasks: Task[], sortMode: SortMode) {
@@ -1533,6 +1576,7 @@ export function TrackerClient({
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
   const quickAddInputRef = useRef<HTMLInputElement | null>(null);
   const dragOrderSnapshotRef = useRef<Task[] | null>(null);
+  const projectDragOrderSnapshotRef = useRef<Project[] | null>(null);
   const lastSavedPreferencesRef = useRef<{
     profileId: string;
     defaultView: ViewMode;
@@ -1554,6 +1598,11 @@ export function TrackerClient({
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectSaving, setNewProjectSaving] = useState(false);
+  const [editProjectId, setEditProjectId] = useState<string | null>(null);
+  const [editProjectForm, setEditProjectForm] = useState<ProjectFormState | null>(null);
+  const [editProjectSaving, setEditProjectSaving] = useState(false);
+  const [deleteProjectModalProject, setDeleteProjectModalProject] = useState<Project | null>(null);
+  const [deleteProjectSaving, setDeleteProjectSaving] = useState(false);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [editTaskSaving, setEditTaskSaving] = useState(false);
   const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
@@ -1590,7 +1639,11 @@ export function TrackerClient({
   const [bulkSnoozeDateValue, setBulkSnoozeDateValue] = useState("");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
-  const [dragOverPosition, setDragOverPosition] = useState<"before" | "after" | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<DragPosition | null>(null);
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
+  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
+  const [dragOverProjectPosition, setDragOverProjectPosition] =
+    useState<DragPosition | null>(null);
   const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
   const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
     createEmptyProjectForm
@@ -1659,6 +1712,9 @@ export function TrackerClient({
     setSearchQuery("");
     setShowArchived(false);
     setNewProjectOpen(false);
+    setEditProjectId(null);
+    setEditProjectForm(null);
+    setDeleteProjectModalProject(null);
     setDeleteTaskModalTask(null);
     setDeleteTaskMode("this");
     setSelectMode(false);
@@ -1680,7 +1736,11 @@ export function TrackerClient({
     setDraggedTaskId(null);
     setDragOverTaskId(null);
     setDragOverPosition(null);
+    setDraggedProjectId(null);
+    setDragOverProjectId(null);
+    setDragOverProjectPosition(null);
     dragOrderSnapshotRef.current = null;
+    projectDragOrderSnapshotRef.current = null;
     preferenceSyncProfileIdRef.current = null;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
@@ -2422,6 +2482,132 @@ export function TrackerClient({
     const project = (await res.json()) as Project;
     setProjects((prev) => prev.map((item) => (item.id === project.id ? project : item)));
     return project;
+  }
+
+  function applyProjectOrder(orderedIds: string[]) {
+    const orderById = new Map(orderedIds.map((id, index) => [id, (index + 1) * 10]));
+
+    setProjects((prev) =>
+      [...prev]
+        .map((project) => ({
+          ...project,
+          orderIndex: orderById.get(project.id) ?? project.orderIndex,
+        }))
+        .sort(compareProjectsForManualSort)
+    );
+  }
+
+  async function reorderProjects(orderedIds: string[]) {
+    const res = await fetch(`/api/p/${profileId}/projects/reorder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds }),
+    });
+
+    if (!res.ok) {
+      const responseBody = await res.json().catch(() => ({}));
+      throw new Error(responseBody?.error ?? "Could not reorder projects");
+    }
+  }
+
+  function finishProjectDragState() {
+    setDraggedProjectId(null);
+    setDragOverProjectId(null);
+    setDragOverProjectPosition(null);
+  }
+
+  async function handleProjectDrop(targetProjectId: string, position: DragPosition) {
+    if (!draggedProjectId) {
+      finishProjectDragState();
+      return;
+    }
+
+    const orderedIds = projects.map((project) => project.id);
+    const nextOrderedIds = reorderIds(
+      orderedIds,
+      draggedProjectId,
+      targetProjectId,
+      position
+    );
+
+    if (nextOrderedIds.every((id, index) => id === orderedIds[index])) {
+      finishProjectDragState();
+      return;
+    }
+
+    projectDragOrderSnapshotRef.current = projects;
+    applyProjectOrder(nextOrderedIds);
+    finishProjectDragState();
+
+    try {
+      await reorderProjects(nextOrderedIds);
+      projectDragOrderSnapshotRef.current = null;
+    } catch (err) {
+      if (projectDragOrderSnapshotRef.current) {
+        setProjects(projectDragOrderSnapshotRef.current);
+        projectDragOrderSnapshotRef.current = null;
+      }
+      window.alert(err instanceof Error ? err.message : "Could not reorder projects");
+    }
+  }
+
+  function openProjectEditor(project: Project) {
+    setEditProjectId(project.id);
+    setEditProjectForm(createProjectForm(project));
+  }
+
+  function closeProjectEditor() {
+    setEditProjectId(null);
+    setEditProjectForm(null);
+    setEditProjectSaving(false);
+  }
+
+  async function submitProjectEditor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editProjectId || !editProjectForm) return;
+
+    setEditProjectSaving(true);
+    setError(null);
+
+    try {
+      await updateProject(editProjectId, {
+        name: editProjectForm.name,
+        startDate: editProjectForm.startDate,
+        dueAt: editProjectForm.dueAt || null,
+        category: editProjectForm.category || null,
+      });
+      closeProjectEditor();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update project");
+    } finally {
+      setEditProjectSaving(false);
+    }
+  }
+
+  async function deleteProject(project: Project) {
+    setError(null);
+    setDeleteProjectSaving(true);
+    const scrollY = window.scrollY;
+
+    try {
+      const res = await fetch(`/api/p/${profileId}/projects/${project.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const responseBody = await res.json().catch(() => ({}));
+        throw new Error(responseBody?.error ?? "Could not delete project");
+      }
+
+      await refreshData();
+      setDeleteProjectModalProject(null);
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY });
+      });
+    } finally {
+      setDeleteProjectSaving(false);
+    }
   }
 
   async function deleteTask(task: Task, mode: DeleteMode) {
@@ -3704,6 +3890,10 @@ export function TrackerClient({
                       .filter(Boolean)
                       .join(" • ")
                   : "Tasks with no project";
+                const projectDragPosition =
+                  section.project && dragOverProjectId === section.project.id
+                    ? dragOverProjectPosition
+                    : null;
 
                 return (
                   <section
@@ -3713,7 +3903,58 @@ export function TrackerClient({
                       section.project?.archived
                         ? "border-amber-300/20 bg-amber-200/5"
                         : "tm-card"
+                    } ${section.project ? "cursor-grab active:cursor-grabbing" : ""} ${
+                      draggedProjectId === section.project?.id ? "opacity-60" : ""
+                    } ${
+                      projectDragPosition === "before"
+                        ? "ring-2 ring-inset ring-[color:var(--tm-text)]"
+                        : projectDragPosition === "after"
+                          ? "ring-2 ring-[color:var(--tm-text)] ring-offset-2 ring-offset-[color:var(--tm-bg)]"
+                          : ""
                     }`}
+                    draggable={Boolean(section.project)}
+                    onDragStart={
+                      section.project
+                        ? (event) => {
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", section.project.id);
+                            setDraggedProjectId(section.project.id);
+                            setDragOverProjectId(null);
+                            setDragOverProjectPosition(null);
+                          }
+                        : undefined
+                    }
+                    onDragEnd={section.project ? finishProjectDragState : undefined}
+                    onDragOver={
+                      section.project
+                        ? (event) => {
+                            if (draggedProjectId === section.project?.id) return;
+
+                            event.preventDefault();
+                            const bounds = event.currentTarget.getBoundingClientRect();
+                            const position =
+                              event.clientY >= bounds.top + bounds.height / 2
+                                ? "after"
+                                : "before";
+                            setDragOverProjectId(section.project.id);
+                            setDragOverProjectPosition(position);
+                          }
+                        : undefined
+                    }
+                    onDrop={
+                      section.project
+                        ? (event) => {
+                            event.preventDefault();
+                            void handleProjectDrop(
+                              section.project.id,
+                              dragOverProjectId === section.project.id &&
+                                dragOverProjectPosition === "after"
+                                ? "after"
+                                : "before"
+                            );
+                          }
+                        : undefined
+                    }
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -3768,6 +4009,13 @@ export function TrackerClient({
                             <button
                               className={buttonClass}
                               type="button"
+                              onClick={() => openProjectEditor(section.project)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className={buttonClass}
+                              type="button"
                               onClick={() => void toggleProjectPriority(section.project)}
                             >
                               {section.project.isPriority ? "Unprioritise" : "Prioritise"}
@@ -3785,6 +4033,13 @@ export function TrackerClient({
                               onClick={() => void toggleProjectArchived(section.project)}
                             >
                               {section.project.archived ? "Restore" : "Archive"}
+                            </button>
+                            <button
+                              className="tm-button-danger inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm"
+                              type="button"
+                              onClick={() => setDeleteProjectModalProject(section.project)}
+                            >
+                              Delete
                             </button>
                           </>
                         )}
@@ -3845,6 +4100,7 @@ export function TrackerClient({
                                   snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
                                   onDragStart={(event) => {
+                                    event.stopPropagation();
                                     if (!manualReorderEnabled) return;
                                     event.dataTransfer.effectAllowed = "move";
                                     event.dataTransfer.setData("text/plain", task.id);
@@ -3854,6 +4110,7 @@ export function TrackerClient({
                                   }}
                                   onDragEnd={finishDragState}
                                   onDragOver={(event) => {
+                                    event.stopPropagation();
                                     if (!manualReorderEnabled || draggedTaskId === task.id) {
                                       return;
                                     }
@@ -3868,6 +4125,7 @@ export function TrackerClient({
                                     setDragOverPosition(position);
                                   }}
                                   onDrop={(event) => {
+                                    event.stopPropagation();
                                     event.preventDefault();
                                     void handleTaskDrop(
                                       task.id,
@@ -4765,6 +5023,61 @@ export function TrackerClient({
             Save Project
           </button>
         </form>
+      </Modal>
+
+      <ProjectEditorModal
+        open={Boolean(editProjectId && editProjectForm)}
+        form={editProjectForm}
+        saving={editProjectSaving}
+        title="Edit Project"
+        submitLabel={editProjectSaving ? "Saving..." : "Save Project"}
+        onClose={closeProjectEditor}
+        onSubmit={submitProjectEditor}
+        onFormChange={(updater) =>
+          setEditProjectForm((prev) => (prev ? updater(prev) : prev))
+        }
+      />
+
+      <Modal
+        open={Boolean(deleteProjectModalProject)}
+        title="Delete Project"
+        onClose={() => setDeleteProjectModalProject(null)}
+      >
+        {deleteProjectModalProject && (
+          <div className="space-y-4">
+            <p className="text-sm text-[color:var(--tm-muted)]">
+              Delete project <span className="font-medium text-[color:var(--tm-text)]">
+                {deleteProjectModalProject.name}
+              </span>
+              ? Tasks assigned to this project will remain in this profile and become
+              unassigned.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className={buttonClass}
+                disabled={deleteProjectSaving}
+                type="button"
+                onClick={() => setDeleteProjectModalProject(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="tm-button-danger inline-flex h-10 items-center justify-center rounded-[10px] border px-4 text-sm disabled:opacity-50"
+                disabled={deleteProjectSaving}
+                type="button"
+                onClick={() =>
+                  void deleteProject(deleteProjectModalProject).catch((err: unknown) =>
+                    setError(
+                      err instanceof Error ? err.message : "Could not delete project"
+                    )
+                  )
+                }
+              >
+                {deleteProjectSaving ? "Deleting..." : "Delete Project"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <TaskEditorModal

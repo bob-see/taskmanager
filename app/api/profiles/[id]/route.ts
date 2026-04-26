@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 const ALLOWED_VIEW_MODES = new Set(["day", "week", "month"]);
 const ALLOWED_AVERAGE_BASES = new Set(["calendar-days", "work-week"]);
@@ -135,7 +136,7 @@ export async function PATCH(
         email: session.user.email,
       },
     },
-    select: { id: true },
+    select: { id: true, name: true, userId: true },
   });
 
   if (!existingProfile) {
@@ -143,10 +144,23 @@ export async function PATCH(
   }
 
   try {
-    const profile = await prisma.profile.update({
-      where: { id },
-      data,
-      select: profileSelect,
+    const profile = await prisma.$transaction(async (tx) => {
+      const updatedProfile = await tx.profile.update({
+        where: { id },
+        data,
+        select: profileSelect,
+      });
+
+      if (existingProfile.userId) {
+        await createActivityLog(tx, {
+          userId: existingProfile.userId,
+          profileId: updatedProfile.id,
+          type: "profile.update",
+          description: `Updated profile "${updatedProfile.name}"`,
+        });
+      }
+
+      return updatedProfile;
     });
 
     return Response.json(profile);
@@ -175,18 +189,34 @@ export async function DELETE(
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const deleted = await prisma.profile.deleteMany({
+  const existingProfile = await prisma.profile.findFirst({
     where: {
       id,
       user: {
         email: session.user.email,
       },
     },
+    select: { id: true, name: true, userId: true },
   });
 
-  if (deleted.count === 0) {
+  if (!existingProfile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
+
+  await prisma.$transaction(async (tx) => {
+    if (existingProfile.userId) {
+      await createActivityLog(tx, {
+        userId: existingProfile.userId,
+        profileId: existingProfile.id,
+        type: "profile.delete",
+        description: `Deleted profile "${existingProfile.name}"`,
+      });
+    }
+
+    await tx.profile.delete({
+      where: { id: existingProfile.id },
+    });
+  });
 
   return new Response(null, { status: 204 });
 }
