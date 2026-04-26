@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   addDays,
-  ensureProfile,
   ensureProject,
   getNextTaskOrderIndex,
   nextOccurrenceDate,
@@ -21,8 +22,22 @@ type Ctx = {
 
 export async function PATCH(req: Request, ctx: Ctx) {
   const { profileId, id } = await ctx.params;
+  const session = await getServerSession(authOptions);
 
-  const profile = await ensureProfile(profileId);
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true },
+  });
+
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
@@ -391,10 +406,25 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 export async function DELETE(_req: Request, ctx: Ctx) {
   const { profileId, id } = await ctx.params;
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(_req.url);
   const mode = searchParams.get("mode") ?? "this";
 
-  const profile = await ensureProfile(profileId);
+  const profile = await prisma.profile.findFirst({
+    where: {
+      id: profileId,
+      user: {
+        email: session.user.email,
+      },
+    },
+    select: { id: true },
+  });
+
   if (!profile) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
