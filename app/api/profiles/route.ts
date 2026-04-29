@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const profile = await prisma.$transaction(async (tx) => {
+  const profile = await prisma.$transaction(async (tx: any) => {
     const user = await tx.user.findUnique({
       where: { email },
       select: { id: true },
