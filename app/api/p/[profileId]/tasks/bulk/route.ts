@@ -549,7 +549,7 @@ export async function POST(req: Request, ctx: Ctx) {
       });
 
       if (profile.userId) {
-        for (const task of targetTasks.filter((item: TaskRecord) => !item.completedOn)) {
+        for (const task of targetTasks.filter((item: { completedOn: Date | null }) => !item.completedOn)) {
           await createActivityLog(tx as any, {
             userId: profile.userId,
             profileId,
@@ -594,7 +594,7 @@ export async function POST(req: Request, ctx: Ctx) {
       });
 
       if (profile.userId) {
-        for (const task of targetTasks.filter((item: TaskRecord) => item.completedOn)) {
+        for (const task of targetTasks.filter((item: { completedOn: Date | null }) => item.completedOn)) {
           await createActivityLog(tx as any, {
             userId: profile.userId,
             profileId,
