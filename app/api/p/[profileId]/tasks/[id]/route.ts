@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -259,7 +258,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     data.recurrenceSeriesId = recurrenceSeriesId;
   }
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: any) => {
     const isCompletingTask = body?.completed === true;
     const isUncompletingTask = body?.completed === false;
     let completionTransitionSucceeded = false;
@@ -386,7 +385,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
           });
         } catch (error) {
           if (
-            error instanceof Prisma.PrismaClientKnownRequestError &&
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
             error.code === "P2002"
           ) {
             createdTask = await tx.task.findFirst({
@@ -510,7 +511,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
       task.repeatEnabled &&
       task.repeatPattern
     ) {
-      deleted = await prisma.$transaction(async (tx) => {
+      deleted = await prisma.$transaction(async (tx: any) => {
         const deletedTask = await tx.task.deleteMany({
           where: { id, profileId },
         });
@@ -572,7 +573,9 @@ export async function DELETE(_req: Request, ctx: Ctx) {
           } catch (error) {
             if (
               !(
-                error instanceof Prisma.PrismaClientKnownRequestError &&
+                typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
                 error.code === "P2002"
               )
             ) {
