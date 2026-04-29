@@ -70,14 +70,14 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json({ error: "One or more tasks were not found" }, { status: 404 });
   }
 
-  if (tasks.some((task) => task.completedOn !== null)) {
+  if (tasks.some((task: { completedOn: Date | null }) => task.completedOn !== null)) {
     return Response.json(
       { error: "Only open tasks can be reordered" },
       { status: 400 }
     );
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     for (const [index, id] of orderedIds.entries()) {
       await tx.task.update({
         where: { id },
