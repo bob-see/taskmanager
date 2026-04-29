@@ -416,7 +416,7 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const targetTasks = await expandTargetTasks(profileId, selectedTasks, scope);
-  const targetIds = targetTasks.map((task) => task.id);
+  const targetIds = targetTasks.map((task: TaskRecord) => task.id);
 
   if (targetIds.length === 0) {
     return Response.json({ ok: true });
