@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const existingIds = new Set(profiles.map((profile) => profile.id));
+  const existingIds = new Set(profiles.map((profile: { id: string }) => profile.id));
   if (orderedIds.some((id) => !existingIds.has(id))) {
     return Response.json(
       { error: "orderedIds must only contain valid profile ids" },
