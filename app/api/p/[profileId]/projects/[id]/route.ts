@@ -126,7 +126,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     });
 
     if (profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId,
         projectId: updatedProject.id,
@@ -184,7 +184,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     });
 
     if (profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId,
         projectId: existingProject.id,
