@@ -19,6 +19,14 @@ type ActivityTypeOption = {
   type: string;
 };
 
+type ActivityLogRow = {
+  id: string;
+  userId: string;
+  type: string;
+  description: string;
+  createdAt: Date;
+};
+
 const inputClass =
   "tm-input h-10 rounded-[10px] border px-3 text-sm outline-none transition-colors";
 const buttonClass =
@@ -86,6 +94,7 @@ export default async function ActivityPage({
       : Promise.resolve([]),
   ]);
 
+  const typedLogs = logs as ActivityLogRow[];
   const typedUsers = users as ActivityUserOption[];
   const typedTypes = types as ActivityTypeOption[];
 
@@ -101,7 +110,7 @@ export default async function ActivityPage({
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Activity Log</h1>
         </div>
         <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
-          {logs.length} latest
+          {typedLogs.length} latest
         </div>
       </div>
 
@@ -151,7 +160,7 @@ export default async function ActivityPage({
               </tr>
             </thead>
             <tbody>
-              {logs.length === 0 ? (
+              {typedLogs.length === 0 ? (
                 <tr>
                   <td
                     className="px-3 py-4 text-[color:var(--tm-muted)]"
@@ -161,7 +170,7 @@ export default async function ActivityPage({
                   </td>
                 </tr>
               ) : (
-                logs.map((log) => {
+                typedLogs.map((log) => {
                   const user = userById.get(log.userId);
 
                   return (
