@@ -144,7 +144,7 @@ export async function PATCH(
   }
 
   try {
-    const profile = await prisma.$transaction(async (tx) => {
+    const profile = await prisma.$transaction(async (tx: any) => {
       const updatedProfile = await tx.profile.update({
         where: { id },
         data,
@@ -152,7 +152,7 @@ export async function PATCH(
       });
 
       if (existingProfile.userId) {
-        await createActivityLog(tx, {
+        await createActivityLog(tx as any, {
           userId: existingProfile.userId,
           profileId: updatedProfile.id,
           type: "profile.update",
@@ -203,9 +203,9 @@ export async function DELETE(
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     if (existingProfile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: existingProfile.userId,
         profileId: existingProfile.id,
         type: "profile.delete",
