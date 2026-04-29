@@ -81,7 +81,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json({ error: "One or more projects were not found" }, { status: 404 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     for (const [index, id] of orderedIds.entries()) {
       await tx.project.update({
         where: { id },
