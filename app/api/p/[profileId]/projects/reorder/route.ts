@@ -7,6 +7,10 @@ type Ctx = {
   params: Promise<{ profileId: string }>;
 };
 
+type ProjectRow = {
+  id: string;
+};
+
 function parseOrderedIds(value: unknown) {
   if (!Array.isArray(value) || value.length === 0) {
     return null;
@@ -71,7 +75,8 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const existingIds = new Set(projects.map((project) => project.id));
+  const typedProjects = projects as ProjectRow[];
+  const existingIds = new Set(typedProjects.map((project) => project.id));
   if (orderedIds.some((id) => !existingIds.has(id))) {
     return Response.json({ error: "One or more projects were not found" }, { status: 404 });
   }
