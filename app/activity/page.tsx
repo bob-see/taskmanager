@@ -76,7 +76,12 @@ export default async function ActivityPage({
       : Promise.resolve([]),
   ]);
 
-  const userById = new Map(users.map((user) => [user.id, user]));
+  const userById = new Map(
+    users.map((user: { id: string; name: string | null; email: string | null }) => [
+      user.id,
+      user,
+    ])
+  );
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">
