@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -371,7 +370,7 @@ export function nextOccurrenceDate(input: {
 }
 
 export async function getNextTaskOrderIndex(
-  tx: Prisma.TransactionClient | typeof prisma,
+  tx: any,
   profileId: string
 ) {
   const aggregate = await tx.task.aggregate({
@@ -383,7 +382,7 @@ export async function getNextTaskOrderIndex(
 }
 
 export async function getNextProjectOrderIndex(
-  tx: Prisma.TransactionClient | typeof prisma,
+  tx: any,
   profileId: string
 ) {
   const aggregate = await tx.project.aggregate({
