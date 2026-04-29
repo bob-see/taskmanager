@@ -149,7 +149,7 @@ export async function POST(req: Request, ctx: Ctx) {
     ? toLocalDayStart(startDate.value)
     : startDate.value;
 
-  const task = await prisma.$transaction(async (tx) => {
+  const task = await prisma.$transaction(async (tx: any) => {
     const orderIndex = await getNextTaskOrderIndex(tx, profileId);
     const createdTask = await tx.task.create({
       data: {
