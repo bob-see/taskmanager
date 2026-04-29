@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -55,7 +54,7 @@ const TASK_SELECT = {
   repeatDays: true,
   repeatWeeklyDay: true,
   repeatMonthlyDay: true,
-} satisfies Prisma.TaskSelect;
+};
 
 function uniqueIds(value: unknown) {
   if (!Array.isArray(value) || value.length === 0) {
@@ -94,7 +93,7 @@ async function expandTargetTasks(
     }
   }
 
-  const orClauses: Prisma.TaskWhereInput[] = [];
+  const orClauses: any[] = [];
 
   if (nonRecurringIds.length > 0) {
     orClauses.push({
@@ -130,7 +129,7 @@ async function expandTargetTasks(
 }
 
 async function ensureTaskRecord(
-  tx: Prisma.TransactionClient,
+  tx: any,
   profileId: string,
   id: string
 ) {
@@ -147,7 +146,7 @@ async function ensureTaskRecord(
 }
 
 async function markTaskDone(
-  tx: Prisma.TransactionClient,
+  tx: any,
   task: TaskRecord,
   completedOn: Date
 ) {
@@ -240,8 +239,10 @@ async function markTaskDone(
   } catch (error) {
     if (
       !(
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
+        typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                error.code === "P2002"
       )
     ) {
       throw error;
@@ -249,7 +250,7 @@ async function markTaskDone(
   }
 }
 
-async function markTaskOpen(tx: Prisma.TransactionClient, task: TaskRecord) {
+async function markTaskOpen(tx: any, task: TaskRecord) {
   const orderIndex =
     task.orderIndex === null ? await getNextTaskOrderIndex(tx, task.profileId) : task.orderIndex;
 
@@ -263,7 +264,7 @@ async function markTaskOpen(tx: Prisma.TransactionClient, task: TaskRecord) {
   });
 }
 
-async function deleteSingleTask(tx: Prisma.TransactionClient, task: TaskRecord) {
+async function deleteSingleTask(tx: any, task: TaskRecord) {
   if (
     !task.recurrenceSeriesId ||
     !task.repeatEnabled ||
@@ -339,8 +340,10 @@ async function deleteSingleTask(tx: Prisma.TransactionClient, task: TaskRecord) 
   } catch (error) {
     if (
       !(
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
+        typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                error.code === "P2002"
       )
     ) {
       throw error;
@@ -482,7 +485,7 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     try {
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         for (const targetTask of targetTasks) {
           await tx.task.update({
             where: { id: targetTask.id },
@@ -496,8 +499,10 @@ export async function POST(req: Request, ctx: Ctx) {
       });
     } catch (error) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
+        typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                error.code === "P2002"
       ) {
         return Response.json(
           { error: "Start date update would create duplicate recurring occurrences" },
@@ -516,13 +521,13 @@ export async function POST(req: Request, ctx: Ctx) {
     if (completedOn.error) return completedOn.error;
     const completionDate = completedOn.value ?? new Date();
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       if (scope === "this") {
         for (const taskId of taskIds) {
           const task = await ensureTaskRecord(tx, profileId, taskId);
           await markTaskDone(tx, task, completionDate);
           if (profile.userId && !task.completedOn) {
-            await createActivityLog(tx, {
+          await createActivityLog(tx as any, {
               userId: profile.userId,
               profileId,
               taskId: task.id,
@@ -545,7 +550,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
       if (profile.userId) {
         for (const task of targetTasks.filter((item) => !item.completedOn)) {
-          await createActivityLog(tx, {
+          await createActivityLog(tx as any, {
             userId: profile.userId,
             profileId,
             taskId: task.id,
@@ -561,7 +566,7 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   if (action === "mark-open") {
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       if (scope === "this") {
         for (const taskId of taskIds) {
           const task = await ensureTaskRecord(tx, profileId, taskId);
@@ -590,7 +595,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
       if (profile.userId) {
         for (const task of targetTasks.filter((item) => item.completedOn)) {
-          await createActivityLog(tx, {
+          await createActivityLog(tx as any, {
             userId: profile.userId,
             profileId,
             taskId: task.id,
@@ -611,7 +616,7 @@ export async function POST(req: Request, ctx: Ctx) {
         const task = await ensureTaskRecord(tx, profileId, taskId);
         await deleteSingleTask(tx, task);
         if (profile.userId) {
-          await createActivityLog(tx, {
+    await createActivityLog(tx as any, {
             userId: profile.userId,
             profileId,
             taskId: task.id,
