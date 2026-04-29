@@ -610,7 +610,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json({ ok: true });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     if (scope === "this") {
       for (const taskId of taskIds) {
         const task = await ensureTaskRecord(tx, profileId, taskId);
@@ -635,7 +635,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
     if (profile.userId) {
       for (const task of targetTasks) {
-        await createActivityLog(tx, {
+        await createActivityLog(tx as any, {
           userId: profile.userId,
           profileId,
           taskId: task.id,
