@@ -82,7 +82,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const defaultStartDate = new Date();
   defaultStartDate.setHours(0, 0, 0, 0);
 
-  const project = await prisma.$transaction(async (tx) => {
+  const project = await prisma.$transaction(async (tx: any) => {
     const createdProject = await tx.project.create({
       data: {
         name,
@@ -95,7 +95,7 @@ export async function POST(req: Request, ctx: Ctx) {
     });
 
     if (profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId,
         projectId: createdProject.id,
