@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -114,7 +115,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     );
   }
 
-  const project = await prisma.$transaction(async (tx) => {
+  const project = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const updatedProject = await tx.project.update({
       where: { id },
       data,
@@ -168,7 +169,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return Response.json({ error: "Project not found" }, { status: 404 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.task.updateMany({
       where: { projectId: id, profileId },
       data: { projectId: null },
