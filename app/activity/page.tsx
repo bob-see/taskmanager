@@ -9,6 +9,16 @@ type SearchParams = Promise<{
   type?: string;
 }>;
 
+type ActivityUserOption = {
+  id: string;
+  name: string | null;
+  email: string | null;
+};
+
+type ActivityTypeOption = {
+  type: string;
+};
+
 const inputClass =
   "tm-input h-10 rounded-[10px] border px-3 text-sm outline-none transition-colors";
 const buttonClass =
@@ -76,12 +86,10 @@ export default async function ActivityPage({
       : Promise.resolve([]),
   ]);
 
-  const userById = new Map(
-    users.map((user: { id: string; name: string | null; email: string | null }) => [
-      user.id,
-      user,
-    ])
-  );
+  const typedUsers = users as ActivityUserOption[];
+  const typedTypes = types as ActivityTypeOption[];
+
+  const userById = new Map(typedUsers.map((user) => [user.id, user]));
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">
@@ -104,7 +112,7 @@ export default async function ActivityPage({
               <div className="text-[color:var(--tm-muted)]">User</div>
               <select name="userId" className={`w-full ${inputClass}`} defaultValue={selectedUserId}>
                 <option value="">All users</option>
-                {users.map((user) => (
+                {typedUsers.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name} ({user.email})
                   </option>
@@ -115,7 +123,7 @@ export default async function ActivityPage({
               <div className="text-[color:var(--tm-muted)]">Type</div>
               <select name="type" className={`w-full ${inputClass}`} defaultValue={selectedType}>
                 <option value="">All types</option>
-                {types.map((item) => (
+                {typedTypes.map((item) => (
                   <option key={item.type} value={item.type}>
                     {formatActivityType(item.type)}
                   </option>
