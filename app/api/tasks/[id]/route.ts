@@ -138,7 +138,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.task.delete({
       where: { id: task.id },
     });
