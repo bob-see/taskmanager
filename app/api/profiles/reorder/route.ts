@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const reorderedProfiles = await prisma.$transaction(async (tx) => {
+  const reorderedProfiles = await prisma.$transaction(async (tx: any) => {
     await Promise.all(
       orderedIds.map((id, index) =>
         tx.profile.update({
