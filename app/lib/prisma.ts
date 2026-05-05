@@ -6,12 +6,10 @@ const globalForPrisma = global as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const adapter = new PrismaMariaDb(process.env.DATABASE_URL!);
-
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    adapter,
+    adapter: new PrismaMariaDb(process.env.DATABASE_URL!),
     log: ["error"],
   });
 
