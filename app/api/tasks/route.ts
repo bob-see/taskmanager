@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const task = await prisma.$transaction(async (tx) => {
+  const task = await prisma.$transaction(async (tx: any) => {
     const createdTask = await tx.task.create({
       data: {
         title,
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     });
 
     if (profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId,
         taskId: createdTask.id,
