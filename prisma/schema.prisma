@@ -18,6 +18,7 @@ model User {
   profiles     Profile[]
 
   @@index([email])
+  @@map("user")
 }
 
 model Task {
@@ -52,6 +53,7 @@ model Task {
   @@index([profileId, recurrenceSeriesId])
   @@index([projectId])
   @@unique([profileId, recurrenceSeriesId, startDate])
+  @@map("task")
 }
 
 model Profile {
@@ -68,6 +70,7 @@ model Profile {
   projects      Project[]
   timeEntries   TimeEntry[]
   @@index([userId])
+  @@map("profile")
 }
 
 model Project {
@@ -89,6 +92,7 @@ model Project {
 
   @@index([profileId, createdAt])
   @@index([profileId, orderIndex])
+  @@map("project")
 }
 
 model TimeEntry {
@@ -110,6 +114,7 @@ model TimeEntry {
   @@index([profileId, entryDate])
   @@index([entryDate])
   @@index([endTime])
+  @@map("timeentry")
 }
 
 model ActivityLog {
@@ -129,4 +134,5 @@ model ActivityLog {
   @@index([taskId])
   @@index([projectId])
   @@index([timeEntryId])
+  @@map("activitylog")
 }
