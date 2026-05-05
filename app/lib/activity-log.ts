@@ -1,4 +1,20 @@
-import type { ActivityLog } from "@prisma/client";
+type ActivityLogCreateData = {
+  userId: string;
+  type: ActivityLogType;
+  description: string;
+  profileId: string | null;
+  taskId: string | null;
+  projectId: string | null;
+  timeEntryId: string | null;
+};
+
+type ActivityLogClient = {
+  activityLog: {
+    create(args: {
+      data: ActivityLogCreateData;
+    }): Promise<unknown>;
+  };
+};
 
 export type ActivityLogType =
   | "task.create"
@@ -15,14 +31,6 @@ export type ActivityLogType =
   | "profile.create"
   | "profile.update"
   | "profile.delete";
-
-type ActivityLogClient = {
-  activityLog: {
-    create(args: { 
-      data: Omit<ActivityLog, "id" | "createdAt">;
-     }): Promise<unknown>;
-  };
-};
 
 export function createActivityLog(
   db: ActivityLogClient,
