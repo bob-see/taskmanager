@@ -13,7 +13,13 @@ import {
   timeEntrySelect,
   validateTimeRange,
 } from "@/app/api/timesheets/shared";
-import { combineDateAndTime } from "@/app/timesheets/timesheet-utils";
+
+function combineBrisbaneDateAndTime(date: string, time: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+
+  return new Date(Date.UTC(year, month - 1, day, hours - 10, minutes, 0, 0));
+}
 
 type Ctx = {
   params: Promise<{ id: string }>;
@@ -93,8 +99,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const roundingMode = parseRoundingMode(body?.roundingMode, "nearest-15");
   if (roundingMode.error) return roundingMode.error;
 
-  const startDateTime = combineDateAndTime(entryDate.value, startTime.value);
-  const endDateTime = combineDateAndTime(entryDate.value, endTime.value);
+  const startDateTime = combineBrisbaneDateAndTime(entryDate.value, startTime.value);
+  const endDateTime = combineBrisbaneDateAndTime(entryDate.value, endTime.value);
   const rangeError = validateTimeRange(startDateTime, endDateTime);
   if (rangeError) return rangeError;
 
