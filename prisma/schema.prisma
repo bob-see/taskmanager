@@ -23,7 +23,7 @@ model User {
 model Task {
   id               String   @id @default(cuid()) @db.VarChar(36)
   title            String
-  notes            String?
+  notes            String?  @db.Text
   dueAt            DateTime?
   completedAt      DateTime?
   completedOn      DateTime?
