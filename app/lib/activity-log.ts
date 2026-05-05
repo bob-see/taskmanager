@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { ActivityLog } from "@prisma/client";
 
 export type ActivityLogType =
   | "task.create"
@@ -18,7 +18,9 @@ export type ActivityLogType =
 
 type ActivityLogClient = {
   activityLog: {
-    create(args: { data: Prisma.ActivityLogUncheckedCreateInput }): Promise<unknown>;
+    create(args: { 
+      data: Omit<ActivityLog, "id" | "createdAt">;
+     }): Promise<unknown>;
   };
 };
 
