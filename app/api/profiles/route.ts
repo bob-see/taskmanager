@@ -84,7 +84,7 @@ export async function POST(req: Request) {
       },
     });
 
-    await createActivityLog(tx, {
+    await createActivityLog(tx as any, {
       userId: user.id,
       profileId: createdProfile.id,
       type: "profile.create",

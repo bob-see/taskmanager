@@ -17,7 +17,7 @@ function parseOrderedIds(value: unknown) {
   }
 
   const orderedIds = value.filter(
-    (item): item is string => typeof item === "string" && item.trim().length > 0
+    (item: unknown): item is string => typeof item === "string" && item.trim().length > 0
   );
 
   if (orderedIds.length !== value.length) {

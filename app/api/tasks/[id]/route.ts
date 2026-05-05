@@ -144,7 +144,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     });
 
     if (task.profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: task.profile.userId,
         profileId: task.profileId,
         taskId: task.id,

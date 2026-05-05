@@ -63,7 +63,7 @@ function uniqueIds(value: unknown) {
 
   const ids = Array.from(
     new Set(
-      value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      value.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
     )
   );
 
@@ -80,8 +80,8 @@ async function expandTargetTasks(
   }
 
   const nonRecurringIds = selectedTasks
-    .filter((task) => !task.recurrenceSeriesId)
-    .map((task) => task.id);
+    .filter((task: TaskRecord) => !task.recurrenceSeriesId)
+    .map((task: TaskRecord) => task.id);
   const recurringStarts = new Map<string, Date>();
 
   for (const task of selectedTasks) {
@@ -572,7 +572,7 @@ export async function POST(req: Request, ctx: Ctx) {
           const task = await ensureTaskRecord(tx, profileId, taskId);
           await markTaskOpen(tx, task);
           if (profile.userId && task.completedOn) {
-            await createActivityLog(tx, {
+            await createActivityLog(tx as any, {
               userId: profile.userId,
               profileId,
               taskId: task.id,

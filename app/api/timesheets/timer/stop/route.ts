@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     roundingMode
   );
 
-  const entry = await prisma.$transaction(async (tx) => {
+  const entry = await prisma.$transaction(async (tx: any) => {
     const updatedEntry = await tx.timeEntry.update({
       where: { id: activeTimer.id },
       data: {
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     });
 
     if (activeTimer.profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: activeTimer.profile.userId,
         profileId: activeTimer.profileId,
         timeEntryId: updatedEntry.id,

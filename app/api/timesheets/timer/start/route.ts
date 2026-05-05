@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   }
 
   const now = new Date();
-  const entry = await prisma.$transaction(async (tx) => {
+  const entry = await prisma.$transaction(async (tx: any) => {
     const createdEntry = await tx.timeEntry.create({
       data: {
         profileId: profileId.value,
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     });
 
     if (profile?.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId: profileId.value,
         timeEntryId: createdEntry.id,

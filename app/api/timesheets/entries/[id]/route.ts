@@ -98,7 +98,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const rangeError = validateTimeRange(startDateTime, endDateTime);
   if (rangeError) return rangeError;
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx: any) => {
     const updatedEntry = await tx.timeEntry.update({
       where: { id },
       data: buildCompletedTimeEntryData({
@@ -114,7 +114,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     });
 
     if (profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId: profileId.value,
         timeEntryId: updatedEntry.id,
@@ -162,13 +162,13 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return Response.json({ error: "Time entry not found" }, { status: 404 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.timeEntry.delete({
       where: { id },
     });
 
     if (existing.profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: existing.profile.userId,
         profileId: existing.profileId,
         timeEntryId: existing.id,

@@ -175,7 +175,7 @@ export async function POST(req: Request, ctx: Ctx) {
       : createdTask;
 
     if (profile.userId) {
-      await createActivityLog(tx, {
+      await createActivityLog(tx as any, {
         userId: profile.userId,
         profileId,
         taskId: task.id,
