@@ -170,7 +170,7 @@ export function serializeTimeEntry(
     id: entry.id,
     profileId: entry.profileId,
     profileName: entry.profile?.name ?? "",
-    entryDate: toDateOnly(entry.entryDate),
+    entryDate: toDateOnly(toLocalDayStart(entry.entryDate)),
     startTime: entry.startTime.toISOString(),
     endTime: entry.endTime?.toISOString() ?? null,
     durationMinutes: entry.durationMinutes,
