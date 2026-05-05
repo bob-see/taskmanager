@@ -132,6 +132,10 @@ function formatDateTime(value: string) {
   });
 }
 
+function getEntryDayKey(entry: TimesheetEntry) {
+  return toDateOnly(new Date(entry.startTime));
+}
+
 export function TimesheetsClient({
   initialWeekStart,
   initialProfiles,
@@ -256,7 +260,7 @@ export function TimesheetsClient({
     const map = new Map<string, TimesheetEntry[]>();
 
     for (const entry of entries) {
-      const key = `${entry.profileId}:${entry.entryDate}`;
+      const key = `${entry.profileId}:${getEntryDayKey(entry)}`;
       const existing = map.get(key);
       if (existing) {
         existing.push(entry);
@@ -472,7 +476,7 @@ export function TimesheetsClient({
     setManualForm({
       id: entry.id,
       profileId: entry.profileId,
-      date: entry.entryDate,
+      date: getEntryDayKey(entry),
       startTime: toTimeInputValue(new Date(entry.startTime)),
       endTime: entry.endTime ? toTimeInputValue(new Date(entry.endTime)) : "17:00",
       notes: entry.notes ?? "",
