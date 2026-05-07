@@ -4528,9 +4528,9 @@ export function TrackerClient({
         </div>
 
         <form onSubmit={createTask} className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr_auto]">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
             <input
-              className={inputClass}
+              className={`${inputClass} min-w-0 w-full`}
               placeholder="+ Task"
               value={form.title}
               onChange={(e) =>
@@ -4538,28 +4538,28 @@ export function TrackerClient({
               }
             />
             <DateInput
-              className={inputClass}
+              className={`${inputClass} min-w-0 w-full`}
               value={form.startDate}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, startDate: e.target.value }))
               }
             />
             <DateInput
-              className={inputClass}
+              className={`${inputClass} min-w-0 w-full`}
               value={form.dueAt}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, dueAt: e.target.value }))
               }
             />
             <CategoryCombobox
-              className={inputClass}
+              className={`${inputClass} min-w-0 w-full`}
               placeholder="Category"
               suggestions={categorySuggestions}
               value={form.category}
               onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
             />
             <select
-              className={inputClass}
+              className={`${inputClass} min-w-0 w-full`}
               value={form.projectId}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, projectId: e.target.value }))
@@ -4576,7 +4576,7 @@ export function TrackerClient({
               ))}
             </select>
             <button
-              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
+              className={`${primaryButtonClass} min-w-24 px-4 disabled:opacity-50 sm:justify-self-start`}
               disabled={saving}
               type="submit"
             >
