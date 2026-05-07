@@ -30,7 +30,7 @@ export default async function ReportingPage({ params }: Props) {
   if (!profile) return notFound();
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-6 pt-3 text-[color:var(--tm-text)] md:px-6 md:pb-8 md:pt-4">
+    <main className="mx-auto max-w-6xl px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 text-[color:var(--tm-text)] md:px-6 md:pb-8 md:pt-4">
       <TrackerClient
         pageMode="reporting"
         profileId={profile.id}

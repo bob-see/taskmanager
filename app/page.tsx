@@ -38,6 +38,7 @@ export default function Home() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [desktopDragEnabled, setDesktopDragEnabled] = useState(false);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [editingProfileName, setEditingProfileName] = useState("");
   const [deletingProfile, setDeletingProfile] = useState<Profile | null>(null);
@@ -57,6 +58,15 @@ export default function Home() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const updateDragEnabled = () => setDesktopDragEnabled(mediaQuery.matches);
+
+    updateDragEnabled();
+    mediaQuery.addEventListener("change", updateDragEnabled);
+    return () => mediaQuery.removeEventListener("change", updateDragEnabled);
   }, []);
 
   async function createProfile(e: React.FormEvent) {
@@ -201,6 +211,8 @@ export default function Home() {
     event: React.DragEvent<HTMLDivElement>,
     index: number
   ) {
+    if (!window.matchMedia("(min-width: 768px)").matches) return;
+
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
     const midpoint = bounds.left + bounds.width / 2;
@@ -208,6 +220,8 @@ export default function Home() {
   }
 
   async function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    if (!window.matchMedia("(min-width: 768px)").matches) return;
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -237,28 +251,30 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-white text-gray-900">
-      <div className="mx-auto flex max-w-5xl flex-col items-center px-6 pt-16">
+      <div className="mx-auto flex max-w-5xl flex-col items-center px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-10 md:pt-16">
         {/* Header */}
-        <div className="flex flex-col items-center gap-4">
-          <Image
-            src="/logo.png"
-            alt="TaskManager logo"
-            width={56}
-            height={56}
-            className="h-14 w-14"
-          />
+        <div className="flex flex-col items-center gap-3 sm:gap-4">
+          <Link href="/">
+            <Image
+              src="/logo.png"
+              alt="TaskManager logo"
+              width={56}
+              height={56}
+              className="h-11 w-11 sm:h-14 sm:w-14"
+            />
+          </Link>
           <div className="text-center">
-            <h1 className="text-4xl font-semibold tracking-tight">
+            <Link href="/" className="block text-2xl font-semibold tracking-tight sm:text-4xl">
               TaskManager
-            </h1>
-            <p className="mt-2 text-sm text-gray-500">
+            </Link>
+            <p className="mt-1 text-xs text-gray-500 sm:mt-2 sm:text-sm">
               Choose a profile to continue
             </p>
           </div>
         </div>
 
         {/* Profiles */}
-        <section className="mt-12 w-full">
+        <section className="mt-6 w-full sm:mt-10 md:mt-12">
           {loading && (
             <div className="text-center text-sm text-gray-500">
               Loading profiles…
@@ -271,7 +287,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto grid w-full max-w-4xl grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
             {profiles.map((profile, index) => {
               const isDragged = draggedId === profile.id;
               const showLeftIndicator = dragOverIndex === index;
@@ -281,17 +297,21 @@ export default function Home() {
               return (
                 <div
                   key={profile.id}
-                  draggable={!reordering}
-                  onDragStart={() => handleDragStart(profile.id)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(event) => handleDragOver(event, index)}
-                  onDrop={handleDrop}
+                  draggable={desktopDragEnabled && !reordering}
+                  onDragStart={
+                    desktopDragEnabled ? () => handleDragStart(profile.id) : undefined
+                  }
+                  onDragEnd={desktopDragEnabled ? handleDragEnd : undefined}
+                  onDragOver={
+                    desktopDragEnabled ? (event) => handleDragOver(event, index) : undefined
+                  }
+                  onDrop={desktopDragEnabled ? handleDrop : undefined}
                   className={`relative w-full transition ${
                     isDragged ? "opacity-60" : ""
                   }`}
                 >
-                  <div className="group relative h-44 w-full rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                    <div className="absolute right-3 top-3 z-10 flex gap-2 opacity-0 transition group-hover:opacity-100">
+                  <div className="group relative aspect-square w-full rounded-xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:rounded-2xl md:h-44 md:aspect-auto">
+                    <div className="absolute right-2 top-2 z-10 hidden gap-2 opacity-0 transition group-hover:opacity-100 md:flex">
                       <button
                         type="button"
                         onClick={() => openEditProfile(profile)}
@@ -312,14 +332,14 @@ export default function Home() {
                       href={`/p/${profile.id}`}
                       className="flex h-full w-full items-center justify-center"
                     >
-                      <div className="px-4 text-center">
-                        <div className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-gray-400">
+                      <div className="min-w-0 px-3 text-center sm:px-4">
+                        <div className="mb-1 hidden text-xs font-medium uppercase tracking-[0.3em] text-gray-400 md:mb-3 md:block">
                           Drag
                         </div>
-                        <div className="text-lg font-medium text-gray-900">
+                        <div className="truncate text-sm font-medium text-gray-900 sm:text-base md:text-lg">
                           {profile.name}
                         </div>
-                        <div className="mt-1 text-xs text-gray-500 opacity-0 transition group-hover:opacity-100">
+                        <div className="mt-1 hidden text-xs text-gray-500 md:block md:opacity-0 md:transition md:group-hover:opacity-100">
                           Open profile
                         </div>
                       </div>
@@ -331,18 +351,18 @@ export default function Home() {
           </div>
 
           {/* Add profile */}
-          <div className="mt-10 flex flex-col items-center gap-4">
+          <div className="mt-6 flex flex-col items-center gap-3 sm:mt-10 sm:gap-4">
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link
                 href="/overview"
-                className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium shadow-sm hover:shadow"
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:shadow sm:px-5"
               >
                 Overview
               </Link>
               <button
                 type="button"
                 onClick={() => setShowForm((prev) => !prev)}
-                className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium shadow-sm hover:shadow"
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:shadow sm:px-5"
               >
                 + Add profile
               </button>

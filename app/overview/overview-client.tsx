@@ -114,7 +114,7 @@ type DeleteMode = "this" | "future" | "series";
 type OverviewTaskFilter = "all-open" | "today" | "overdue" | "upcoming";
 type OverviewGroupingMode = "project" | "category";
 
-const cardClass = "tm-card rounded-[12px] border p-4 shadow-sm md:p-5";
+const cardClass = "tm-card min-w-0 rounded-[12px] border p-4 shadow-sm md:p-5";
 const inputClass =
   "tm-input h-9 rounded-[10px] border px-3 text-sm outline-none transition-colors";
 const buttonClass =
@@ -139,6 +139,19 @@ function todayInputValue() {
 function toDateOnly(value: string | null) {
   if (!value) return "";
   return value.slice(0, 10);
+}
+
+function formatMobileTaskDate(value: string | null) {
+  const dateOnly = toDateOnly(value);
+  if (!dateOnly) return "—";
+
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  if (!year || !month || !day) return dateOnly;
+
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function compareTasksByCreatedAt(
@@ -414,6 +427,7 @@ function ProfileCard({
   const [showAll, setShowAll] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const mobileGroupsInitializedRef = useRef(false);
   const [categorySuggestions, setCategorySuggestions] = useState(profile.categorySuggestions);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -640,6 +654,21 @@ function ProfileCard({
       }))
       .filter((group) => group.tasks.length > 0);
   }, [orderedTaskGroups, profile.initialTaskLimit, showAll]);
+
+  useEffect(() => {
+    if (mobileGroupsInitializedRef.current || typeof window === "undefined") {
+      return;
+    }
+
+    if (!window.matchMedia("(max-width: 767px)").matches || groupedVisibleTasks.length === 0) {
+      return;
+    }
+
+    mobileGroupsInitializedRef.current = true;
+    setCollapsedGroups(
+      Object.fromEntries(groupedVisibleTasks.map((group) => [group.key, true]))
+    );
+  }, [groupedVisibleTasks]);
 
   function closeDialog() {
     if (saving) return;
@@ -1354,7 +1383,7 @@ function ProfileCard({
 
   return (
     <article
-      className={`${cardClass} h-full transition ${
+      className={`${cardClass} h-full max-w-full transition ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragActive ? "opacity-60" : ""} ${
         dragOverPosition === "before"
@@ -1373,9 +1402,9 @@ function ProfileCard({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">{profile.name}</h2>
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-semibold tracking-tight">{profile.name}</h2>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--tm-muted)]">
             <span className="tm-chip rounded-full border px-2 py-0.5">Open {counts.open}</span>
             <span className="tm-chip rounded-full border px-2 py-0.5">Done {counts.done}</span>
@@ -1385,7 +1414,42 @@ function ProfileCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+          <Link
+            href={`/p/${profile.id}`}
+            className="tm-button-primary inline-flex h-9 w-full items-center justify-center rounded-[10px] border px-3 text-sm md:w-auto"
+          >
+            Open tracker
+          </Link>
+          <details className="md:hidden">
+            <summary className="tm-button flex h-8 cursor-pointer list-none items-center justify-center rounded-[10px] border px-3 text-xs">
+              Actions
+            </summary>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                className="tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2 text-xs"
+                onClick={() => setDialogOpen(true)}
+              >
+                Add Task
+              </button>
+              <button
+                type="button"
+                className="tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2 text-xs"
+                onClick={() => setProjectDialogOpen(true)}
+              >
+                Add Project
+              </button>
+              <button
+                type="button"
+                className="tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2 text-xs"
+                onClick={() => setCollapsed((prev) => !prev)}
+              >
+                {collapsed ? "Expand" : "Collapse"}
+              </button>
+            </div>
+          </details>
+          <div className="hidden gap-2 md:flex md:flex-wrap">
           <button
             type="button"
             className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
@@ -1407,18 +1471,85 @@ function ProfileCard({
           >
             {collapsed ? "Expand" : "Collapse"}
           </button>
-          <Link
-            href={`/p/${profile.id}`}
-            className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-          >
-            Open tracker
-          </Link>
+          </div>
         </div>
       </div>
 
       {!collapsed && (
         <>
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 space-y-2 md:hidden">
+            {groupedVisibleTasks.length === 0 ? (
+              <div className="text-sm text-[color:var(--tm-muted)]">
+                {selectedFilter === "all-open" ? "No open tasks." : "No matching tasks"}
+              </div>
+            ) : (
+              groupedVisibleTasks.map((group) => {
+                const isGroupCollapsed = collapsedGroups[group.key] ?? false;
+
+                return (
+                  <section
+                    key={group.key}
+                    className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/30"
+                  >
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium"
+                      onClick={() =>
+                        setCollapsedGroups((prev) => ({
+                          ...prev,
+                          [group.key]: !(prev[group.key] ?? false),
+                        }))
+                      }
+                    >
+                      <span className="min-w-0 truncate">
+                        {isGroupCollapsed ? "▸" : "▾"} {group.label}
+                      </span>
+                      <span className="shrink-0 text-xs text-[color:var(--tm-muted)]">
+                        {group.taskCount}
+                      </span>
+                    </button>
+                    {!isGroupCollapsed && (
+                      <div className="space-y-2 border-t border-[color:var(--tm-border)] p-2">
+                        {group.tasks.map((task) => (
+                          <article
+                            key={task.id}
+                            className={`rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 p-3 ${
+                              task.isPriority
+                                ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
+                                : ""
+                            }`}
+                            onContextMenu={(event) => openTaskContextMenu(event, task)}
+                          >
+                            <div className="font-medium leading-snug">{task.title}</div>
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-[color:var(--tm-muted)]">
+                              <span className="tm-chip rounded-full border px-2 py-0.5">
+                                {groupingMode === "project"
+                                  ? group.label
+                                  : task.projectName || "Unassigned"}
+                              </span>
+                              <span className="tm-chip rounded-full border px-2 py-0.5">
+                                {task.category ?? "Uncategorized"}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-[color:var(--tm-muted)]">
+                              <span className="tm-chip rounded-full border px-2 py-0.5">
+                                Start {formatMobileTaskDate(task.startDate)}
+                              </span>
+                              <span className="tm-chip rounded-full border px-2 py-0.5">
+                                Due {formatMobileTaskDate(task.dueAt)}
+                              </span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-4 hidden max-w-full overflow-x-auto md:block">
             <table className="w-full min-w-[680px] text-sm">
               <thead>
                 <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
@@ -2100,7 +2231,7 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
 
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
-      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 xl:px-8 2xl:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 md:py-10 xl:px-8 2xl:px-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Overview</h1>
@@ -2119,9 +2250,9 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <div className={segmentedTabSetClass}>
+        <div className="mt-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
+            <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
               {filterOptions.map((option) => {
                 const active = selectedFilter === option.value;
 
@@ -2138,11 +2269,11 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
               })}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                 Group by
               </span>
-              <div className={segmentedTabSetClass}>
+              <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
                 {groupingOptions.map((option) => {
                   const active = groupingMode === option.value;
 
@@ -2169,7 +2300,7 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
           />
         </div>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-6 grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProfiles.length === 0 ? (
             <div className="tm-card rounded-[12px] border p-4 text-sm text-[color:var(--tm-muted)] md:col-span-2 xl:col-span-3">
               No profiles match this filter.

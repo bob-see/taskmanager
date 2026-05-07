@@ -175,7 +175,7 @@ const SNOOZE_PRESET_OPTIONS: Array<{ value: SnoozePreset; label: string }> = [
   { value: "next-business-day", label: "Next business day" },
   { value: "next-week", label: "Next week (+7 days)" },
 ];
-const cardClass = "tm-card rounded-[12px] border shadow-sm";
+const cardClass = "tm-card min-w-0 rounded-[12px] border shadow-sm";
 const sectionCardClass = `${cardClass} p-4`;
 const inputClass =
   "tm-input h-10 rounded-[10px] border px-3 text-sm outline-none transition-colors";
@@ -199,7 +199,7 @@ const progressTrackClass = "tm-progress-track overflow-hidden rounded-full";
 const progressFillClass = "tm-progress-fill rounded-full transition-[width]";
 const modalChoiceClass = "tm-choice flex cursor-pointer items-start gap-3 rounded-lg border p-3";
 const commandBarClass =
-  "sticky top-0 z-40 -mx-4 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-bg)]/95 px-4 py-2 backdrop-blur md:-mx-6 md:px-6";
+  "sticky top-[57px] z-30 -mx-4 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-bg)]/95 px-4 py-2 backdrop-blur md:top-0 md:z-40 md:-mx-6 md:px-6";
 const matrixHeaderCellClass =
   "sticky top-0 z-10 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]";
 const matrixCellClass = "px-3 py-2.5 align-top";
@@ -3201,7 +3201,7 @@ export function TrackerClient({
           </div>
 
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <div className="relative min-w-[18rem] max-w-[32rem] flex-1">
+            <div className="relative min-w-0 max-w-[32rem] flex-1 basis-full sm:min-w-[18rem] lg:basis-auto">
               <input
                 className={`w-full ${inputClass} pr-9`}
                 placeholder="Search title, category, notes"
@@ -3368,7 +3368,7 @@ export function TrackerClient({
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-w-full overflow-x-auto">
               <div className="grid min-w-[42rem] grid-cols-7 gap-3">
                 {weekDays.map((day, index) => (
                   <button
@@ -3468,7 +3468,7 @@ export function TrackerClient({
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-w-full overflow-x-auto">
               <div className="mb-3 grid min-w-[42rem] grid-cols-7 gap-2">
                 {WEEKDAY_LABELS.map((label) => (
                   <div
@@ -4273,8 +4273,8 @@ export function TrackerClient({
             ) : sortedOpenTasks.length === 0 ? (
               <div className="text-sm opacity-60">No matching open tasks.</div>
             ) : (
-              <div className="relative max-h-[520px] overflow-y-auto overflow-x-auto">
-                <table className="min-w-full table-fixed border-separate border-spacing-0 text-sm">
+              <div className="relative max-h-[520px] max-w-full overflow-y-auto overflow-x-auto">
+                <table className="min-w-[56rem] table-fixed border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
                       <th className={`${matrixHeaderCellClass} w-[40%]`}>Task</th>
@@ -4408,8 +4408,8 @@ export function TrackerClient({
               ) : doneTasks.length === 0 ? (
                 <div className="text-sm opacity-60">No completed tasks in this range.</div>
               ) : (
-                <div className="relative max-h-[520px] overflow-y-auto overflow-x-auto">
-                  <table className="min-w-full table-fixed border-separate border-spacing-0 text-sm">
+                <div className="relative max-h-[520px] max-w-full overflow-y-auto overflow-x-auto">
+                  <table className="min-w-[62rem] table-fixed border-separate border-spacing-0 text-sm">
                     <thead>
                       <tr>
                         <th className={`${matrixHeaderCellClass} w-[36%]`}>Task</th>

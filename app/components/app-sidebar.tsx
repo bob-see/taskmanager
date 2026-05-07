@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useState } from "react";
 
 type SidebarProfile = {
   id: string;
@@ -35,11 +36,29 @@ function itemClassName(active: boolean, disabled = false) {
 
 export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const activeProfile = profiles.find((profile) => {
+    const href = `/p/${profile.id}`;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  });
+  const currentSection =
+    activeProfile?.name ??
+    (pathname === "/overview"
+      ? "Overview"
+      : pathname === "/timesheets"
+        ? "Timesheets"
+        : pathname === "/activity"
+          ? "Activity"
+          : pathname === "/users"
+            ? "Users"
+            : pathname === "/reports"
+              ? "Reports"
+              : "Workspace");
 
-  return (
-    <aside className="w-full shrink-0 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/80 md:sticky md:top-0 md:h-screen md:w-72 md:border-b-0 md:border-r">
-      <div className="flex h-full flex-col px-4 py-4 md:px-5 md:py-6">
-        <div className="mb-5 flex items-center gap-3 px-2">
+  function renderNavigation(onNavigate?: () => void) {
+    return (
+      <>
+        <Link href="/" className="mb-5 flex items-center gap-3 px-2">
           <Image
             src="/logo.png"
             alt="TaskManager logo"
@@ -47,21 +66,25 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
             height={36}
             className="rounded-xl"
           />
-          <div>
-            <p className="text-sm font-semibold tracking-tight text-[color:var(--tm-text)]">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold tracking-tight text-[color:var(--tm-text)]">
               TaskManager
             </p>
             <p className="text-xs text-[color:var(--tm-muted)]">Workspaces</p>
           </div>
-        </div>
+        </Link>
 
-        <div className="flex flex-col gap-6 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
           <section>
             <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
               Profiles
             </p>
             <nav className="mt-2 flex flex-col gap-1">
-              <Link href="/overview" className={itemClassName(pathname === "/overview")}>
+              <Link
+                href="/overview"
+                className={itemClassName(pathname === "/overview")}
+                onClick={onNavigate}
+              >
                 Overview
               </Link>
               {profiles.map((profile) => {
@@ -74,6 +97,7 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
                     key={profile.id}
                     href={href}
                     className={itemClassName(active)}
+                    onClick={onNavigate}
                   >
                     <span className="truncate">{profile.name}</span>
                   </Link>
@@ -87,14 +111,26 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
               Tools
             </p>
             <nav className="mt-2 flex flex-col gap-1">
-              <Link href="/timesheets" className={itemClassName(pathname === "/timesheets")}>
+              <Link
+                href="/timesheets"
+                className={itemClassName(pathname === "/timesheets")}
+                onClick={onNavigate}
+              >
                 Timesheets
               </Link>
-              <Link href="/activity" className={itemClassName(pathname === "/activity")}>
+              <Link
+                href="/activity"
+                className={itemClassName(pathname === "/activity")}
+                onClick={onNavigate}
+              >
                 Activity
               </Link>
               {currentUser.role === "admin" ? (
-                <Link href="/users" className={itemClassName(pathname === "/users")}>
+                <Link
+                  href="/users"
+                  className={itemClassName(pathname === "/users")}
+                  onClick={onNavigate}
+                >
                   Users
                 </Link>
               ) : null}
@@ -106,13 +142,17 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
               Reports
             </p>
             <nav className="mt-2 flex flex-col gap-1">
-              <Link href="/reports" className={itemClassName(pathname === "/reports")}>
+              <Link
+                href="/reports"
+                className={itemClassName(pathname === "/reports")}
+                onClick={onNavigate}
+              >
                 Reports
               </Link>
             </nav>
           </section>
         </div>
-        <div className="mt-auto border-t border-[color:var(--tm-border)] pt-4 pb-12 md:pb-6">
+        <div className="mt-auto border-t border-[color:var(--tm-border)] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 md:pb-6">
           <div className="mb-3 px-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
               Logged in as
@@ -134,7 +174,65 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
             Logout
           </button>
         </div>
-      </div>
-    </aside>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <header className="sticky top-0 z-40 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/95 px-4 py-3 backdrop-blur md:hidden">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <Link href="/" className="flex min-w-0 items-center gap-3">
+            <Image
+              src="/logo.png"
+              alt="TaskManager logo"
+              width={32}
+              height={32}
+              className="h-8 w-8 shrink-0 rounded-lg"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold tracking-tight">TaskManager</p>
+              <p className="truncate text-xs text-[color:var(--tm-muted)]">{currentSection}</p>
+            </div>
+          </Link>
+          <button
+            type="button"
+            className="tm-button inline-flex h-9 shrink-0 items-center justify-center rounded-[10px] border px-3 text-sm"
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            Menu
+          </button>
+        </div>
+      </header>
+
+      <aside className="hidden shrink-0 border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/80 md:sticky md:top-0 md:flex md:h-screen md:w-72 md:border-r">
+        <div className="flex h-full w-full flex-col px-5 py-6">
+          {renderNavigation()}
+        </div>
+      </aside>
+
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/35"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="tm-card relative flex h-full w-[min(20rem,82vw)] flex-col border-r border-[color:var(--tm-border)] px-4 py-4 shadow-2xl">
+            <div className="mb-3 flex justify-end">
+              <button
+                type="button"
+                className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            {renderNavigation(() => setMobileMenuOpen(false))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

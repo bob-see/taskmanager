@@ -20,9 +20,9 @@ type AppShellProps = {
 
 export function AppShell({ children, profiles, currentUser }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)] md:flex">
+    <div className="min-h-screen overflow-x-hidden bg-[color:var(--tm-bg)] text-[color:var(--tm-text)] md:flex">
       <AppSidebar profiles={profiles} currentUser={currentUser} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
     </div>
   );
 }

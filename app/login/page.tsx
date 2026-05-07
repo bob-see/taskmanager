@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -45,9 +46,9 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-[color:var(--tm-bg)] px-4 py-10">
       <section className="w-full max-w-md rounded-3xl border border-[color:var(--tm-border)] bg-[color:var(--tm-card)] p-8 shadow-sm">
         <div className="mb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--tm-muted)]">
+          <Link href="/" className="block text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--tm-muted)]">
             TaskManager
-          </p>
+          </Link>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--tm-text)]">
             Sign in
           </h1>
