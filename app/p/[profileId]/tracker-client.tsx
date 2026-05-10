@@ -74,10 +74,17 @@ type Project = {
   orderIndex: number | null;
 };
 
+export type TrackerInitialData = {
+  profiles: Profile[];
+  tasks: Task[];
+  projects: Project[];
+};
+
 type TrackerClientProps = {
   pageMode: "tracker" | "reporting";
   profileId: string;
   profileName: string;
+  initialData?: TrackerInitialData;
 };
 
 type TaskFormState = RepeatFormState & {
@@ -1570,6 +1577,7 @@ export function TrackerClient({
   pageMode,
   profileId,
   profileName,
+  initialData,
 }: TrackerClientProps) {
   const router = useRouter();
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
@@ -1582,10 +1590,10 @@ export function TrackerClient({
     defaultView: ViewMode;
     averageBasis: AverageBasis;
   } | null>(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<Profile[]>(() => initialData?.profiles ?? []);
+  const [tasks, setTasks] = useState<Task[]>(() => initialData?.tasks ?? []);
+  const [projects, setProjects] = useState<Project[]>(() => initialData?.projects ?? []);
+  const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(todayInputValue);
@@ -1670,6 +1678,15 @@ export function TrackerClient({
     let cancelled = false;
 
     async function initialLoad() {
+      if (initialData) {
+        setProfiles(initialData.profiles);
+        setTasks(initialData.tasks);
+        setProjects(initialData.projects);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
@@ -1694,7 +1711,7 @@ export function TrackerClient({
     return () => {
       cancelled = true;
     };
-  }, [profileId]);
+  }, [initialData, profileId]);
 
   useEffect(() => {
     setForm(createEmptyTaskForm());

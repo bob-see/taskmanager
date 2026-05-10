@@ -786,7 +786,6 @@ function ProfileCard({
 
       setDialogOpen(false);
       setTaskDraft(createEmptyTaskDraftState());
-      router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -818,9 +817,12 @@ function ProfileCard({
         throw new Error(body?.error ?? "Could not create project");
       }
 
+      const createdProject = (await res.json()) as OverviewProject;
+      setProjects((prev) =>
+        [...prev, createdProject].sort(compareProjectsForManualSort)
+      );
       setProjectDialogOpen(false);
       setProjectDraft(createEmptyProjectDraftState());
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not create project");
     } finally {
@@ -1190,6 +1192,9 @@ function ProfileCard({
       const savedTask = response.task;
 
       if (savedTask) {
+        const previousTask = openTasks.find((item) => item.id === editTaskId);
+        const nextDueAt = toDateOnly(savedTask.dueAt);
+
         setOpenTasks((prev) =>
           prev.map((item) =>
             item.id === editTaskId
@@ -1199,7 +1204,7 @@ function ProfileCard({
                   notes: savedTask.notes,
                   category: savedTask.category,
                   startDate: toDateOnly(savedTask.startDate),
-                  dueAt: toDateOnly(savedTask.dueAt),
+                  dueAt: nextDueAt,
                   orderIndex: savedTask.orderIndex,
                   projectId: savedTask.projectId,
                   projectName: savedTask.projectId
@@ -1217,10 +1222,35 @@ function ProfileCard({
               : item
           )
         );
+
+        if (previousTask) {
+          const previousOverdue = isTaskOverdue(previousTask.dueAt);
+          const nextOverdue = isTaskOverdue(nextDueAt);
+
+          if (previousOverdue !== nextOverdue) {
+            setCounts((prev) => ({
+              ...prev,
+              overdue: Math.max(0, prev.overdue + (nextOverdue ? 1 : -1)),
+            }));
+          }
+        }
+
+        const newCategory = savedTask.category?.trim();
+        if (newCategory) {
+          setCategorySuggestions((prev) => {
+            const exists = prev.some(
+              (item) => item.toLocaleLowerCase() === newCategory.toLocaleLowerCase()
+            );
+            if (exists) return prev;
+
+            return [...prev, newCategory].sort((left, right) =>
+              left.localeCompare(right, undefined, { sensitivity: "base" })
+            );
+          });
+        }
       }
 
       closeTaskEditor();
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update task");
     } finally {
@@ -1247,8 +1277,6 @@ function ProfileCard({
           overdue: Math.max(0, prev.overdue - (isTaskOverdue(task.dueAt) ? 1 : 0)),
         }));
       }
-
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update task");
     } finally {
@@ -1266,7 +1294,6 @@ function ProfileCard({
 
       await deleteTask(task.id);
       removeTaskFromCard(task);
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not delete task");
     } finally {
@@ -1281,10 +1308,11 @@ function ProfileCard({
       await deleteTask(task.id, mode);
       if (mode === "this") {
         removeTaskFromCard(task);
+      } else {
+        router.refresh();
       }
       setDeleteTaskModalTask(null);
       setDeleteTaskMode("this");
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not delete task");
     } finally {
@@ -1312,7 +1340,6 @@ function ProfileCard({
         )
       );
       closeProjectEditor();
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update project");
     } finally {
@@ -1335,7 +1362,6 @@ function ProfileCard({
           project.id === group.projectId ? { ...project, archived: true } : project
         )
       );
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not archive project");
     } finally {
@@ -1354,7 +1380,6 @@ function ProfileCard({
           item.id === task.id ? { ...item, isPriority: !item.isPriority } : item
         )
       );
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update task");
     } finally {
@@ -1373,7 +1398,6 @@ function ProfileCard({
     try {
       const project = await patchProject(group.projectId, { isPriority: !group.isPriority });
       setProjects((prev) => prev.map((item) => (item.id === project.id ? project : item)));
-      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not update project");
     } finally {
