@@ -39,7 +39,7 @@ export async function GET(req: Request) {
             email: session.user.email,
           },
         },
-        startTime: {
+        entryDate: {
           gte: weekStartDate,
           lt: weekEndDate,
         },

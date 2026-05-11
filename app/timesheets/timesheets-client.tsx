@@ -132,6 +132,19 @@ function formatDateTime(value: string) {
   });
 }
 
+function formatTimerStarted(value: string) {
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
 function getEntryDayKey(entry: TimesheetEntry) {
   return toDateOnly(new Date(entry.startTime));
 }
@@ -566,7 +579,7 @@ export function TimesheetsClient({
                   <div>
                     <div className="text-sm font-medium">{activeTimer.profileName}</div>
                     <div className="mt-1 text-sm text-[color:var(--tm-muted)]">
-                      Started {new Date(activeTimer.startTime).toLocaleString()}
+                      Started {formatTimerStarted(activeTimer.startTime)}
                     </div>
                     {activeTimer.notes && (
                       <div className="mt-2 text-sm text-[color:var(--tm-muted)]">
