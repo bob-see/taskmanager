@@ -157,7 +157,7 @@ export function TimesheetsClient({
   const [savingTimer, setSavingTimer] = useState(false);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [pendingDeleteEntryId, setPendingDeleteEntryId] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number | null>(null);
 
   const weekDays = useMemo(() => getWeekDays(selectedWeekStart), [selectedWeekStart]);
   const roundingOptions: Array<{ value: TimesheetRoundingMode; label: string }> = [
@@ -185,8 +185,11 @@ export function TimesheetsClient({
 
   useEffect(() => {
     if (!activeTimer) {
+      setNow(null);
       return;
     }
+
+    setNow(Date.now());
 
     const interval = window.setInterval(() => {
       setNow(Date.now());
@@ -474,7 +477,7 @@ export function TimesheetsClient({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const activeTimerElapsed = activeTimer
+  const activeTimerElapsed = activeTimer && now !== null
     ? calculateLoggedMinutes(new Date(activeTimer.startTime), new Date(now), "exact").durationMinutes
     : 0;
 
