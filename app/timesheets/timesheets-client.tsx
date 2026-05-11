@@ -167,20 +167,10 @@ export function TimesheetsClient({
   ];
 
   useEffect(() => {
-    const storedWeek = window.localStorage.getItem(WEEK_STORAGE_KEY);
     const storedRounding = window.localStorage.getItem(ROUNDING_STORAGE_KEY);
 
     if (storedRounding === "exact" || storedRounding === "nearest-15" || storedRounding === "up-15") {
       setRoundingMode(storedRounding);
-    }
-
-    if (storedWeek) {
-      const normalizedWeek = toDateOnly(startOfWeek(parseDateOnly(storedWeek)));
-      if (normalizedWeek !== initialWeekStart) {
-        void loadWeekData(normalizedWeek);
-      }
-      setSelectedWeekStart(normalizedWeek);
-      setManualForm((prev) => ({ ...prev, date: normalizedWeek }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
