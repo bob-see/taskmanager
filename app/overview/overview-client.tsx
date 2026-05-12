@@ -504,6 +504,20 @@ function ProfileCard({
     () => openTasks.filter((task) => matchesOverviewTaskFilter(task, selectedFilter, today)),
     [openTasks, selectedFilter, today]
   );
+  const displayCounts = useMemo(
+    () => ({
+      openNow: openTasks.filter((task) =>
+        matchesOverviewTaskFilter(task, "all-open", today)
+      ).length,
+      upcoming: openTasks.filter((task) =>
+        matchesOverviewTaskFilter(task, "upcoming", today)
+      ).length,
+      overdue: openTasks.filter((task) =>
+        matchesOverviewTaskFilter(task, "overdue", today)
+      ).length,
+    }),
+    [openTasks, today]
+  );
 
   const taskCountByGroupKey = useMemo(() => {
     const countsByGroup = new Map<string, number>();
@@ -1430,10 +1444,15 @@ function ProfileCard({
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold tracking-tight">{profile.name}</h2>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--tm-muted)]">
-            <span className="tm-chip rounded-full border px-2 py-0.5">Open {counts.open}</span>
+            <span className="tm-chip rounded-full border px-2 py-0.5">
+              Open now {displayCounts.openNow}
+            </span>
+            <span className="tm-chip rounded-full border px-2 py-0.5">
+              Upcoming {displayCounts.upcoming}
+            </span>
             <span className="tm-chip rounded-full border px-2 py-0.5">Done {counts.done}</span>
             <span className="tm-chip rounded-full border px-2 py-0.5">
-              Overdue {counts.overdue}
+              Overdue {displayCounts.overdue}
             </span>
           </div>
         </div>
