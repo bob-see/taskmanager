@@ -10,8 +10,8 @@ type Ctx = {
 };
 
 const defaultStatusOptions = [
-  { label: "Not Started", color: "gray", order: 0 },
-  { label: "In Progress", color: "blue", order: 1 },
+  { label: "Not Started", color: "red", order: 0 },
+  { label: "In Progress", color: "amber", order: 1 },
   { label: "Complete", color: "green", order: 2 },
 ];
 

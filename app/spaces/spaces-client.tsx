@@ -67,6 +67,19 @@ const columnTypes: ColumnType[] = [
   "user",
 ];
 
+const statusColorClasses: Record<string, string> = {
+  red: "border-red-200 bg-red-50 text-red-800",
+  muted: "border-slate-200 bg-slate-50 text-slate-700",
+  gray: "border-slate-200 bg-slate-50 text-slate-700",
+  grey: "border-slate-200 bg-slate-50 text-slate-700",
+  amber: "border-amber-200 bg-amber-50 text-amber-900",
+  yellow: "border-amber-200 bg-amber-50 text-amber-900",
+  blue: "border-blue-200 bg-blue-50 text-blue-800",
+  green: "border-green-200 bg-green-50 text-green-800",
+};
+
+const neutralStatusClasses = "border-[color:var(--tm-border)] bg-white/70 text-[color:var(--tm-muted)]";
+
 function toDateInputValue(value: string | null) {
   if (!value) return "";
   return value.slice(0, 10);
@@ -137,6 +150,15 @@ function inputClassName(extra = "") {
     "tm-input min-h-10 rounded-[10px] border px-3 py-2 text-sm outline-none",
     "focus:border-slate-300 focus:ring-2 focus:ring-slate-200",
     extra,
+  ].join(" ");
+}
+
+function statusPillClassName(color: string | null | undefined) {
+  const colorKey = typeof color === "string" ? color.trim().toLowerCase() : "";
+  return [
+    "min-h-9 w-full rounded-full border px-3 py-1.5 text-left text-sm font-medium outline-none transition",
+    "focus:ring-2 focus:ring-slate-200 disabled:opacity-70",
+    statusColorClasses[colorKey] ?? neutralStatusClasses,
   ].join(" ");
 }
 
@@ -686,9 +708,14 @@ function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
       return <span className="text-xs text-[color:var(--tm-muted)]">No options</span>;
     }
 
+    const selectedOption =
+      typeof draft === "string"
+        ? column.statusOptions.find((option) => option.id === draft)
+        : undefined;
+
     return (
       <select
-        className={inputClassName("w-full")}
+        className={statusPillClassName(selectedOption?.color)}
         value={typeof draft === "string" ? draft : ""}
         disabled={saving}
         onChange={(event) => {
