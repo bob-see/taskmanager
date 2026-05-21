@@ -101,9 +101,6 @@ CREATE INDEX `matrixcell_userIdValue_idx` ON `matrixcell`(`userIdValue`);
 ALTER TABLE `spacemember` ADD CONSTRAINT `spacemember_spaceId_fkey` FOREIGN KEY (`spaceId`) REFERENCES `collaborativespace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `spacemember` ADD CONSTRAINT `spacemember_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE `matrixrow` ADD CONSTRAINT `matrixrow_spaceId_fkey` FOREIGN KEY (`spaceId`) REFERENCES `collaborativespace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -120,6 +117,3 @@ ALTER TABLE `matrixcell` ADD CONSTRAINT `matrixcell_columnId_fkey` FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE `matrixcell` ADD CONSTRAINT `matrixcell_statusOptionId_fkey` FOREIGN KEY (`statusOptionId`) REFERENCES `columnstatusoption`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `matrixcell` ADD CONSTRAINT `matrixcell_userIdValue_fkey` FOREIGN KEY (`userIdValue`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
