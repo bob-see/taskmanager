@@ -45,6 +45,8 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
     activeProfile?.name ??
     (pathname === "/overview"
       ? "Overview"
+      : pathname === "/spaces"
+        ? "Collaborative Spaces"
       : pathname === "/timesheets"
         ? "Timesheets"
         : pathname === "/activity"
@@ -111,6 +113,13 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
               Tools
             </p>
             <nav className="mt-2 flex flex-col gap-1">
+              <Link
+                href="/spaces"
+                className={itemClassName(pathname === "/spaces")}
+                onClick={onNavigate}
+              >
+                Collaborative Spaces
+              </Link>
               <Link
                 href="/timesheets"
                 className={itemClassName(pathname === "/timesheets")}
