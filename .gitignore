@@ -45,5 +45,5 @@ next-env.d.ts
 # Local database
 *.db
 *.sql
-*.sql
+!prisma/migrations/**/migration.sql
 backups/
