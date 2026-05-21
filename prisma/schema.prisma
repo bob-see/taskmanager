@@ -16,6 +16,8 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   profiles     Profile[]
+  spaceMemberships SpaceMember[]
+  matrixCells       MatrixCell[] @relation("MatrixCellUserValue")
 
   @@index([email])
   @@map("user")
@@ -135,4 +137,99 @@ model ActivityLog {
   @@index([projectId])
   @@index([timeEntryId])
   @@map("activitylog")
+}
+
+model CollaborativeSpace {
+  id        String   @id @default(cuid()) @db.VarChar(36)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members SpaceMember[]
+  rows    MatrixRow[]
+  columns MatrixColumn[]
+
+  @@map("collaborativespace")
+}
+
+model SpaceMember {
+  id      String @id @default(cuid()) @db.VarChar(36)
+  spaceId String @db.VarChar(36)
+  userId  String @db.VarChar(36)
+  role    String @default("member") @db.VarChar(32)
+
+  space CollaborativeSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, userId])
+  @@index([spaceId])
+  @@index([userId])
+  @@map("spacemember")
+}
+
+model MatrixRow {
+  id      String @id @default(cuid()) @db.VarChar(36)
+  spaceId String @db.VarChar(36)
+  name    String
+  order   Int
+
+  space CollaborativeSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  cells MatrixCell[]
+
+  @@index([spaceId, order])
+  @@map("matrixrow")
+}
+
+model MatrixColumn {
+  id      String @id @default(cuid()) @db.VarChar(36)
+  spaceId String @db.VarChar(36)
+  name    String
+  type    String @db.VarChar(32)
+  order   Int
+
+  space         CollaborativeSpace  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  statusOptions ColumnStatusOption[]
+  cells         MatrixCell[]
+
+  @@index([spaceId, order])
+  @@map("matrixcolumn")
+}
+
+model ColumnStatusOption {
+  id       String @id @default(cuid()) @db.VarChar(36)
+  columnId String @db.VarChar(36)
+  label    String
+  color    String @db.VarChar(32)
+  order    Int
+
+  column MatrixColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  cells  MatrixCell[]
+
+  @@index([columnId, order])
+  @@map("columnstatusoption")
+}
+
+model MatrixCell {
+  id             String    @id @default(cuid()) @db.VarChar(36)
+  rowId          String    @db.VarChar(36)
+  columnId       String    @db.VarChar(36)
+  textValue      String?   @db.Text
+  numberValue    Decimal?  @db.Decimal(18, 4)
+  dateValue      DateTime?
+  booleanValue   Boolean?
+  statusOptionId String?   @db.VarChar(36)
+  userIdValue    String?   @db.VarChar(36)
+  notes          String?   @db.Text
+  updatedAt      DateTime  @updatedAt
+
+  row          MatrixRow           @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  column       MatrixColumn        @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  statusOption ColumnStatusOption? @relation(fields: [statusOptionId], references: [id], onDelete: SetNull)
+  userValue    User?               @relation("MatrixCellUserValue", fields: [userIdValue], references: [id], onDelete: SetNull)
+
+  @@unique([rowId, columnId])
+  @@index([columnId])
+  @@index([statusOptionId])
+  @@index([userIdValue])
+  @@map("matrixcell")
 }
