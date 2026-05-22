@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ProjectEditorModal,
@@ -224,6 +223,7 @@ function createEmptyTaskDraftState(): TaskDraftState {
   return {
     title: "",
     category: "",
+    notes: "",
     projectId: "",
     startDate,
     dueAt: "",
@@ -238,6 +238,113 @@ function createEmptyProjectDraftState(): ProjectDraftState {
 function isTaskOverdue(dueAt: string) {
   if (!dueAt) return false;
   return dueAt < todayInputValue();
+}
+
+function TaskNotesIndicator({ notes }: { notes: string }) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+    placement: "above" | "below";
+    width: number;
+  } | null>(null);
+
+  function updatePosition() {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 32);
+    const left = Math.min(
+      Math.max(16, rect.left),
+      Math.max(16, window.innerWidth - width - 16)
+    );
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placement = spaceBelow < 220 && rect.top > 220 ? "above" : "below";
+    const top = placement === "above" ? rect.top - 8 : rect.bottom + 8;
+
+    setPosition({ left, top, placement, width });
+  }
+
+  function showPreview() {
+    updatePosition();
+    setOpen(true);
+  }
+
+  function togglePreview() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+
+    showPreview();
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleReposition() {
+      updatePosition();
+    }
+
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+
+    return () => {
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [open]);
+
+  return (
+    <span className="relative inline-flex align-middle">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="tm-chip inline-flex h-5 w-5 items-center justify-center rounded-full border text-[color:var(--tm-muted)] transition-colors hover:bg-white/80 hover:text-[color:var(--tm-text)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]"
+        aria-label="Show task notes"
+        aria-expanded={open}
+        onMouseEnter={showPreview}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={showPreview}
+        onBlur={() => setOpen(false)}
+        onClick={(event) => {
+          event.stopPropagation();
+          togglePreview();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none">
+          <path
+            d="M4 3.5h8v9H4zM6 6h4M6 8.25h4M6 10.5h2.5"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+          />
+        </svg>
+      </button>
+      {open && position && (
+        <div
+          className="pointer-events-none fixed z-[70] max-h-48 overflow-auto whitespace-pre-wrap rounded-[12px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-xs font-normal leading-5 text-[color:var(--tm-text)] shadow-xl"
+          style={{
+            left: position.left,
+            top: position.top,
+            width: position.width,
+            transform:
+              position.placement === "above" ? "translateY(-100%)" : undefined,
+          }}
+        >
+          {notes}
+        </div>
+      )}
+    </span>
+  );
 }
 
 function matchesOverviewTaskFilter(
@@ -500,6 +607,7 @@ function ProfileCard({
     [projects]
   );
   const today = todayInputValue();
+  const overviewTaskPreviewLimit = Math.min(profile.initialTaskLimit, 3);
   const filteredOpenTasks = useMemo(
     () => openTasks.filter((task) => matchesOverviewTaskFilter(task, selectedFilter, today)),
     [openTasks, selectedFilter, today]
@@ -658,7 +766,7 @@ function ProfileCard({
   const groupedVisibleTasks = useMemo(() => {
     const orderedTaskIds = orderedTaskGroups.flatMap((group) => group.tasks.map((task) => task.id));
     const visibleTaskIds = new Set(
-      (showAll ? orderedTaskIds : orderedTaskIds.slice(0, profile.initialTaskLimit)).map((id) => id)
+      (showAll ? orderedTaskIds : orderedTaskIds.slice(0, overviewTaskPreviewLimit)).map((id) => id)
     );
 
     return orderedTaskGroups
@@ -667,7 +775,7 @@ function ProfileCard({
         tasks: group.tasks.filter((task) => visibleTaskIds.has(task.id)),
       }))
       .filter((group) => group.tasks.length > 0);
-  }, [orderedTaskGroups, profile.initialTaskLimit, showAll]);
+  }, [orderedTaskGroups, overviewTaskPreviewLimit, showAll]);
 
   useEffect(() => {
     if (mobileGroupsInitializedRef.current || typeof window === "undefined") {
@@ -1458,12 +1566,6 @@ function ProfileCard({
         </div>
 
         <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-          <Link
-            href={`/p/${profile.id}`}
-            className="tm-button-primary inline-flex h-9 w-full items-center justify-center rounded-[10px] border px-3 text-sm md:w-auto"
-          >
-            Open tracker
-          </Link>
           <details className="md:hidden">
             <summary className="tm-button flex h-8 cursor-pointer list-none items-center justify-center rounded-[10px] border px-3 text-xs">
               Actions
@@ -1563,8 +1665,13 @@ function ProfileCard({
                             }`}
                             onContextMenu={(event) => openTaskContextMenu(event, task)}
                           >
-                            <div className="font-medium leading-snug">{task.title}</div>
-                            <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-[color:var(--tm-muted)]">
+                            <div className="flex items-center gap-1.5 font-medium leading-snug">
+                              <span>{task.title}</span>
+                              {task.notes?.trim() && (
+                                <TaskNotesIndicator notes={task.notes.trim()} />
+                              )}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
                               <span className="tm-chip rounded-full border px-2 py-0.5">
                                 {groupingMode === "project"
                                   ? group.label
@@ -1572,14 +1679,6 @@ function ProfileCard({
                               </span>
                               <span className="tm-chip rounded-full border px-2 py-0.5">
                                 {task.category ?? "Uncategorized"}
-                              </span>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-[color:var(--tm-muted)]">
-                              <span className="tm-chip rounded-full border px-2 py-0.5">
-                                Start {formatMobileTaskDate(task.startDate)}
-                              </span>
-                              <span className="tm-chip rounded-full border px-2 py-0.5">
-                                Due {formatMobileTaskDate(task.dueAt)}
                               </span>
                             </div>
                           </article>
@@ -1593,19 +1692,17 @@ function ProfileCard({
           </div>
 
           <div className="mt-4 hidden max-w-full overflow-x-auto md:block">
-            <table className="w-full min-w-[680px] text-sm">
+            <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                   <th className="px-2 py-2">Title</th>
-                  <th className="px-2 py-2">Category</th>
-                  <th className="px-2 py-2">Start</th>
-                  <th className="px-2 py-2">Due</th>
+                  <th className="px-2 py-2">Details</th>
                 </tr>
               </thead>
               <tbody>
                 {groupedVisibleTasks.length === 0 ? (
                   <tr>
-                    <td className="px-2 py-3 text-sm text-[color:var(--tm-muted)]" colSpan={4}>
+                    <td className="px-2 py-3 text-sm text-[color:var(--tm-muted)]" colSpan={2}>
                       {selectedFilter === "all-open" ? "No open tasks." : "No matching tasks"}
                     </td>
                   </tr>
@@ -1656,7 +1753,7 @@ function ProfileCard({
                               : undefined
                           }
                         >
-                          <td colSpan={4} className="px-2 py-2">
+                          <td colSpan={2} className="px-2 py-2">
                             <button
                               type="button"
                               className="inline-flex items-center gap-2 text-sm font-medium"
@@ -1706,22 +1803,19 @@ function ProfileCard({
                               onDrop={(event) => handleTaskDrop(event, task.id, group.key)}
                               onContextMenu={(event) => openTaskContextMenu(event, task)}
                             >
-                              <td className="group relative px-2 py-2.5 font-medium">
-                                <span>{task.title}</span>
+                              <td className="px-2 py-2.5 font-medium">
+                                <div className="inline-flex min-w-0 items-center gap-1.5">
+                                  <span>{task.title}</span>
+                                  {task.notes?.trim() && (
+                                    <TaskNotesIndicator notes={task.notes.trim()} />
+                                  )}
+                                </div>
                                 {task.notes?.trim() && (
-                                  <div className="pointer-events-none absolute left-2 top-full z-20 mt-1 hidden max-h-48 w-[min(320px,calc(100vw-3rem))] overflow-hidden whitespace-pre-wrap rounded-[12px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-xs font-normal leading-5 text-[color:var(--tm-text)] shadow-xl group-hover:block">
-                                    {task.notes.trim()}
-                                  </div>
+                                  <span className="sr-only">Has notes</span>
                                 )}
                               </td>
-                              <td className="px-2 py-2.5 text-[color:var(--tm-muted)]">
-                                {task.category ?? "—"}
-                              </td>
-                              <td className="px-2 py-2.5 text-[color:var(--tm-muted)]">
-                                {task.startDate}
-                              </td>
-                              <td className="px-2 py-2.5 text-[color:var(--tm-muted)]">
-                                {task.dueAt || "—"}
+                              <td className="px-2 py-2.5 text-xs text-[color:var(--tm-muted)]">
+                                {task.category ?? "Uncategorized"}
                               </td>
                             </tr>
                           ))}
@@ -1733,7 +1827,7 @@ function ProfileCard({
             </table>
           </div>
 
-          {filteredOpenTasks.length > profile.initialTaskLimit && (
+          {filteredOpenTasks.length > overviewTaskPreviewLimit && (
             <div className="mt-3">
               <button
                 type="button"
@@ -1742,7 +1836,7 @@ function ProfileCard({
               >
                 {showAll
                   ? "Show less"
-                  : `Show more (${filteredOpenTasks.length - profile.initialTaskLimit})`}
+                  : `Show more (${filteredOpenTasks.length - overviewTaskPreviewLimit})`}
               </button>
             </div>
           )}
@@ -1809,6 +1903,21 @@ function ProfileCard({
                     <option key={suggestion} value={suggestion} />
                   ))}
                 </datalist>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor={`overview-task-notes-${profile.id}`}>
+                  Notes
+                </label>
+                <textarea
+                  id={`overview-task-notes-${profile.id}`}
+                  className={`min-h-24 w-full py-2 ${inputClass}`}
+                  placeholder="Notes"
+                  value={taskDraft.notes}
+                  onChange={(event) =>
+                    setTaskDraft((prev) => ({ ...prev, notes: event.target.value }))
+                  }
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -2283,34 +2392,29 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-            >
-              Profiles
-            </Link>
-          </div>
         </div>
 
         <div className="mt-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
-            <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
-              {filterOptions.map((option) => {
-                const active = selectedFilter === option.value;
-
-                return (
+            <details className="relative">
+              <summary className="tm-button flex h-9 cursor-pointer list-none items-center rounded-[10px] border px-3 text-sm">
+                Filter: {filterOptions.find((option) => option.value === selectedFilter)?.label}
+              </summary>
+              <div className="tm-menu absolute left-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
+                {filterOptions.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    className={active ? segmentedActiveTabClass : segmentedTabClass}
+                    className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 ${
+                      selectedFilter === option.value ? "font-semibold" : ""
+                    }`}
                     onClick={() => setSelectedFilter(option.value)}
                   >
                     {option.label}
                   </button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            </details>
 
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">

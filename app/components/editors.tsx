@@ -40,6 +40,7 @@ export type TaskCreateFormState = RepeatFormState & {
   startDate: string;
   dueAt: string;
   category: string;
+  notes: string;
   projectId: string;
 };
 
@@ -284,6 +285,7 @@ export function createTaskPayload<T extends TaskCreateFormState>(form: T) {
     startDate: form.startDate,
     dueAt: form.dueAt || null,
     category: form.category.trim() || null,
+    notes: form.notes.trim() || null,
     projectId: form.projectId || null,
     repeatEnabled: form.repeatEnabled,
     repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
@@ -385,9 +387,10 @@ export function RepeatFields<T extends RepeatFormState>({
                   return (
                     <button
                       key={`${label}-${weekday}`}
-                      className={`h-9 w-9 rounded-full border text-sm ${
-                        selected ? "tm-button-primary" : "tm-button"
+                      className={`tm-repeat-day h-9 w-9 rounded-full border text-sm ${
+                        selected ? "tm-repeat-day-selected" : "tm-repeat-day-unselected"
                       }`}
+                      aria-pressed={selected}
                       type="button"
                       onClick={() =>
                         onChange((prev) => {
@@ -414,6 +417,22 @@ export function RepeatFields<T extends RepeatFormState>({
                         })
                       }
                     >
+                      {selected && (
+                        <svg
+                          className="tm-repeat-day-check"
+                          aria-hidden="true"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                        >
+                          <path
+                            d="M2.25 6.25 4.75 8.75 9.75 3.25"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
                       {label}
                     </button>
                   );

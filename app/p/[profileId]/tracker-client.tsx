@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import Image from "next/image";
 import {
   useEffect,
   useRef,
@@ -92,11 +90,13 @@ type TaskFormState = RepeatFormState & {
   startDate: string;
   dueAt: string;
   category: string;
+  notes: string;
   projectId: string;
 };
 
 type ViewMode = "day" | "week" | "month";
 type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
+type TaskView = "active" | "today" | "upcoming" | "overdue" | "done" | "archived";
 type DoneRange = "today" | "week" | "month" | "all";
 type SortMode = "start-date" | "due-date" | "manual";
 type DeleteMode = "this" | "future" | "series";
@@ -143,11 +143,13 @@ const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
 ];
 const VALID_VIEW_MODES = new Set<ViewMode>(["day", "week", "month"]);
 
-const OPEN_FILTER_OPTIONS: Array<{ value: OpenFilter; label: string }> = [
-  { value: "all-active", label: "All Active" },
+const TASK_VIEW_OPTIONS: Array<{ value: TaskView; label: string }> = [
+  { value: "active", label: "Active" },
   { value: "today", label: "Today" },
   { value: "upcoming", label: "Upcoming" },
   { value: "overdue", label: "Overdue" },
+  { value: "done", label: "Done" },
+  { value: "archived", label: "Archived" },
 ];
 
 const DONE_RANGE_OPTIONS: Array<{ value: DoneRange; label: string }> = [
@@ -196,9 +198,6 @@ const chipClass = "tm-chip rounded-full border px-2 py-0.5";
 const smallChipClass = "tm-chip rounded-full border px-2 py-0.5 text-xs";
 const priorityChipClass =
   "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800";
-const tabSetClass = "tm-tabset inline-flex rounded-md border p-1 text-sm";
-const tabClass = "tm-tab rounded px-3 py-1";
-const activeTabClass = "tm-tab-active rounded px-3 py-1";
 const segmentedTabSetClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentedTabClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
@@ -212,6 +211,15 @@ const matrixHeaderCellClass =
 const matrixCellClass = "px-3 py-2.5 align-top";
 const iconButtonClass =
   "tm-button inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-sm";
+const taskMatrixHeaderClass =
+  "grid items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid-cols-[minmax(12rem,1.7fr)_minmax(8rem,0.8fr)_minmax(5rem,0.5fr)_minmax(6rem,0.6fr)_auto]";
+
+function taskViewToOpenFilter(taskView: TaskView): OpenFilter {
+  if (taskView === "today") return "today";
+  if (taskView === "upcoming") return "upcoming";
+  if (taskView === "overdue") return "overdue";
+  return "all-active";
+}
 
 function reorderIds(
   orderedIds: string[],
@@ -1027,6 +1035,7 @@ function createEmptyTaskForm(dateValue = todayInputValue()): TaskFormState {
     startDate: dateValue,
     dueAt: "",
     category: "",
+    notes: "",
     projectId: "",
     ...createRepeatDefaults(dateValue),
   };
@@ -1118,9 +1127,10 @@ function RepeatFields<T extends RepeatFormState>({
                   return (
                     <button
                       key={`${label}-${weekday}`}
-                      className={`h-9 w-9 rounded-full border text-sm ${
-                        selected ? "tm-button-primary" : "tm-button"
+                      className={`tm-repeat-day h-9 w-9 rounded-full border text-sm ${
+                        selected ? "tm-repeat-day-selected" : "tm-repeat-day-unselected"
                       }`}
+                      aria-pressed={selected}
                       type="button"
                       onClick={() =>
                         onChange((prev) => {
@@ -1147,6 +1157,22 @@ function RepeatFields<T extends RepeatFormState>({
                         })
                       }
                     >
+                      {selected && (
+                        <svg
+                          className="tm-repeat-day-check"
+                          aria-hidden="true"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                        >
+                          <path
+                            d="M2.25 6.25 4.75 8.75 9.75 3.25"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
                       {label}
                     </button>
                   );
@@ -1197,7 +1223,7 @@ function Modal({
 
   return (
     <div className="tm-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className={`${cardClass} w-full max-w-lg p-5 shadow-2xl`}>
+      <div className={`${cardClass} max-h-[90vh] w-full max-w-lg overflow-y-auto p-5 shadow-2xl`}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
@@ -1211,6 +1237,116 @@ function Modal({
         {children}
       </div>
     </div>
+  );
+}
+
+function TaskNotesButton({ notes }: { notes: string }) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+    placement: "above" | "below";
+    width: number;
+  } | null>(null);
+
+  function updatePosition() {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(380, window.innerWidth - 32);
+    const left = Math.min(
+      Math.max(16, rect.left),
+      Math.max(16, window.innerWidth - width - 16)
+    );
+    const placement =
+      window.innerHeight - rect.bottom < 180 && rect.top > 180 ? "above" : "below";
+    const top = placement === "above" ? rect.top - 8 : rect.bottom + 8;
+
+    setPosition({ left, top, placement, width });
+  }
+
+  function toggleOpen() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+
+    updatePosition();
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (
+        buttonRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    function handleReposition() {
+      updatePosition();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        aria-expanded={open}
+        aria-label="View task notes"
+        className="tm-chip inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] transition-colors hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]"
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleOpen();
+        }}
+      >
+        📝
+      </button>
+      {open && position && (
+        <div
+          ref={popoverRef}
+          className="fixed z-[80] max-h-64 overflow-auto whitespace-pre-wrap rounded-[12px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-xs leading-5 text-[color:var(--tm-text)] shadow-2xl"
+          style={{
+            left: position.left,
+            top: position.top,
+            width: position.width,
+            transform:
+              position.placement === "above" ? "translateY(-100%)" : undefined,
+          }}
+        >
+          {notes}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1290,13 +1426,30 @@ function TaskRow({
   const isEditing = editingTitleTaskId === task.id;
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!actionsRef.current?.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [actionsOpen]);
 
   return (
     <div
-      className={`rounded-md border p-2.5 ${
+      className={`border-b border-[color:var(--tm-border)] px-2 py-2 transition-colors hover:bg-white/45 ${
         projectArchived
-          ? "border-amber-300/20 bg-amber-200/5"
-          : "tm-card"
+          ? "bg-amber-100/20"
+          : "bg-transparent"
       } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
         draggable ? "cursor-grab" : ""
       } ${dragActive ? "opacity-60" : ""} ${
@@ -1312,9 +1465,9 @@ function TaskRow({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2.5">
+      <div className="grid items-center gap-2 md:grid-cols-[minmax(12rem,1.7fr)_minmax(8rem,0.8fr)_minmax(5rem,0.5fr)_minmax(6rem,0.6fr)_auto]">
         {selectMode && (
-          <label className="tm-choice flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs">
+          <label className="tm-choice flex items-center gap-2 rounded-md border px-2 py-1 text-xs md:col-span-5">
             <input
               type="checkbox"
               checked={selected}
@@ -1323,7 +1476,7 @@ function TaskRow({
             <span>Select</span>
           </label>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           {isEditing ? (
             <input
               autoFocus
@@ -1345,35 +1498,20 @@ function TaskRow({
             />
           ) : (
             <button
-              className="min-w-0 text-left text-sm font-medium hover:opacity-80"
+              className="min-w-0 text-left text-sm font-medium leading-5 hover:opacity-80"
               type="button"
               onClick={() => onStartTitleEdit(task)}
             >
-              <span className={isTaskCompleted(task) ? "line-through opacity-70" : ""}>
+              <span className={`line-clamp-1 ${isTaskCompleted(task) ? "line-through opacity-70" : ""}`}>
                 {task.title}
               </span>
             </button>
           )}
-          {task.notes && <p className="tm-muted mt-1.5 text-xs">{task.notes}</p>}
-          <div className="tm-muted mt-2 flex flex-wrap gap-1.5 text-[11px]">
-            {task.isPriority && (
-              <span className={priorityChipClass}>
-                Priority
-              </span>
-            )}
-            {projectArchived && (
-              <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
-                Archived
-              </span>
-            )}
-            <span className={chipClass}>
-              Start {toDateOnly(task.startDate)}
-            </span>
-            <span className={chipClass}>
-              Due {toDateOnly(task.dueAt) || "—"}
-            </span>
-            {isEditingCategory ? (
-              <div className="tm-chip flex flex-wrap items-center gap-2 rounded-full border px-2 py-0.5">
+        </div>
+
+        <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
+          {isEditingCategory ? (
+            <div className="tm-chip flex flex-wrap items-center gap-2 rounded-md border px-2 py-1">
                 <CategoryCombobox
                   autoFocus
                   className="min-w-32 bg-transparent outline-none"
@@ -1407,73 +1545,106 @@ function TaskRow({
                 >
                   Cancel
                 </button>
-              </div>
-            ) : (
-              <button
-                className="tm-chip rounded-full border px-2 py-0.5 text-left transition-colors hover:bg-white/70"
-                type="button"
-                onClick={() => onStartCategoryEdit(task)}
-              >
-                Category {task.category ?? "—"}
-              </button>
-            )}
-            {projectName && (
-              <span className={chipClass}>
-                Project {projectName}
-              </span>
-            )}
-            {repeatSummary && (
-              <span className={chipClass}>
-                {repeatSummary}
-              </span>
-            )}
-            {task.completedOn && (
-              <span className={chipClass}>
-                Done {toDateOnly(task.completedOn)}
-              </span>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button
+              className="line-clamp-1 text-left transition-colors hover:text-[color:var(--tm-text)]"
+              type="button"
+              onClick={() => onStartCategoryEdit(task)}
+            >
+              {task.category ?? "Uncategorized"}
+            </button>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          {showSnoozeAction && (
-            <SnoozeMenu
-              label="Snooze"
-              disabled={snoozeDisabled}
-              onPickDate={() => onPickSnoozeDate(task)}
-              onSelectPreset={(preset) => onSnoozePreset(task, preset)}
-            />
+        <div className="text-xs text-[color:var(--tm-muted)]">
+          {toDateOnly(task.dueAt) || "—"}
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--tm-muted)]">
+          {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
+          {task.notes?.trim() && (
+            <TaskNotesButton notes={task.notes.trim()} />
           )}
+          {task.isPriority && <span className={priorityChipClass}>Priority</span>}
+          {projectArchived && (
+            <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
+              Archived
+            </span>
+          )}
+          {projectName && <span className="line-clamp-1">{projectName}</span>}
+          {task.completedOn && <span>Done {toDateOnly(task.completedOn)}</span>}
+        </div>
+
+        <div className="relative justify-self-start md:justify-self-end" ref={actionsRef}>
           <button
-            className={compactButtonClass}
+            aria-expanded={actionsOpen}
+            aria-label={`Task actions for ${task.title}`}
+            className={iconButtonClass}
             type="button"
-            onClick={() => onTogglePriority(task)}
+            onClick={() => setActionsOpen((prev) => !prev)}
           >
-            {task.isPriority ? "Unprioritise" : "Prioritise"}
+            ⋯
           </button>
-          <button
-            className={compactButtonClass}
-            type="button"
-            onClick={() => onOpenEditModal(task)}
-          >
-            Edit
-          </button>
-          <label className="tm-choice flex items-center gap-2 rounded-md border px-2.5 py-1">
-            <input
-              type="checkbox"
-              checked={isTaskCompleted(task)}
-              disabled={completionPending}
-              onChange={(e) => onToggleCompleted(task, e.target.checked)}
-            />
-            <span>{isTaskCompleted(task) ? "Done" : "Open"}</span>
-          </label>
-          <button
-            className={compactButtonClass}
-            type="button"
-            onClick={() => onDelete(task)}
-          >
-            Delete
-          </button>
+
+          {actionsOpen && (
+            <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
+              {showSnoozeAction && (
+                <button
+                  className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
+                  disabled={snoozeDisabled}
+                  type="button"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    onPickSnoozeDate(task);
+                  }}
+                >
+                  Snooze
+                </button>
+              )}
+              <button
+                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onTogglePriority(task);
+                }}
+              >
+                {task.isPriority ? "Unprioritise" : "Prioritise"}
+              </button>
+              <button
+                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onOpenEditModal(task);
+                }}
+              >
+                Edit
+              </button>
+              <button
+                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
+                disabled={completionPending}
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onToggleCompleted(task, !isTaskCompleted(task));
+                }}
+              >
+                {isTaskCompleted(task) ? "Open" : "Done"}
+              </button>
+              <button
+                className="block w-full px-3 py-2 text-left text-sm text-red-700 transition-colors hover:bg-red-50"
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onDelete(task);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1582,7 +1753,6 @@ export function TrackerClient({
   const router = useRouter();
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
-  const quickAddInputRef = useRef<HTMLInputElement | null>(null);
   const dragOrderSnapshotRef = useRef<Task[] | null>(null);
   const projectDragOrderSnapshotRef = useRef<Project[] | null>(null);
   const lastSavedPreferencesRef = useRef<{
@@ -1598,12 +1768,12 @@ export function TrackerClient({
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(todayInputValue);
   const [viewMode, setViewMode] = useState<ViewMode>("day");
-  const [openFilter, setOpenFilter] = useState<OpenFilter>("all-active");
+  const [taskView, setTaskView] = useState<TaskView>("active");
   const [doneRange, setDoneRange] = useState<DoneRange>("today");
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectSaving, setNewProjectSaving] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
@@ -1723,11 +1893,10 @@ export function TrackerClient({
     setEditingCategoryTaskId(null);
     setEditingCategoryValue("");
     setSelectedDay(todayInputValue());
-    setOpenFilter("all-active");
+    setTaskView("active");
     setDoneRange("today");
     setSortMode("manual");
     setSearchQuery("");
-    setShowArchived(false);
     setNewProjectOpen(false);
     setEditProjectId(null);
     setEditProjectForm(null);
@@ -1868,9 +2037,12 @@ export function TrackerClient({
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchActive = normalizedSearchQuery.length > 0;
-  const visibleProjects = projects.filter((project) => showArchived || !project.archived);
+  const archivedView = taskView === "archived";
+  const visibleProjects = projects.filter((project) =>
+    archivedView ? project.archived : !project.archived
+  );
   const assignableProjects = projects.filter(
-    (project) => showArchived || !project.archived
+    (project) => archivedView || !project.archived
   );
   const matchingActiveProjects = searchActive
     ? projects.filter(
@@ -1885,7 +2057,9 @@ export function TrackerClient({
       )
     : [];
 
-  const visibleTasks = filterTasksByArchivedVisibility(tasks, projectById, showArchived);
+  const visibleTasks = archivedView
+    ? tasks.filter((task) => isTaskInArchivedProject(task, projectById))
+    : filterTasksByArchivedVisibility(tasks, projectById, false);
   const dayInsights = getDayInsightMetrics(visibleTasks, selectedDay);
   const weekInsights = getWeekInsightMetrics(visibleTasks, selectedDay, true, averageBasis);
   const monthInsights = getMonthInsightMetrics(visibleTasks, selectedDay, true, averageBasis);
@@ -1902,7 +2076,7 @@ export function TrackerClient({
     (task) => getTaskProjectLabel(task, projectById)
   );
   const progressTasks = visibleTasks.filter((task) =>
-    isTaskVisibleForProgress(task, projectById, showArchived)
+    isTaskVisibleForProgress(task, projectById, archivedView)
   );
   const progressTotal = progressTasks.filter((task) =>
     countsTowardDayProgress(task, selectedDay)
@@ -1957,6 +2131,7 @@ export function TrackerClient({
     monthStartValue,
     monthEndValue
   );
+  const openFilter = taskViewToOpenFilter(taskView);
   const openTasks = projectedOpenTasks[
     openFilter === "all-active"
       ? "allActive"
@@ -1991,17 +2166,28 @@ export function TrackerClient({
     if (!task.projectId) return true;
 
     const project = projectById.get(task.projectId);
-    return project ? showArchived || !project.archived : true;
+    return project ? archivedView || !project.archived : true;
   }
 
-  const dayOpenTasks = sortedOpenTasks.filter(
-    (task) =>
-      isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
+  const activeDayOpenTasks = sortedOpenTasks.filter(
+    (task) => isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
   const dayDoneTasks = doneTasks.filter(
     (task) =>
       isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
+  const archivedDayTasks = sortTasks(
+    tasks.filter(
+      (task) =>
+        isTaskInArchivedProject(task, projectById) &&
+        matchesTaskSearch(task, searchQuery, projectById)
+    ),
+    sortMode
+  );
+  const dayViewTasks =
+    taskView === "done" ? dayDoneTasks : taskView === "archived" ? archivedDayTasks : activeDayOpenTasks;
+  const matrixTasks =
+    taskView === "done" ? doneTasks : taskView === "archived" ? archivedDayTasks : sortedOpenTasks;
   const searchResults = visibleTasks.filter((task) =>
     matchesTaskSearch(task, searchQuery, projectById)
   );
@@ -2116,7 +2302,7 @@ export function TrackerClient({
       label: "Recurring",
       project: null,
       collapsed: false,
-      openTasks: dayOpenTasks.filter((task) => isRecurringTask(task)),
+      openTasks: dayViewTasks.filter((task) => isRecurringTask(task)),
       doneTasks: dayDoneTasks.filter((task) => isRecurringTask(task)),
       progressTotal: 0,
       progressCompleted: 0,
@@ -2126,7 +2312,7 @@ export function TrackerClient({
       label: "Unassigned",
       project: null,
       collapsed: false,
-      openTasks: dayOpenTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
+      openTasks: dayViewTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
       doneTasks: dayDoneTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
       progressTotal: 0,
       progressCompleted: 0,
@@ -2136,7 +2322,7 @@ export function TrackerClient({
       label: project.name,
       project,
       collapsed: project.collapsed,
-      openTasks: dayOpenTasks.filter((task) => task.projectId === project.id),
+      openTasks: dayViewTasks.filter((task) => task.projectId === project.id),
       doneTasks: dayDoneTasks.filter((task) => task.projectId === project.id),
       progressTotal: progressTasks.filter(
         (task) => task.projectId === project.id && countsTowardDayProgress(task, selectedDay)
@@ -2148,11 +2334,12 @@ export function TrackerClient({
       ).length,
     })),
   ];
+  const visibleGroupedSections = groupedSections.filter((section) => section.openTasks.length > 0);
   const visibleDayTaskIds = Array.from(
     new Set(
       (searchActive
         ? searchSections.flatMap((section) => section.tasks)
-        : groupedSections.flatMap((section) => [...section.openTasks, ...section.doneTasks])
+        : visibleGroupedSections.flatMap((section) => section.openTasks)
       ).map((task) => task.id)
     )
   );
@@ -2196,14 +2383,14 @@ export function TrackerClient({
   const editTask = editTaskId ? tasks.find((task) => task.id === editTaskId) ?? null : null;
   const projectOptions = projects.filter(
     (project) =>
-      !project.archived || showArchived || project.id === (editTask?.projectId ?? "")
+      !project.archived || archivedView || project.id === (editTask?.projectId ?? "")
   );
   const newTaskProjectOptions = assignableProjects;
   const isReportingPage = pageMode === "reporting";
   const manualReorderEnabled =
     viewMode === "day" &&
     !searchActive &&
-    openFilter === "all-active" &&
+    taskView === "active" &&
     sortMode === "manual" &&
     !selectMode;
 
@@ -2248,6 +2435,7 @@ export function TrackerClient({
           startDate: form.startDate,
           dueAt: form.dueAt || null,
           category: form.category || null,
+          notes: form.notes.trim() || null,
           projectId: form.projectId || null,
           repeatEnabled: form.repeatEnabled,
           repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
@@ -2275,6 +2463,7 @@ export function TrackerClient({
       const task = (await res.json()) as Task;
       setTasks((prev) => [task, ...prev]);
       setForm(createEmptyTaskForm(selectedDay));
+      setNewTaskOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -2314,9 +2503,6 @@ export function TrackerClient({
       const task = (await res.json()) as Task;
       setTasks((prev) => [task, ...prev]);
       setQuickAddValue("");
-      requestAnimationFrame(() => {
-        quickAddInputRef.current?.focus();
-      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -2458,7 +2644,7 @@ export function TrackerClient({
       return;
     }
 
-    const orderedIds = dayOpenTasks.map((task) => task.id);
+    const orderedIds = activeDayOpenTasks.map((task) => task.id);
     const nextOrderedIds = reorderTaskIds(orderedIds, draggedTaskId, targetTaskId, position);
 
     if (nextOrderedIds.every((id, index) => id === orderedIds[index])) {
@@ -2930,31 +3116,10 @@ export function TrackerClient({
       <section className="space-y-4 text-[color:var(--tm-text)]">
         <div className={commandBarClass}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Link
-                className="inline-flex h-10 items-center gap-3 rounded-[10px] px-2 text-sm transition-opacity hover:opacity-100"
-                href="/"
-              >
-                <Image
-                  src="/logo.png"
-                  alt="TaskManager"
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 rounded-md"
-                />
-                <span className="tm-muted">← Back to profiles</span>
-              </Link>
-              <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
-                {currentProfileName}
-              </span>
-              <div className={tabSetClass}>
-                <Link className={tabClass} href={`/p/${profileId}`}>
-                  Tracker
-                </Link>
-                <Link className={activeTabClass} href={`/p/${profileId}/reporting`}>
-                  Reporting
-                </Link>
-              </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
+              {currentProfileName}
+            </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -3015,14 +3180,6 @@ export function TrackerClient({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="tm-choice flex h-10 items-center gap-2 rounded-[10px] border px-3 text-sm">
-                <input
-                  checked={showArchived}
-                  type="checkbox"
-                  onChange={(e) => setShowArchived(e.target.checked)}
-                />
-                <span>Show archived</span>
               </label>
             </div>
           </div>
@@ -3161,30 +3318,9 @@ export function TrackerClient({
       <div className={commandBarClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Link
-              className="inline-flex h-10 items-center gap-3 rounded-[10px] px-2 text-sm transition-opacity hover:opacity-100"
-              href="/"
-            >
-              <Image
-                src="/logo.png"
-                alt="TaskManager"
-                width={28}
-                height={28}
-                className="h-7 w-7 rounded-md"
-              />
-              <span className="tm-muted">← Back to profiles</span>
-            </Link>
             <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
               {currentProfileName}
             </span>
-            <div className={tabSetClass}>
-              <Link className={activeTabClass} href={`/p/${profileId}`}>
-                Tracker
-              </Link>
-              <Link className={tabClass} href={`/p/${profileId}/reporting`}>
-                Reporting
-              </Link>
-            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -3218,42 +3354,10 @@ export function TrackerClient({
           </div>
 
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <div className="relative min-w-0 max-w-[32rem] flex-1 basis-full sm:min-w-[18rem] lg:basis-auto">
-              <input
-                className={`w-full ${inputClass} pr-9`}
-                placeholder="Search title, category, notes"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape" && searchQuery.trim()) {
-                    e.preventDefault();
-                    clearSearch();
-                  }
-                }}
-              />
-              {searchQuery.trim() && (
-                <button
-                  aria-label="Clear search"
-                  className="tm-muted absolute right-2 top-1/2 -translate-y-1/2 rounded-sm px-1 text-sm transition-opacity hover:opacity-100"
-                  type="button"
-                  onClick={clearSearch}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <label className="tm-choice flex h-10 items-center gap-2 rounded-[10px] border px-3 text-sm">
-              <input
-                checked={showArchived}
-                type="checkbox"
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />
-              <span>{searchActive ? "Include archived" : "Show archived"}</span>
-            </label>
             <button
               className={primaryButtonClass}
               type="button"
-              onClick={() => quickAddInputRef.current?.focus()}
+              onClick={() => setNewTaskOpen(true)}
             >
               + Task
             </button>
@@ -3564,23 +3668,6 @@ export function TrackerClient({
             </div>
           </div>
 
-          <form
-            className="mb-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submitQuickAdd();
-            }}
-          >
-            <input
-              ref={quickAddInputRef}
-              className={`w-full ${inputClass} text-sm transition-colors`}
-              disabled={quickAddSaving}
-              placeholder="Quick add... (Enter to add)"
-              value={quickAddValue}
-              onChange={(e) => setQuickAddValue(e.target.value)}
-            />
-          </form>
-
           {searchActive ? (
             <div className="tm-muted mb-4 text-sm">
               Found {searchResultCount} matching task
@@ -3589,18 +3676,25 @@ export function TrackerClient({
           ) : (
             <>
               <div className="mb-4 flex flex-wrap gap-2">
-                {OPEN_FILTER_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`rounded-md border px-3 py-1 text-sm ${
-                      openFilter === option.value ? "tm-button-primary" : "tm-button"
-                    }`}
-                    type="button"
-                    onClick={() => setOpenFilter(option.value)}
-                  >
-                    Open: {option.label}
-                  </button>
-                ))}
+                <details className="relative">
+                  <summary className="tm-button flex h-9 cursor-pointer list-none items-center rounded-[10px] border px-3 text-sm">
+                    View: {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label}
+                  </summary>
+                  <div className="tm-menu absolute left-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
+                    {TASK_VIEW_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 ${
+                          taskView === option.value ? "font-semibold" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setTaskView(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
                 <select
                   className={`${inputClass} py-1 text-sm`}
                   value={sortMode}
@@ -3612,22 +3706,24 @@ export function TrackerClient({
                     </option>
                   ))}
                 </select>
-                <select
-                  className={`${inputClass} py-1 text-sm`}
-                  value={doneRange}
-                  onChange={(e) => setDoneRange(e.target.value as DoneRange)}
-                >
-                  {DONE_RANGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value} className="text-black">
-                      Done: {option.label}
-                    </option>
-                  ))}
-                </select>
+                {taskView === "done" && (
+                  <select
+                    className={`${inputClass} py-1 text-sm`}
+                    value={doneRange}
+                    onChange={(e) => setDoneRange(e.target.value as DoneRange)}
+                  >
+                    {DONE_RANGE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value} className="text-black">
+                        Done: {option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="tm-muted mb-4 text-sm">
-                Showing {dayOpenTasks.length} open and {dayDoneTasks.length} done task
-                {(dayOpenTasks.length + dayDoneTasks.length) === 1 ? "" : "s"}.
+                Showing {dayViewTasks.length} {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label.toLowerCase()} task
+                {dayViewTasks.length === 1 ? "" : "s"}.
                 {manualReorderEnabled ? " Drag open rows to reorder them." : ""}
               </div>
             </>
@@ -3762,10 +3858,10 @@ export function TrackerClient({
                     <h3 className="text-base font-semibold">Projects</h3>
                     <div className="tm-muted text-sm">
                       {matchingActiveProjects.length +
-                        (showArchived ? matchingArchivedProjects.length : 0)}{" "}
+                        (archivedView ? matchingArchivedProjects.length : 0)}{" "}
                       result
                       {matchingActiveProjects.length +
-                        (showArchived ? matchingArchivedProjects.length : 0) ===
+                        (archivedView ? matchingArchivedProjects.length : 0) ===
                       1
                         ? ""
                         : "s"}
@@ -3791,7 +3887,7 @@ export function TrackerClient({
                     )}
                   </div>
 
-                  {showArchived && (
+                  {archivedView && (
                     <div>
                       <div className="mb-2 text-sm font-medium">
                         Archived Projects
@@ -3836,7 +3932,14 @@ export function TrackerClient({
                   {section.tasks.length === 0 ? (
                     <div className="text-sm opacity-50">No matching tasks.</div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="overflow-hidden rounded-md border border-[color:var(--tm-border)]">
+                      <div className={taskMatrixHeaderClass}>
+                        <span>Title</span>
+                        <span>Category</span>
+                        <span>Due</span>
+                        <span>Tags / Notes</span>
+                        <span className="text-left md:text-right">Actions</span>
+                      </div>
                       {section.tasks.map((task) => (
                         <TaskRow
                           key={task.id}
@@ -3894,8 +3997,11 @@ export function TrackerClient({
               )}
             </div>
           ) : (
-            <div className="space-y-4">
-              {groupedSections.map((section) => {
+            <div className="space-y-3">
+              {visibleGroupedSections.length === 0 && (
+                <div className="text-sm opacity-60">No matching tasks for this view.</div>
+              )}
+              {visibleGroupedSections.map((section) => {
                 const subtitle = section.project
                   ? [
                       section.project.category ? `Category ${section.project.category}` : null,
@@ -3916,10 +4022,10 @@ export function TrackerClient({
                   <section
                     key={section.key}
                     id={section.project ? `project-${section.project.id}` : undefined}
-                    className={`rounded-xl border p-4 ${
+                    className={`rounded-md border px-3 py-2 ${
                       section.project?.archived
                         ? "border-amber-300/20 bg-amber-200/5"
-                        : "tm-card"
+                        : "border-[color:var(--tm-border)] bg-white/25"
                     } ${section.project ? "cursor-grab active:cursor-grabbing" : ""} ${
                       draggedProjectId === section.project?.id ? "opacity-60" : ""
                     } ${
@@ -3973,10 +4079,10 @@ export function TrackerClient({
                         : undefined
                     }
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--tm-border)] pb-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-base font-semibold">{section.label}</h3>
+                          <h3 className="text-sm font-medium">{section.label}</h3>
                           {section.project?.isPriority && (
                             <span className={priorityChipClass}>
                               Priority
@@ -3988,12 +4094,12 @@ export function TrackerClient({
                             </span>
                           )}
                           <span className={`${smallChipClass} opacity-100`}>
-                            {section.openTasks.length} open / {section.doneTasks.length} done
+                            {section.openTasks.length}
                           </span>
                         </div>
-                        <div className="tm-muted mt-1 text-sm">{subtitle}</div>
+                        <div className="tm-muted mt-1 text-xs">{subtitle}</div>
                         {section.project && (
-                          <div className="mt-3 max-w-md">
+                          <div className="mt-2 max-w-md">
                             <div className="tm-muted mb-2 flex items-center justify-between text-xs">
                               <span>Day progress</span>
                               <span>
@@ -4020,7 +4126,7 @@ export function TrackerClient({
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {section.project && (
                           <>
                             <button
@@ -4064,15 +4170,18 @@ export function TrackerClient({
                     </div>
 
                     {!section.collapsed && (
-                      <div className="mt-4 space-y-4">
+                      <div className="mt-2 space-y-3">
                         <div>
-                          <div className="mb-2 text-sm font-medium opacity-80">Open</div>
-                          {section.openTasks.length === 0 ? (
-                            <div className="text-sm opacity-50">No open tasks.</div>
-                          ) : (
-                            <div className="space-y-3">
-                              {section.openTasks.map((task) => (
-                                <TaskRow
+                          <div className="overflow-hidden rounded-md border border-[color:var(--tm-border)]">
+                            <div className={taskMatrixHeaderClass}>
+                              <span>Title</span>
+                              <span>Category</span>
+                              <span>Due</span>
+                              <span>Tags / Notes</span>
+                              <span className="text-left md:text-right">Actions</span>
+                            </div>
+                            {section.openTasks.map((task) => (
+                              <TaskRow
                                   key={task.id}
                                   task={task}
                                   draggable={manualReorderEnabled}
@@ -4151,69 +4260,16 @@ export function TrackerClient({
                                         : "before"
                                     );
                                   }}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <div className="mb-2 text-sm font-medium opacity-80">Done</div>
-                          {section.doneTasks.length === 0 ? (
-                            <div className="text-sm opacity-50">No done tasks.</div>
-                          ) : (
-                            <div className="space-y-3">
-                              {section.doneTasks.map((task) => (
-                                <TaskRow
-                                  key={task.id}
-                                  task={task}
-                                  completionPending={completionPendingTaskIds.includes(
-                                    task.id
-                                  )}
-                                  selectMode={selectMode}
-                                  selected={selectedTaskIds.includes(task.id)}
-                                  editingTitleTaskId={editingTitleTaskId}
-                                  editingTitleValue={editingTitleValue}
-                                  editingCategoryTaskId={editingCategoryTaskId}
-                                  editingCategoryValue={editingCategoryValue}
-                                  categorySuggestions={categorySuggestions}
-                                  onStartTitleEdit={startTitleEdit}
-                                  onChangeTitleEdit={setEditingTitleValue}
-                                  onCancelTitleEdit={cancelTitleEdit}
-                                  onSaveTitleEdit={() => void saveTitleEdit()}
-                                  onToggleSelected={toggleTaskSelected}
-                                  onStartCategoryEdit={startCategoryEdit}
-                                  onChangeCategoryEdit={setEditingCategoryValue}
-                                  onCancelCategoryEdit={cancelCategoryEdit}
-                                  onSaveCategoryEdit={() => void saveCategoryEdit()}
-                                  onOpenEditModal={openTaskEditor}
-                                  onToggleCompleted={(nextTask, completed) =>
-                                    void toggleTaskCompleted(nextTask.id, completed).catch(
-                                      (err: unknown) =>
-                                        setError(
-                                          err instanceof Error
-                                            ? err.message
-                                            : "Could not update task"
-                                        )
-                                    )
-                                  }
-                                  onSnoozePreset={snoozeTask}
-                                  onPickSnoozeDate={openSingleTaskSnoozeDate}
-                                  onTogglePriority={toggleTaskPriority}
-                                  showSnoozeAction={false}
-                                  snoozeDisabled={bulkSaving}
-                                  onDelete={requestDeleteTask}
-                                />
-                              ))}
-                            </div>
-                          )}
+                              />
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
                   </section>
                 );
               })}
-              {groupedSections.length === 0 && (
+              {visibleGroupedSections.length === 0 && (
                 <div className="text-sm opacity-60">No matching tasks for this day.</div>
               )}
             </div>
@@ -4231,7 +4287,7 @@ export function TrackerClient({
                     {nonDayOpenListLabel}
                   </span>
                 </div>
-                {openFilter === "today" && (
+                {taskView === "today" && (
                   <div className="tm-muted mt-1 text-xs">
                     Today includes tasks that start today or are due today.
                   </div>
@@ -4266,32 +4322,51 @@ export function TrackerClient({
                     ))}
                   </select>
                 </label>
-                <div className={segmentedTabSetClass}>
-                  {OPEN_FILTER_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      className={
-                        openFilter === option.value
-                          ? segmentedActiveTabClass
-                          : segmentedTabClass
-                      }
-                      type="button"
-                      onClick={() => setOpenFilter(option.value)}
+                <details className="relative">
+                  <summary className="tm-button flex h-10 cursor-pointer list-none items-center rounded-[10px] border px-3 text-sm">
+                    View: {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label}
+                  </summary>
+                  <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
+                    {TASK_VIEW_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 ${
+                          taskView === option.value ? "font-semibold" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setTaskView(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+                {taskView === "done" && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <span className="tm-muted">Range</span>
+                    <select
+                      className={`${inputClass} min-w-[10rem]`}
+                      value={doneRange}
+                      onChange={(e) => setDoneRange(e.target.value as DoneRange)}
                     >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                      {DONE_RANGE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value} className="text-black">
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
             </div>
 
             {loading ? (
               <div className="text-sm opacity-60">Loading tasks…</div>
-            ) : sortedOpenTasks.length === 0 ? (
-              <div className="text-sm opacity-60">No matching open tasks.</div>
+            ) : matrixTasks.length === 0 ? (
+              <div className="text-sm opacity-60">No matching tasks.</div>
             ) : (
               <div className="relative max-h-[520px] max-w-full overflow-y-auto overflow-x-auto">
-                <table className="min-w-[56rem] table-fixed border-separate border-spacing-0 text-sm">
+                <table className="min-w-[50rem] table-fixed border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
                       <th className={`${matrixHeaderCellClass} w-[40%]`}>Task</th>
@@ -4299,13 +4374,11 @@ export function TrackerClient({
                       <th className={`${matrixHeaderCellClass} w-[14%]`}>Category</th>
                       <th className={`${matrixHeaderCellClass} w-[120px]`}>Due</th>
                       <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
-                      <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Done</th>
-                      <th className={`${matrixHeaderCellClass} w-[128px] text-center`}>Priority</th>
-                      <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Delete</th>
+                      <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedOpenTasks.map((task) => (
+                    {matrixTasks.map((task) => (
                       <tr
                         key={task.id}
                         className={`tm-table-row border-t align-top ${
@@ -4316,7 +4389,12 @@ export function TrackerClient({
                       >
                         <td className={matrixCellClass}>
                           <div className="min-w-0">
-                            <div className="truncate font-semibold">{task.title}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-semibold">{task.title}</span>
+                              {task.notes?.trim() && (
+                                <TaskNotesButton notes={task.notes.trim()} />
+                              )}
+                            </div>
                             <div className="tm-muted mt-1 flex flex-wrap gap-1.5 text-[11px]">
                               {showStartChipInTables && (
                                 <span className={smallChipClass}>
@@ -4345,41 +4423,35 @@ export function TrackerClient({
                         <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
                         <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
                         <td className={`${matrixCellClass} text-center`}>
-                          <input
-                            aria-label={`Mark ${task.title} done`}
-                            type="checkbox"
-                            checked={false}
-                            disabled={completionPendingTaskIds.includes(task.id)}
-                            onChange={() =>
-                              void toggleTaskCompleted(task.id, true).catch(
-                                (err: unknown) =>
-                                  setError(
-                                    err instanceof Error
-                                      ? err.message
-                                      : "Could not update task"
+                          <details className="relative inline-block">
+                            <summary className={`${iconButtonClass} cursor-pointer list-none`}>⋯</summary>
+                            <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 text-left shadow-2xl">
+                              <button className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" type="button" onClick={() => openSingleTaskSnoozeDate(task)}>
+                                Snooze
+                              </button>
+                              <button className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" type="button" onClick={() => void toggleTaskPriority(task)}>
+                                {task.isPriority ? "Unprioritise" : "Prioritise"}
+                              </button>
+                              <button className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" type="button" onClick={() => openTaskEditor(task)}>
+                                Edit
+                              </button>
+                              <button
+                                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
+                                disabled={completionPendingTaskIds.includes(task.id)}
+                                type="button"
+                                onClick={() =>
+                                  void toggleTaskCompleted(task.id, taskView !== "done").catch((err: unknown) =>
+                                    setError(err instanceof Error ? err.message : "Could not update task")
                                   )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className={`${matrixCellClass} text-center`}>
-                          <button
-                            className={compactButtonClass}
-                            type="button"
-                            onClick={() => void toggleTaskPriority(task)}
-                          >
-                            {task.isPriority ? "Unprioritise" : "Prioritise"}
-                          </button>
-                        </td>
-                        <td className={`${matrixCellClass} text-center`}>
-                          <button
-                            aria-label={`Delete ${task.title}`}
-                            className={iconButtonClass}
-                            type="button"
-                            onClick={() => requestDeleteTask(task)}
-                          >
-                            ×
-                          </button>
+                                }
+                              >
+                                {taskView === "done" ? "Open" : "Done"}
+                              </button>
+                              <button className="block w-full px-3 py-2 text-left text-sm text-red-700 transition-colors hover:bg-red-50" type="button" onClick={() => requestDeleteTask(task)}>
+                                Delete
+                              </button>
+                            </div>
+                          </details>
                         </td>
                       </tr>
                     ))}
@@ -4389,150 +4461,17 @@ export function TrackerClient({
             )}
           </section>
 
-          <details
-            open
-            className="rounded-[12px] border border-[color:var(--tm-border)] bg-[rgba(246,240,230,0.68)] p-4"
-          >
-            <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 text-sm">
-              <span className="flex items-center gap-3">
-                <span className="text-base font-medium text-[color:var(--tm-text)]">Done</span>
-                <span className="tm-muted">
-                  {doneTasks.length} completed task{doneTasks.length === 1 ? "" : "s"}
-                </span>
-              </span>
-              <label
-                className="flex items-center gap-2 text-sm"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <span className="tm-muted">Range</span>
-                <select
-                  className={`${inputClass} min-w-[10rem]`}
-                  value={doneRange}
-                  onChange={(e) => setDoneRange(e.target.value as DoneRange)}
-                >
-                  {DONE_RANGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value} className="text-black">
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </summary>
-
-            <div className="mt-4">
-              {loading ? (
-                <div className="text-sm opacity-60">Loading tasks…</div>
-              ) : doneTasks.length === 0 ? (
-                <div className="text-sm opacity-60">No completed tasks in this range.</div>
-              ) : (
-                <div className="relative max-h-[520px] max-w-full overflow-y-auto overflow-x-auto">
-                  <table className="min-w-[62rem] table-fixed border-separate border-spacing-0 text-sm">
-                    <thead>
-                      <tr>
-                        <th className={`${matrixHeaderCellClass} w-[36%]`}>Task</th>
-                        <th className={`${matrixHeaderCellClass} w-[14%]`}>Project</th>
-                        <th className={`${matrixHeaderCellClass} w-[14%]`}>Category</th>
-                        <th className={`${matrixHeaderCellClass} w-[120px]`}>Due</th>
-                        <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
-                        <th className={`${matrixHeaderCellClass} w-[120px]`}>Done on</th>
-                        <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>
-                          Open
-                        </th>
-                        <th className={`${matrixHeaderCellClass} w-[128px] text-center`}>
-                          Priority
-                        </th>
-                        <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>
-                          Delete
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {doneTasks.map((task) => (
-                        <tr
-                          key={task.id}
-                          className={`tm-table-row border-t align-top opacity-80 ${
-                            task.isPriority
-                              ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
-                              : ""
-                          }`}
-                        >
-                          <td className={matrixCellClass}>
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">{task.title}</div>
-                              <div className="tm-muted mt-1 flex flex-wrap gap-1.5 text-[11px]">
-                                {showStartChipInTables && (
-                                  <span className={smallChipClass}>
-                                    Start {formatShortDate(toDateOnly(task.startDate))}
-                                  </span>
-                                )}
-                                {task.isPriority && (
-                                  <span className={priorityChipClass}>
-                                    Priority
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className={`${matrixCellClass} tm-muted`}>
-                            {getTaskProjectLabel(task, projectById)}
-                          </td>
-                          <td className={`${matrixCellClass} tm-muted`}>
-                            {task.category ?? "—"}
-                          </td>
-                          <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
-                          <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
-                          <td className={matrixCellClass}>{toDateOnly(task.completedOn)}</td>
-                          <td className={`${matrixCellClass} text-center`}>
-                            <input
-                              aria-label={`Mark ${task.title} open`}
-                              type="checkbox"
-                              checked
-                              disabled={completionPendingTaskIds.includes(task.id)}
-                              onChange={() =>
-                                void toggleTaskCompleted(task.id, false).catch(
-                                  (err: unknown) =>
-                                    setError(
-                                      err instanceof Error
-                                        ? err.message
-                                        : "Could not update task"
-                                    )
-                                )
-                              }
-                            />
-                          </td>
-                          <td className={`${matrixCellClass} text-center`}>
-                            <button
-                              className={compactButtonClass}
-                              type="button"
-                              onClick={() => void toggleTaskPriority(task)}
-                            >
-                              {task.isPriority ? "Unprioritise" : "Prioritise"}
-                            </button>
-                          </td>
-                          <td className={`${matrixCellClass} text-center`}>
-                            <button
-                              aria-label={`Delete ${task.title}`}
-                              className={iconButtonClass}
-                              type="button"
-                              onClick={() => requestDeleteTask(task)}
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </details>
-
         </div>
       )}
 
-      <details className="rounded-[12px] border border-[color:var(--tm-border)] px-4 py-3">
-        <summary className="cursor-pointer text-sm font-medium">Advanced add task</summary>
+      <Modal
+        open={newTaskOpen}
+        title="Add Task"
+        onClose={() => {
+          if (saving) return;
+          setNewTaskOpen(false);
+        }}
+      >
         <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="tm-muted text-sm">Expanded task fields and repeat settings.</div>
           <button
@@ -4575,6 +4514,14 @@ export function TrackerClient({
               value={form.category}
               onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
             />
+            <textarea
+              className={`${inputClass} min-h-24 min-w-0 w-full py-2 sm:col-span-2`}
+              placeholder="Notes"
+              value={form.notes}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, notes: e.target.value }))
+              }
+            />
             <select
               className={`${inputClass} min-w-0 w-full`}
               value={form.projectId}
@@ -4607,7 +4554,7 @@ export function TrackerClient({
             onChange={(updater) => setForm((prev) => updater(prev))}
           />
         </form>
-      </details>
+      </Modal>
 
       <Modal
         open={Boolean(bulkScopeAction)}
