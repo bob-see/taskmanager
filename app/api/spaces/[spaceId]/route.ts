@@ -69,3 +69,38 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   return Response.json({ ...space, cells, currentMember: membership.member });
 }
+
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const { spaceId } = await ctx.params;
+
+  const currentUser = await getCurrentUserOr401();
+  if (currentUser.error) return currentUser.error;
+
+  const space = await prisma.collaborativeSpace.findUnique({
+    where: { id: spaceId },
+    select: {
+      id: true,
+      members: {
+        where: { userId: currentUser.user.id },
+        select: { role: true },
+      },
+    },
+  });
+
+  if (!space || space.members.length === 0) {
+    return Response.json({ error: "Space not found" }, { status: 404 });
+  }
+
+  if (space.members[0].role !== "owner") {
+    return Response.json(
+      { error: "Only owners can delete spaces" },
+      { status: 403 }
+    );
+  }
+
+  await prisma.collaborativeSpace.delete({
+    where: { id: spaceId },
+  });
+
+  return Response.json({ ok: true });
+}

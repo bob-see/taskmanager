@@ -7,6 +7,7 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ProjectEditorModal,
@@ -213,6 +214,8 @@ const iconButtonClass =
   "tm-button inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-sm";
 const taskMatrixHeaderClass =
   "grid items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid-cols-[minmax(12rem,1.7fr)_minmax(8rem,0.8fr)_minmax(5rem,0.5fr)_minmax(6rem,0.6fr)_auto]";
+const taskActionMenuItemClass =
+  "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50";
 
 function taskViewToOpenFilter(taskView: TaskView): OpenFilter {
   if (taskView === "today") return "today";
@@ -1350,6 +1353,190 @@ function TaskNotesButton({ notes }: { notes: string }) {
   );
 }
 
+function TaskActionMenu({
+  task,
+  completionPending = false,
+  snoozeDisabled = false,
+  showSnoozeAction = true,
+  completedActionLabel,
+  onPickSnoozeDate,
+  onTogglePriority,
+  onOpenEditModal,
+  onToggleCompleted,
+  onDelete,
+}: {
+  task: Task;
+  completionPending?: boolean;
+  snoozeDisabled?: boolean;
+  showSnoozeAction?: boolean;
+  completedActionLabel?: string;
+  onPickSnoozeDate: (task: Task) => void;
+  onTogglePriority: (task: Task) => void;
+  onOpenEditModal: (task: Task) => void;
+  onToggleCompleted: (task: Task) => void;
+  onDelete: (task: Task) => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+    placement: "above" | "below";
+  } | null>(null);
+
+  function updatePosition() {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuHeight = menuRef.current?.offsetHeight ?? (showSnoozeAction ? 188 : 152);
+    const gutter = 12;
+    const left = Math.min(
+      Math.max(gutter, rect.right - menuWidth),
+      Math.max(gutter, window.innerWidth - menuWidth - gutter)
+    );
+    const shouldOpenAbove =
+      window.innerHeight - rect.bottom < menuHeight + gutter &&
+      rect.top > menuHeight + gutter;
+    const top = shouldOpenAbove ? rect.top - 8 : rect.bottom + 8;
+
+    setPosition({
+      left,
+      top,
+      placement: shouldOpenAbove ? "above" : "below",
+    });
+  }
+
+  function closeMenu() {
+    setOpen(false);
+  }
+
+  function runAction(action: (task: Task) => void) {
+    closeMenu();
+    action(task);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    updatePosition();
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+
+      closeMenu();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    }
+
+    function handleReposition() {
+      updatePosition();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [open, showSnoozeAction]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Task actions for ${task.title}`}
+        className={iconButtonClass}
+        type="button"
+        onClick={() => {
+          if (!open) updatePosition();
+          setOpen((prev) => !prev);
+        }}
+      >
+        ⋯
+      </button>
+
+      {open &&
+        position &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="tm-menu fixed z-[1000] min-w-44 overflow-hidden rounded-lg border py-1 text-left shadow-2xl"
+            role="menu"
+            style={{
+              left: position.left,
+              top: position.top,
+              transform: position.placement === "above" ? "translateY(-100%)" : undefined,
+            }}
+          >
+            {showSnoozeAction && (
+              <button
+                className={taskActionMenuItemClass}
+                disabled={snoozeDisabled}
+                role="menuitem"
+                type="button"
+                onClick={() => runAction(onPickSnoozeDate)}
+              >
+                Snooze
+              </button>
+            )}
+            <button
+              className={taskActionMenuItemClass}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onTogglePriority)}
+            >
+              {task.isPriority ? "Unprioritise" : "Prioritise"}
+            </button>
+            <button
+              className={taskActionMenuItemClass}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onOpenEditModal)}
+            >
+              Edit
+            </button>
+            <button
+              className={taskActionMenuItemClass}
+              disabled={completionPending}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onToggleCompleted)}
+            >
+              {completedActionLabel ?? (isTaskCompleted(task) ? "Open" : "Done")}
+            </button>
+            <button
+              className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onDelete)}
+            >
+              Delete
+            </button>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
 function TaskRow({
   task,
   projectName,
@@ -1426,23 +1613,6 @@ function TaskRow({
   const isEditing = editingTitleTaskId === task.id;
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const actionsRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!actionsOpen) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (!actionsRef.current?.contains(event.target as Node)) {
-        setActionsOpen(false);
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [actionsOpen]);
 
   return (
     <div
@@ -1576,75 +1746,20 @@ function TaskRow({
           {task.completedOn && <span>Done {toDateOnly(task.completedOn)}</span>}
         </div>
 
-        <div className="relative justify-self-start md:justify-self-end" ref={actionsRef}>
-          <button
-            aria-expanded={actionsOpen}
-            aria-label={`Task actions for ${task.title}`}
-            className={iconButtonClass}
-            type="button"
-            onClick={() => setActionsOpen((prev) => !prev)}
-          >
-            ⋯
-          </button>
-
-          {actionsOpen && (
-            <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
-              {showSnoozeAction && (
-                <button
-                  className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
-                  disabled={snoozeDisabled}
-                  type="button"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    onPickSnoozeDate(task);
-                  }}
-                >
-                  Snooze
-                </button>
-              )}
-              <button
-                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onTogglePriority(task);
-                }}
-              >
-                {task.isPriority ? "Unprioritise" : "Prioritise"}
-              </button>
-              <button
-                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70"
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onOpenEditModal(task);
-                }}
-              >
-                Edit
-              </button>
-              <button
-                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
-                disabled={completionPending}
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onToggleCompleted(task, !isTaskCompleted(task));
-                }}
-              >
-                {isTaskCompleted(task) ? "Open" : "Done"}
-              </button>
-              <button
-                className="block w-full px-3 py-2 text-left text-sm text-red-700 transition-colors hover:bg-red-50"
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onDelete(task);
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )}
+        <div className="justify-self-start md:justify-self-end">
+          <TaskActionMenu
+            task={task}
+            completionPending={completionPending}
+            snoozeDisabled={snoozeDisabled}
+            showSnoozeAction={showSnoozeAction}
+            onPickSnoozeDate={onPickSnoozeDate}
+            onTogglePriority={onTogglePriority}
+            onOpenEditModal={onOpenEditModal}
+            onToggleCompleted={(selectedTask) =>
+              onToggleCompleted(selectedTask, !isTaskCompleted(selectedTask))
+            }
+            onDelete={onDelete}
+          />
         </div>
       </div>
     </div>
@@ -4423,35 +4538,25 @@ export function TrackerClient({
                         <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
                         <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
                         <td className={`${matrixCellClass} text-center`}>
-                          <details className="relative inline-block">
-                            <summary className={`${iconButtonClass} cursor-pointer list-none`}>⋯</summary>
-                            <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 text-left shadow-2xl">
-                              <button className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" type="button" onClick={() => openSingleTaskSnoozeDate(task)}>
-                                Snooze
-                              </button>
-                              <button className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" type="button" onClick={() => void toggleTaskPriority(task)}>
-                                {task.isPriority ? "Unprioritise" : "Prioritise"}
-                              </button>
-                              <button className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" type="button" onClick={() => openTaskEditor(task)}>
-                                Edit
-                              </button>
-                              <button
-                                className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
-                                disabled={completionPendingTaskIds.includes(task.id)}
-                                type="button"
-                                onClick={() =>
-                                  void toggleTaskCompleted(task.id, taskView !== "done").catch((err: unknown) =>
-                                    setError(err instanceof Error ? err.message : "Could not update task")
+                          <TaskActionMenu
+                            task={task}
+                            completionPending={completionPendingTaskIds.includes(task.id)}
+                            completedActionLabel={taskView === "done" ? "Open" : "Done"}
+                            onPickSnoozeDate={openSingleTaskSnoozeDate}
+                            onTogglePriority={(selectedTask) => void toggleTaskPriority(selectedTask)}
+                            onOpenEditModal={openTaskEditor}
+                            onToggleCompleted={(selectedTask) =>
+                              void toggleTaskCompleted(selectedTask.id, taskView !== "done").catch(
+                                (err: unknown) =>
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Could not update task"
                                   )
-                                }
-                              >
-                                {taskView === "done" ? "Open" : "Done"}
-                              </button>
-                              <button className="block w-full px-3 py-2 text-left text-sm text-red-700 transition-colors hover:bg-red-50" type="button" onClick={() => requestDeleteTask(task)}>
-                                Delete
-                              </button>
-                            </div>
-                          </details>
+                              )
+                            }
+                            onDelete={requestDeleteTask}
+                          />
                         </td>
                       </tr>
                     ))}

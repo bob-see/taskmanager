@@ -13,6 +13,17 @@ export const columnTypes = [
 
 export type MatrixColumnType = (typeof columnTypes)[number];
 
+export const statusOptionColors = [
+  "red",
+  "amber",
+  "blue",
+  "green",
+  "purple",
+  "neutral",
+] as const;
+
+export type StatusOptionColor = (typeof statusOptionColors)[number];
+
 export async function getCurrentUserOr401() {
   const session = await getServerSession(authOptions);
 
@@ -103,6 +114,23 @@ export function validateColumnType(value: unknown) {
   }
 
   return { value: value as MatrixColumnType };
+}
+
+export function validateStatusOptionColor(value: unknown) {
+  if (typeof value !== "string") {
+    return {
+      error: Response.json({ error: "Color is required" }, { status: 400 }),
+    };
+  }
+
+  const color = value.trim().toLowerCase();
+  if (!statusOptionColors.includes(color as StatusOptionColor)) {
+    return {
+      error: Response.json({ error: "Invalid status color" }, { status: 400 }),
+    };
+  }
+
+  return { value: color as StatusOptionColor };
 }
 
 export function parseCellValue(type: MatrixColumnType, value: unknown) {

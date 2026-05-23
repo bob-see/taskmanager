@@ -171,10 +171,12 @@ model SpaceMember {
 }
 
 model MatrixRow {
-  id      String @id @default(cuid()) @db.VarChar(36)
-  spaceId String @db.VarChar(36)
+  id      String    @id @default(cuid()) @db.VarChar(36)
+  spaceId String    @db.VarChar(36)
   name    String
   order   Int
+  isDone  Boolean   @default(false)
+  doneAt  DateTime?
 
   space CollaborativeSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   cells MatrixCell[]

@@ -1,0 +1,3 @@
+ALTER TABLE `matrixrow`
+    ADD COLUMN `isDone` BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN `doneAt` DATETIME(3) NULL;
