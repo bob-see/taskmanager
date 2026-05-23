@@ -1,93 +1,96 @@
 datasource db {
   provider = "mysql"
 }
+
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "binary"
 }
 
 model User {
-  id           String    @id @default(cuid()) @db.VarChar(36)
+  id           String   @id @default(cuid()) @db.VarChar(36)
   name         String
-  email        String    @unique @db.VarChar(191)
+  email        String   @unique @db.VarChar(191)
   passwordHash String
-  role         String    @default("user") @db.VarChar(32)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  role         String   @default("user") @db.VarChar(32)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  profiles     Profile[]
+  profiles         Profile[]
   spaceMemberships SpaceMember[]
-  matrixCells       MatrixCell[] @relation("MatrixCellUserValue")
+  matrixCells      MatrixCell[]     @relation("MatrixCellUserValue")
+  matrixCellNotes  MatrixCellNote[]
 
   @@index([email])
   @@map("user")
 }
 
 model Task {
-  id               String   @id @default(cuid()) @db.VarChar(36)
-  title            String
-  notes            String?  @db.Text
-  dueAt            DateTime?
-  completedAt      DateTime?
-  completedOn      DateTime?
-  orderIndex       Int?
-  isPriority       Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  startDate        DateTime @default(now())
-  category         String?
-  profileId        String   @default("default") @db.VarChar(36)
-  projectId        String?  @db.VarChar(36)
-  recurrenceSeriesId String? @db.VarChar(36)
-  repeatEnabled    Boolean  @default(false)
-  repeatPattern    String?
-  repeatDays       Int?
-  repeatWeeklyDay  Int?
-  repeatMonthlyDay Int?
+  id                 String    @id @default(cuid()) @db.VarChar(36)
+  title              String
+  notes              String?   @db.Text
+  dueAt              DateTime?
+  completedAt        DateTime?
+  completedOn        DateTime?
+  orderIndex         Int?
+  isPriority         Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  startDate          DateTime  @default(now())
+  category           String?
+  profileId          String    @default("default") @db.VarChar(36)
+  projectId          String?   @db.VarChar(36)
+  recurrenceSeriesId String?   @db.VarChar(36)
+  repeatEnabled      Boolean   @default(false)
+  repeatPattern      String?
+  repeatDays         Int?
+  repeatWeeklyDay    Int?
+  repeatMonthlyDay   Int?
 
-  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
+  @@unique([profileId, recurrenceSeriesId, startDate])
   @@index([profileId, startDate])
   @@index([profileId, dueAt])
   @@index([profileId, completedOn])
   @@index([profileId, completedOn, orderIndex])
   @@index([profileId, recurrenceSeriesId])
   @@index([projectId])
-  @@unique([profileId, recurrenceSeriesId, startDate])
   @@map("task")
 }
 
 model Profile {
-  id            String    @id @default(cuid()) @db.VarChar(36)
-  userId        String?   @db.VarChar(36)
-  name          String
-  order         Int
-  defaultView   String?
-  averageBasis  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tasks         Task[]
-  projects      Project[]
-  timeEntries   TimeEntry[]
+  id           String      @id @default(cuid()) @db.VarChar(36)
+  userId       String?     @db.VarChar(36)
+  name         String
+  order        Int
+  defaultView  String?
+  averageBasis String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks        Task[]
+  projects     Project[]
+  timeEntries  TimeEntry[]
+
   @@index([userId])
   @@map("profile")
 }
 
 model Project {
-  id        String    @id @default(cuid()) @db.VarChar(36)
-  name      String
-  startDate DateTime  @default(now())
-  dueAt     DateTime?
-  category  String?
+  id         String    @id @default(cuid()) @db.VarChar(36)
+  name       String
+  startDate  DateTime  @default(now())
+  dueAt      DateTime?
+  category   String?
   orderIndex Int?
-  archived  Boolean   @default(false)
-  collapsed Boolean   @default(false)
-  isPriority Boolean  @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  profileId String    @db.VarChar(36)
+  archived   Boolean   @default(false)
+  collapsed  Boolean   @default(false)
+  isPriority Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  profileId  String    @db.VarChar(36)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   tasks   Task[]
@@ -98,18 +101,18 @@ model Project {
 }
 
 model TimeEntry {
-  id              String   @id @default(cuid()) @db.VarChar(36)
-  profileId       String   @db.VarChar(36)
+  id              String    @id @default(cuid()) @db.VarChar(36)
+  profileId       String    @db.VarChar(36)
   entryDate       DateTime
   startTime       DateTime
   endTime         DateTime?
   durationMinutes Int?
   loggedMinutes   Int?
   roundingMode    String?
-  notes           String?  @db.Text
+  notes           String?   @db.Text
   source          String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
@@ -187,7 +190,7 @@ model MatrixColumn {
   type    String @db.VarChar(32)
   order   Int
 
-  space         CollaborativeSpace  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  space         CollaborativeSpace   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   statusOptions ColumnStatusOption[]
   cells         MatrixCell[]
 
@@ -226,10 +229,26 @@ model MatrixCell {
   column       MatrixColumn        @relation(fields: [columnId], references: [id], onDelete: Cascade)
   statusOption ColumnStatusOption? @relation(fields: [statusOptionId], references: [id], onDelete: SetNull)
   userValue    User?               @relation("MatrixCellUserValue", fields: [userIdValue], references: [id], onDelete: SetNull)
+  noteHistory  MatrixCellNote[]
 
   @@unique([rowId, columnId])
   @@index([columnId])
   @@index([statusOptionId])
   @@index([userIdValue])
   @@map("matrixcell")
+}
+
+model MatrixCellNote {
+  id        String   @id @default(cuid()) @db.VarChar(36)
+  cellId    String   @db.VarChar(36)
+  userId    String   @db.VarChar(36)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  cell MatrixCell @relation(fields: [cellId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([cellId, createdAt])
+  @@index([userId])
+  @@map("matrixcellnote")
 }

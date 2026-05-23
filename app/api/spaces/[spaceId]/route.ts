@@ -51,7 +51,21 @@ export async function GET(_req: Request, ctx: Ctx) {
         spaceId,
       },
     },
+    include: {
+      noteHistory: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
   });
 
-  return Response.json({ ...space, cells });
+  return Response.json({ ...space, cells, currentMember: membership.member });
 }

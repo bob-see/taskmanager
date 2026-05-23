@@ -49,11 +49,45 @@ export async function requireSpaceMember(spaceId: string, userId: string) {
   });
 
   if (!member) {
-    return { error: Response.json({ error: "Space not found" }, { status: 404 }) };
+    return {
+      error: Response.json(
+        { error: "You do not have access to this space" },
+        { status: 403 }
+      ),
+    };
   }
 
   return { member };
 }
+
+export async function requireSpaceOwner(spaceId: string, userId: string) {
+  const membership = await requireSpaceMember(spaceId, userId);
+  if (membership.error) return membership;
+
+  if (membership.member.role !== "owner") {
+    return {
+      error: Response.json(
+        { error: "Only owners can manage members" },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return membership;
+}
+
+export const memberSelect = {
+  id: true,
+  role: true,
+  userId: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+} as const;
 
 export function validateColumnType(value: unknown) {
   if (typeof value !== "string") {

@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import {
   getCurrentUserOr401,
+  type MatrixColumnType,
   parseCellValue,
   requireSpaceMember,
   validateColumnType,
@@ -9,6 +10,24 @@ import {
 type Ctx = {
   params: Promise<{ spaceId: string }>;
 };
+
+type ParsedCellValueData = {
+  textValue: string | null;
+  numberValue: number | null;
+  dateValue: Date | null;
+  booleanValue: boolean | null;
+  statusOptionId: string | null;
+  userIdValue: string | null;
+};
+
+function cellValueData(type: MatrixColumnType, data: ParsedCellValueData) {
+  if (type === "text") return { textValue: data.textValue };
+  if (type === "number") return { numberValue: data.numberValue };
+  if (type === "date") return { dateValue: data.dateValue };
+  if (type === "checkbox") return { booleanValue: data.booleanValue };
+  if (type === "user") return { userIdValue: data.userIdValue };
+  return { statusOptionId: data.statusOptionId };
+}
 
 export async function PATCH(req: Request, ctx: Ctx) {
   const { spaceId } = await ctx.params;
@@ -52,24 +71,31 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const type = validateColumnType(column.type);
   if (type.error) return type.error;
 
-  const value = parseCellValue(type.value, body?.value);
-  if (value.error) return value.error;
+  const data: Record<string, string | number | boolean | Date | null> = {};
+  const hasValue = Object.prototype.hasOwnProperty.call(body, "value");
+  let parsedValue: ReturnType<typeof parseCellValue> | null = null;
 
-  const notes =
-    body?.notes === undefined || body?.notes === null
-      ? undefined
-      : typeof body.notes === "string"
-        ? body.notes
-        : null;
-
-  if (notes === null) {
-    return Response.json({ error: "notes must be text" }, { status: 400 });
+  if (hasValue) {
+    parsedValue = parseCellValue(type.value, body?.value);
+    if (parsedValue.error) return parsedValue.error;
+    Object.assign(data, cellValueData(type.value, parsedValue.data));
   }
 
-  if (type.value === "status" && value.data.statusOptionId) {
+  const newNote =
+    body?.newNote === undefined
+      ? undefined
+      : typeof body.newNote === "string"
+        ? body.newNote.trim()
+        : null;
+
+  if (newNote === null) {
+    return Response.json({ error: "newNote must be text" }, { status: 400 });
+  }
+
+  if (type.value === "status" && parsedValue?.data.statusOptionId) {
     const option = await prisma.columnStatusOption.findFirst({
       where: {
-        id: value.data.statusOptionId,
+        id: parsedValue.data.statusOptionId,
         columnId,
       },
       select: { id: true },
@@ -83,9 +109,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
   }
 
-  if (type.value === "user" && value.data.userIdValue) {
+  if (type.value === "user" && parsedValue?.data.userIdValue) {
     const user = await prisma.user.findUnique({
-      where: { id: value.data.userIdValue },
+      where: { id: parsedValue.data.userIdValue },
       select: { id: true },
     });
 
@@ -94,10 +120,42 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
   }
 
-  const data = {
-    ...value.data,
-    ...(notes !== undefined ? { notes } : {}),
-  };
+  if (Object.prototype.hasOwnProperty.call(body, "assignedUserId")) {
+    const assignedUserId =
+      body?.assignedUserId === null || body?.assignedUserId === ""
+        ? null
+        : typeof body?.assignedUserId === "string"
+          ? body.assignedUserId
+          : undefined;
+
+    if (assignedUserId === undefined) {
+      return Response.json(
+        { error: "assignedUserId must be a user id or empty" },
+        { status: 400 }
+      );
+    }
+
+    if (assignedUserId) {
+      const assignedMember = await prisma.spaceMember.findUnique({
+        where: {
+          spaceId_userId: {
+            spaceId,
+            userId: assignedUserId,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!assignedMember) {
+        return Response.json(
+          { error: "Assigned user must be a member of this space" },
+          { status: 400 }
+        );
+      }
+    }
+
+    data.userIdValue = assignedUserId;
+  }
 
   const cell = await prisma.matrixCell.upsert({
     where: {
@@ -114,5 +172,33 @@ export async function PATCH(req: Request, ctx: Ctx) {
     update: data,
   });
 
-  return Response.json(cell);
+  if (newNote) {
+    await prisma.matrixCellNote.create({
+      data: {
+        cellId: cell.id,
+        userId: currentUser.user.id,
+        content: newNote,
+      },
+    });
+  }
+
+  const updatedCell = await prisma.matrixCell.findUniqueOrThrow({
+    where: { id: cell.id },
+    include: {
+      noteHistory: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return Response.json(updatedCell);
 }
