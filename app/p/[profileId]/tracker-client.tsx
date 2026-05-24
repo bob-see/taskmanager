@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -100,6 +101,8 @@ type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
 type TaskView = "active" | "today" | "upcoming" | "overdue" | "done" | "archived";
 type DoneRange = "today" | "week" | "month" | "all";
 type SortMode = "start-date" | "due-date" | "manual";
+type TaskSortColumn = "title" | "category" | "due" | "notes";
+type SortDirection = "asc" | "desc";
 type DeleteMode = "this" | "future" | "series";
 type DragPosition = "before" | "after";
 type BulkAction =
@@ -595,6 +598,63 @@ function sortTasks(tasks: Task[], sortMode: SortMode) {
     return compareTasksForStartDateSort(left, right);
   });
   return sorted;
+}
+
+function getTaskColumnSortValue(task: Task, sortColumn: TaskSortColumn) {
+  if (sortColumn === "title") {
+    return task.title.trim().toLocaleLowerCase();
+  }
+
+  if (sortColumn === "category") {
+    return (task.category?.trim() || "Uncategorized").toLocaleLowerCase();
+  }
+
+  if (sortColumn === "due") {
+    return toDateOnly(task.dueAt);
+  }
+
+  return task.notes?.trim() ? 1 : 0;
+}
+
+function sortTasksByColumn(
+  tasks: Task[],
+  sortColumn: TaskSortColumn | null,
+  sortDirection: SortDirection | null
+) {
+  if (!sortColumn || !sortDirection) return tasks;
+
+  return tasks
+    .map((task, index) => ({ task, index }))
+    .sort((left, right) => {
+      if (sortColumn === "due") {
+        const leftDue = getTaskColumnSortValue(left.task, sortColumn) as string;
+        const rightDue = getTaskColumnSortValue(right.task, sortColumn) as string;
+
+        if (leftDue !== rightDue) {
+          if (!leftDue) return 1;
+          if (!rightDue) return -1;
+
+          const comparison = leftDue.localeCompare(rightDue);
+          return sortDirection === "asc" ? comparison : -comparison;
+        }
+      } else {
+        const leftValue = getTaskColumnSortValue(left.task, sortColumn);
+        const rightValue = getTaskColumnSortValue(right.task, sortColumn);
+        const comparison =
+          typeof leftValue === "number" && typeof rightValue === "number"
+            ? leftValue - rightValue
+            : String(leftValue).localeCompare(String(rightValue), undefined, {
+                sensitivity: "base",
+              });
+
+        if (comparison !== 0) {
+          return sortDirection === "asc" ? comparison : -comparison;
+        }
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ task }) => task);
 }
 
 function reorderTaskIds(
@@ -1766,6 +1826,75 @@ function TaskRow({
   );
 }
 
+function SortableTaskHeader({
+  sortColumn,
+  sortDirection,
+  onSort,
+}: {
+  sortColumn: TaskSortColumn | null;
+  sortDirection: SortDirection | null;
+  onSort: (column: TaskSortColumn) => void;
+}) {
+  function renderSortableHeader(column: TaskSortColumn, label: string) {
+    const active = sortColumn === column && sortDirection;
+    const arrow = active === "asc" ? "↑" : active === "desc" ? "↓" : "";
+
+    return (
+      <button
+        className="group inline-flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left transition-colors hover:bg-white/45 hover:text-[color:var(--tm-text)]"
+        type="button"
+        onClick={() => onSort(column)}
+      >
+        <span className="truncate">{label}</span>
+        <span className="w-2 text-[9px] text-[color:var(--tm-muted)] opacity-70">
+          {arrow}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className={taskMatrixHeaderClass}>
+      {renderSortableHeader("title", "Title")}
+      {renderSortableHeader("category", "Category")}
+      {renderSortableHeader("due", "Due")}
+      {renderSortableHeader("notes", "Tags / Notes")}
+      <span className="text-left md:text-right">Actions</span>
+    </div>
+  );
+}
+
+function SortableTaskTableHeaderCell({
+  className,
+  label,
+  sortColumn,
+  sortDirection,
+  onSort,
+}: {
+  className: string;
+  label: string;
+  sortColumn: TaskSortColumn;
+  sortDirection: SortDirection | null;
+  onSort: (column: TaskSortColumn) => void;
+}) {
+  const arrow = sortDirection === "asc" ? "↑" : sortDirection === "desc" ? "↓" : "";
+
+  return (
+    <th className={className}>
+      <button
+        className="group inline-flex max-w-full items-center gap-1 rounded px-1 py-0.5 text-left transition-colors hover:bg-white/45 hover:text-[color:var(--tm-text)]"
+        type="button"
+        onClick={() => onSort(sortColumn)}
+      >
+        <span className="truncate">{label}</span>
+        <span className="w-2 text-[9px] text-[color:var(--tm-muted)] opacity-70">
+          {arrow}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function ProjectSearchRow({
   project,
   onClick,
@@ -1886,6 +2015,8 @@ export function TrackerClient({
   const [taskView, setTaskView] = useState<TaskView>("active");
   const [doneRange, setDoneRange] = useState<DoneRange>("today");
   const [sortMode, setSortMode] = useState<SortMode>("manual");
+  const [sortColumn, setSortColumn] = useState<TaskSortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -2011,6 +2142,8 @@ export function TrackerClient({
     setTaskView("active");
     setDoneRange("today");
     setSortMode("manual");
+    setSortColumn(null);
+    setSortDirection(null);
     setSearchQuery("");
     setNewProjectOpen(false);
     setEditProjectId(null);
@@ -2045,6 +2178,11 @@ export function TrackerClient({
     preferenceSyncProfileIdRef.current = null;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
+
+  useEffect(() => {
+    setSortColumn(null);
+    setSortDirection(null);
+  }, [viewMode]);
 
   const currentProfile = profiles.find((profile) => profile.id === profileId);
 
@@ -2256,7 +2394,10 @@ export function TrackerClient({
           ? "upcoming"
           : "overdue"
   ];
-  const sortedOpenTasks = sortTasks(openTasks, sortMode);
+  const sortedOpenTasks = useMemo(
+    () => sortTasks(openTasks, sortMode),
+    [openTasks, sortMode]
+  );
 
   const doneTasks = visibleTasks.filter((task) => {
     if (!task.completedOn) return false;
@@ -2301,8 +2442,16 @@ export function TrackerClient({
   );
   const dayViewTasks =
     taskView === "done" ? dayDoneTasks : taskView === "archived" ? archivedDayTasks : activeDayOpenTasks;
-  const matrixTasks =
+  const displayedDayViewTasks = useMemo(
+    () => sortTasksByColumn(dayViewTasks, sortColumn, sortDirection),
+    [dayViewTasks, sortColumn, sortDirection]
+  );
+  const baseMatrixTasks =
     taskView === "done" ? doneTasks : taskView === "archived" ? archivedDayTasks : sortedOpenTasks;
+  const matrixTasks = useMemo(
+    () => sortTasksByColumn(baseMatrixTasks, sortColumn, sortDirection),
+    [baseMatrixTasks, sortColumn, sortDirection]
+  );
   const searchResults = visibleTasks.filter((task) =>
     matchesTaskSearch(task, searchQuery, projectById)
   );
@@ -2333,6 +2482,14 @@ export function TrackerClient({
       tasks: searchResults.filter((task) => isTaskCompleted(task)),
     },
   ];
+  const displayedSearchSections = useMemo(
+    () =>
+      searchSections.map((section) => ({
+        ...section,
+        tasks: sortTasksByColumn(section.tasks, sortColumn, sortDirection),
+      })),
+    [searchSections, sortColumn, sortDirection]
+  );
   const searchResultCount = searchSections.reduce(
     (count, section) => count + section.tasks.length,
     0
@@ -2417,7 +2574,7 @@ export function TrackerClient({
       label: "Recurring",
       project: null,
       collapsed: false,
-      openTasks: dayViewTasks.filter((task) => isRecurringTask(task)),
+      openTasks: displayedDayViewTasks.filter((task) => isRecurringTask(task)),
       doneTasks: dayDoneTasks.filter((task) => isRecurringTask(task)),
       progressTotal: 0,
       progressCompleted: 0,
@@ -2427,7 +2584,7 @@ export function TrackerClient({
       label: "Unassigned",
       project: null,
       collapsed: false,
-      openTasks: dayViewTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
+      openTasks: displayedDayViewTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
       doneTasks: dayDoneTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
       progressTotal: 0,
       progressCompleted: 0,
@@ -2437,7 +2594,7 @@ export function TrackerClient({
       label: project.name,
       project,
       collapsed: project.collapsed,
-      openTasks: dayViewTasks.filter((task) => task.projectId === project.id),
+      openTasks: displayedDayViewTasks.filter((task) => task.projectId === project.id),
       doneTasks: dayDoneTasks.filter((task) => task.projectId === project.id),
       progressTotal: progressTasks.filter(
         (task) => task.projectId === project.id && countsTowardDayProgress(task, selectedDay)
@@ -2453,7 +2610,7 @@ export function TrackerClient({
   const visibleDayTaskIds = Array.from(
     new Set(
       (searchActive
-        ? searchSections.flatMap((section) => section.tasks)
+        ? displayedSearchSections.flatMap((section) => section.tasks)
         : visibleGroupedSections.flatMap((section) => section.openTasks)
       ).map((task) => task.id)
     )
@@ -2507,6 +2664,7 @@ export function TrackerClient({
     !searchActive &&
     taskView === "active" &&
     sortMode === "manual" &&
+    !sortColumn &&
     !selectMode;
 
   useEffect(() => {
@@ -2517,6 +2675,29 @@ export function TrackerClient({
     setDragOverPosition(null);
     dragOrderSnapshotRef.current = null;
   }, [manualReorderEnabled]);
+
+  function toggleColumnSort(column: TaskSortColumn) {
+    if (sortColumn !== column) {
+      setSortColumn(column);
+      setSortDirection("asc");
+      return;
+    }
+
+    if (sortDirection === "asc") {
+      setSortDirection("desc");
+      return;
+    }
+
+    setSortColumn(null);
+    setSortDirection(null);
+    setSortMode("manual");
+  }
+
+  function changeSortMode(nextSortMode: SortMode) {
+    setSortMode(nextSortMode);
+    setSortColumn(null);
+    setSortDirection(null);
+  }
 
   function shiftSelectedDay(direction: -1 | 1) {
     const nextDate =
@@ -3813,7 +3994,7 @@ export function TrackerClient({
                 <select
                   className={`${inputClass} py-1 text-sm`}
                   value={sortMode}
-                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  onChange={(e) => changeSortMode(e.target.value as SortMode)}
                 >
                   {SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value} className="text-black">
@@ -4029,7 +4210,7 @@ export function TrackerClient({
                 </div>
               </section>
 
-              {searchSections.map((section) => (
+              {displayedSearchSections.map((section) => (
                 <section
                   key={section.key}
                   className={sectionCardClass}
@@ -4048,13 +4229,11 @@ export function TrackerClient({
                     <div className="text-sm opacity-50">No matching tasks.</div>
                   ) : (
                     <div className="overflow-hidden rounded-md border border-[color:var(--tm-border)]">
-                      <div className={taskMatrixHeaderClass}>
-                        <span>Title</span>
-                        <span>Category</span>
-                        <span>Due</span>
-                        <span>Tags / Notes</span>
-                        <span className="text-left md:text-right">Actions</span>
-                      </div>
+                      <SortableTaskHeader
+                        sortColumn={sortColumn}
+                        sortDirection={sortDirection}
+                        onSort={toggleColumnSort}
+                      />
                       {section.tasks.map((task) => (
                         <TaskRow
                           key={task.id}
@@ -4288,13 +4467,11 @@ export function TrackerClient({
                       <div className="mt-2 space-y-3">
                         <div>
                           <div className="overflow-hidden rounded-md border border-[color:var(--tm-border)]">
-                            <div className={taskMatrixHeaderClass}>
-                              <span>Title</span>
-                              <span>Category</span>
-                              <span>Due</span>
-                              <span>Tags / Notes</span>
-                              <span className="text-left md:text-right">Actions</span>
-                            </div>
+                            <SortableTaskHeader
+                              sortColumn={sortColumn}
+                              sortDirection={sortDirection}
+                              onSort={toggleColumnSort}
+                            />
                             {section.openTasks.map((task) => (
                               <TaskRow
                                   key={task.id}
@@ -4414,7 +4591,7 @@ export function TrackerClient({
                   <select
                     className={`${inputClass} min-w-[10rem]`}
                     value={sortMode}
-                    onChange={(e) => setSortMode(e.target.value as SortMode)}
+                    onChange={(e) => changeSortMode(e.target.value as SortMode)}
                   >
                     {SORT_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value} className="text-black">
@@ -4484,10 +4661,28 @@ export function TrackerClient({
                 <table className="min-w-[50rem] table-fixed border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
-                      <th className={`${matrixHeaderCellClass} w-[40%]`}>Task</th>
+                      <SortableTaskTableHeaderCell
+                        className={`${matrixHeaderCellClass} w-[40%]`}
+                        label="Title"
+                        sortColumn="title"
+                        sortDirection={sortColumn === "title" ? sortDirection : null}
+                        onSort={toggleColumnSort}
+                      />
                       <th className={`${matrixHeaderCellClass} w-[14%]`}>Project</th>
-                      <th className={`${matrixHeaderCellClass} w-[14%]`}>Category</th>
-                      <th className={`${matrixHeaderCellClass} w-[120px]`}>Due</th>
+                      <SortableTaskTableHeaderCell
+                        className={`${matrixHeaderCellClass} w-[14%]`}
+                        label="Category"
+                        sortColumn="category"
+                        sortDirection={sortColumn === "category" ? sortDirection : null}
+                        onSort={toggleColumnSort}
+                      />
+                      <SortableTaskTableHeaderCell
+                        className={`${matrixHeaderCellClass} w-[120px]`}
+                        label="Due"
+                        sortColumn="due"
+                        sortDirection={sortColumn === "due" ? sortDirection : null}
+                        onSort={toggleColumnSort}
+                      />
                       <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
                       <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Actions</th>
                     </tr>
