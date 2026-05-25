@@ -126,20 +126,20 @@ const columnTypes: ColumnType[] = [
 ];
 
 const statusColorClasses: Record<string, string> = {
-  red: "border-red-200 bg-red-50 text-red-800",
-  neutral: "border-slate-200 bg-slate-50 text-slate-700",
-  muted: "border-slate-200 bg-slate-50 text-slate-700",
-  gray: "border-slate-200 bg-slate-50 text-slate-700",
-  grey: "border-slate-200 bg-slate-50 text-slate-700",
-  amber: "border-amber-200 bg-amber-50 text-amber-900",
-  yellow: "border-amber-200 bg-amber-50 text-amber-900",
-  blue: "border-blue-200 bg-blue-50 text-blue-800",
-  green: "border-green-200 bg-green-50 text-green-800",
-  purple: "border-purple-200 bg-purple-50 text-purple-800",
+  red: "border-red-500 bg-red-200 text-red-950",
+  neutral: "border-slate-500 bg-slate-300 text-slate-950",
+  muted: "border-slate-500 bg-slate-300 text-slate-950",
+  gray: "border-slate-500 bg-slate-300 text-slate-950",
+  grey: "border-slate-500 bg-slate-300 text-slate-950",
+  amber: "border-amber-500 bg-amber-200 text-amber-950",
+  yellow: "border-amber-500 bg-amber-200 text-amber-950",
+  blue: "border-blue-500 bg-blue-200 text-blue-950",
+  green: "border-green-600 bg-green-200 text-green-950",
+  purple: "border-purple-500 bg-purple-200 text-purple-950",
 };
 
 const statusColorOptions = ["red", "amber", "blue", "green", "purple", "neutral"];
-const neutralStatusClasses = "border-[color:var(--tm-border)] bg-white/70 text-[color:var(--tm-muted)]";
+const neutralStatusClasses = "border-slate-500 bg-slate-300 text-slate-950";
 
 function toDateInputValue(value: string | null) {
   if (!value) return "";
@@ -242,6 +242,18 @@ function statusIndicatorClassName(color: string | null | undefined) {
     "h-5 w-10 rounded-full border shadow-sm",
     statusColorClasses[colorKey] ?? neutralStatusClasses,
   ].join(" ");
+}
+
+function statusDotClassName(color: string | null | undefined) {
+  const colorKey = typeof color === "string" ? color.trim().toLowerCase() : "";
+  return [
+    "h-2.5 w-2.5 rounded-full border shadow-sm",
+    statusColorClasses[colorKey] ?? neutralStatusClasses,
+  ].join(" ");
+}
+
+function statusLabel(option: StatusOption | undefined) {
+  return option ? `Status: ${option.label}` : "Select status";
 }
 
 function columnWidthClassName(type: ColumnType) {
@@ -1613,6 +1625,14 @@ export function SpacesClient() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href={`/spaces/${space.id}/print`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="tm-button inline-flex min-h-9 items-center rounded-[10px] border px-3 text-sm font-medium"
+                    >
+                      Print / Export PDF
+                    </a>
                     <button
                       type="button"
                       className="tm-button min-h-9 rounded-[10px] border px-3 text-sm font-medium"
@@ -1850,8 +1870,10 @@ export function SpacesClient() {
                                         {column.statusOptions.slice(0, 5).map((option) => (
                                           <span
                                             key={option.id}
-                                            className={`h-2.5 w-2.5 rounded-full border ${statusColorClasses[option.color] ?? neutralStatusClasses}`}
-                                            title={option.label}
+                                            className={statusDotClassName(option.color)}
+                                            title={statusLabel(option)}
+                                            role="img"
+                                            aria-label={statusLabel(option)}
                                           />
                                         ))}
                                       </span>
@@ -2557,6 +2579,9 @@ function ColumnConfigPanel({
                       </select>
                       <span
                         className={`${statusPillClassName(draft.color)} flex min-h-9 items-center`}
+                        title={`Status: ${draft.label.trim() || "Label"}`}
+                        role="img"
+                        aria-label={`Status: ${draft.label.trim() || "Label"}`}
                       >
                         {draft.label.trim() || "Label"}
                       </span>
@@ -2668,8 +2693,8 @@ function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
           type="button"
           className="flex min-h-8 w-full items-center justify-center rounded-[10px] border border-transparent transition hover:border-[color:var(--tm-border)] hover:bg-white/55 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-70"
           disabled={saving}
-          title={selectedOption?.label ?? "Select status"}
-          aria-label={selectedOption ? `Status: ${selectedOption.label}` : "Select status"}
+          title={statusLabel(selectedOption)}
+          aria-label={statusLabel(selectedOption)}
           onClick={() => setEditingStatus(true)}
         >
           {selectedOption ? (
