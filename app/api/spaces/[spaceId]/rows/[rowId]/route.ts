@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import {
   getCurrentUserOr401,
   requireSpaceMember,
+  validateRowCellTypeOverride,
 } from "@/app/api/spaces/shared";
 
 type Ctx = {
@@ -22,8 +23,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const hasOrder = Object.prototype.hasOwnProperty.call(body, "order");
   const hasIsDone = Object.prototype.hasOwnProperty.call(body, "isDone");
   const hasDoneAt = Object.prototype.hasOwnProperty.call(body, "doneAt");
+  const hasCellTypeOverride = Object.prototype.hasOwnProperty.call(
+    body,
+    "cellTypeOverride"
+  );
 
-  if (!hasName && !hasOrder && !hasIsDone && !hasDoneAt) {
+  if (!hasName && !hasOrder && !hasIsDone && !hasDoneAt && !hasCellTypeOverride) {
     return Response.json(
       { error: "At least one supported row field is required" },
       { status: 400 }
@@ -65,6 +70,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
   }
 
+  const cellTypeOverride = hasCellTypeOverride
+    ? validateRowCellTypeOverride(body?.cellTypeOverride)
+    : null;
+  if (cellTypeOverride?.error) return cellTypeOverride.error;
+
   const existingRow = await prisma.matrixRow.findFirst({
     where: { id: rowId, spaceId },
     select: { id: true },
@@ -87,6 +97,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
         : hasDoneAt
           ? { doneAt }
           : {}),
+      ...(hasCellTypeOverride
+        ? { cellTypeOverride: cellTypeOverride?.value ?? null }
+        : {}),
     },
   });
 

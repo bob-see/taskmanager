@@ -13,6 +13,23 @@ export const columnTypes = [
 
 export type MatrixColumnType = (typeof columnTypes)[number];
 
+export const rowCellTypeOverrides = [
+  "status",
+  "date",
+  "text",
+  "number",
+  "checkbox",
+] as const;
+
+export type MatrixRowCellTypeOverride = (typeof rowCellTypeOverrides)[number];
+
+export function effectiveCellType(
+  row: { cellTypeOverride?: string | null },
+  column: { type: string }
+) {
+  return row.cellTypeOverride || column.type;
+}
+
 export const statusOptionColors = [
   "red",
   "amber",
@@ -114,6 +131,33 @@ export function validateColumnType(value: unknown) {
   }
 
   return { value: value as MatrixColumnType };
+}
+
+export function validateRowCellTypeOverride(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return { value: null };
+  }
+
+  if (typeof value !== "string") {
+    return {
+      error: Response.json(
+        { error: "cellTypeOverride must be a supported cell type or empty" },
+        { status: 400 }
+      ),
+    };
+  }
+
+  const type = value.trim().toLowerCase();
+  if (!rowCellTypeOverrides.includes(type as MatrixRowCellTypeOverride)) {
+    return {
+      error: Response.json(
+        { error: "Invalid cell type override" },
+        { status: 400 }
+      ),
+    };
+  }
+
+  return { value: type as MatrixRowCellTypeOverride };
 }
 
 export function validateStatusOptionColor(value: unknown) {

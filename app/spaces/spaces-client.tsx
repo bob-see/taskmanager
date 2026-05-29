@@ -17,6 +17,7 @@ type MatrixRow = {
   order: number;
   isDone: boolean;
   doneAt: string | null;
+  cellTypeOverride: RowCellTypeOverride | null;
   isPending?: boolean;
 };
 
@@ -96,6 +97,8 @@ type UserOption = {
 };
 
 type ColumnType = "status" | "text" | "number" | "date" | "checkbox" | "user";
+type RowCellTypeOverride = "status" | "date" | "text" | "number" | "checkbox";
+type EffectiveCellType = ColumnType | RowCellTypeOverride;
 
 type MenuAnchor = {
   left: number;
@@ -112,7 +115,10 @@ type MatrixActionMenuState = {
 
 type FloatingMenuItem = {
   label: string;
+  helper?: string;
   disabled?: boolean;
+  active?: boolean;
+  kind?: "item" | "section";
   onSelect: () => void;
 };
 
@@ -123,6 +129,14 @@ const columnTypes: ColumnType[] = [
   "date",
   "checkbox",
   "user",
+];
+const rowCellTypeOverrideOptions: { label: string; value: RowCellTypeOverride | null }[] = [
+  { label: "Inherit from columns", value: null },
+  { label: "Status", value: "status" },
+  { label: "Date", value: "date" },
+  { label: "Text", value: "text" },
+  { label: "Number", value: "number" },
+  { label: "Checkbox", value: "checkbox" },
 ];
 
 const statusColorClasses: Record<string, string> = {
@@ -146,13 +160,43 @@ function toDateInputValue(value: string | null) {
   return value.slice(0, 10);
 }
 
-function cellDisplayValue(cell: MatrixCell | undefined, column: MatrixColumn) {
+function formatCellTypeLabel(type: RowCellTypeOverride) {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function formatCompactDate(value: string) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+  }).format(new Date(year, month - 1, day));
+}
+
+function effectiveCellType(row: MatrixRow, column: MatrixColumn): EffectiveCellType {
+  return row.cellTypeOverride || column.type;
+}
+
+function statusColumnForCell(
+  row: MatrixRow,
+  column: MatrixColumn,
+  columns: MatrixColumn[]
+) {
+  if (effectiveCellType(row, column) !== "status") return null;
+  return column.type === "status"
+    ? column
+    : columns.find((item) => item.type === "status") ?? null;
+}
+
+function cellDisplayValue(cell: MatrixCell | undefined, type: EffectiveCellType) {
   if (!cell) return "";
-  if (column.type === "text") return cell.textValue ?? "";
-  if (column.type === "number") return cell.numberValue?.toString() ?? "";
-  if (column.type === "date") return toDateInputValue(cell.dateValue);
-  if (column.type === "checkbox") return cell.booleanValue ?? false;
-  if (column.type === "user") return cell.userIdValue ?? "";
+  if (type === "text") return cell.textValue ?? "";
+  if (type === "number") return cell.numberValue?.toString() ?? "";
+  if (type === "date") return toDateInputValue(cell.dateValue);
+  if (type === "checkbox") return cell.booleanValue ?? false;
+  if (type === "user") return cell.userIdValue ?? "";
   return cell.statusOptionId ?? "";
 }
 
@@ -167,7 +211,7 @@ function getNextOrder(items: { order: number }[]) {
 function createOptimisticCell(
   rowId: string,
   columnId: string,
-  columnType: ColumnType,
+  type: EffectiveCellType,
   value: string | number | boolean | null,
   previousCell?: MatrixCell
 ): MatrixCell {
@@ -189,19 +233,19 @@ function createOptimisticCell(
         isPending: true,
       };
 
-  if (columnType === "text") {
+  if (type === "text") {
     return { ...cell, textValue: value === null || value === "" ? null : String(value) };
   }
-  if (columnType === "number") {
+  if (type === "number") {
     return { ...cell, numberValue: value === null || value === "" ? null : Number(value) };
   }
-  if (columnType === "date") {
+  if (type === "date") {
     return { ...cell, dateValue: value === null || value === "" ? null : String(value) };
   }
-  if (columnType === "checkbox") {
+  if (type === "checkbox") {
     return { ...cell, booleanValue: Boolean(value) };
   }
-  if (columnType === "user") {
+  if (type === "user") {
     return { ...cell, userIdValue: value === null || value === "" ? null : String(value) };
   }
   return { ...cell, statusOptionId: value === null || value === "" ? null : String(value) };
@@ -263,6 +307,13 @@ function columnWidthClassName(type: ColumnType) {
   if (type === "date") return "w-[150px] min-w-[150px] max-w-[170px]";
   if (type === "user") return "w-[120px] min-w-[120px] max-w-[150px]";
   return "w-[160px] min-w-[140px] max-w-[220px]";
+}
+
+function cellWidthClassName(column: MatrixColumn, type: EffectiveCellType) {
+  if (type === "date" && column.type !== "date") {
+    return "w-[132px] min-w-[132px] max-w-[132px]";
+  }
+  return columnWidthClassName(column.type);
 }
 
 function sortColumns(columns: MatrixColumn[]) {
@@ -482,6 +533,18 @@ export function SpacesClient() {
             disabled: saving === `row:${activeMenuRow.id}`,
             onSelect: () => toggleRowDone(activeMenuRow),
           },
+          {
+            kind: "section",
+            label: "Override row cell type",
+            helper: "Applies to every cell in this row.",
+            onSelect: () => {},
+          },
+          ...rowCellTypeOverrideOptions.map((option) => ({
+            label: option.label,
+            active: activeMenuRow.cellTypeOverride === option.value,
+            disabled: saving === `row:${activeMenuRow.id}`,
+            onSelect: () => updateRowCellTypeOverride(activeMenuRow, option.value),
+          })),
         ]
       : [];
 
@@ -750,6 +813,7 @@ export function SpacesClient() {
       order: getNextOrder(space.rows),
       isDone: false,
       doneAt: null,
+      cellTypeOverride: null,
       isPending: true,
     };
 
@@ -958,6 +1022,48 @@ export function SpacesClient() {
         current && current.id === space.id ? { ...current, rows: previousRows } : current
       );
       setError(err instanceof Error ? err.message : "Could not update row");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function updateRowCellTypeOverride(
+    row: MatrixRow,
+    cellTypeOverride: RowCellTypeOverride | null
+  ) {
+    if (!space || row.cellTypeOverride === cellTypeOverride) return;
+
+    const previousRows = space.rows;
+    setSaving(`row:${row.id}`);
+    setError("");
+    setSpace((current) =>
+      current && current.id === space.id
+        ? {
+            ...current,
+            rows: current.rows.map((item) =>
+              item.id === row.id
+                ? { ...item, cellTypeOverride, isPending: true }
+                : item
+            ),
+          }
+        : current
+    );
+
+    try {
+      const updatedRow = await patchRow(row, { cellTypeOverride });
+      setSpace((current) =>
+        current && current.id === space.id && updatedRow
+          ? {
+              ...current,
+              rows: current.rows.map((item) => (item.id === row.id ? updatedRow : item)),
+            }
+          : current
+      );
+    } catch (err) {
+      setSpace((current) =>
+        current && current.id === space.id ? { ...current, rows: previousRows } : current
+      );
+      setError(err instanceof Error ? err.message : "Could not update row cell type");
     } finally {
       setSaving("");
     }
@@ -1381,10 +1487,11 @@ export function SpacesClient() {
     if (!space) return;
 
     const previousCell = cellMap.get(`${row.id}:${column.id}`);
+    const type = effectiveCellType(row, column);
     const optimisticCell = createOptimisticCell(
       row.id,
       column.id,
-      column.type,
+      type,
       value,
       previousCell
     );
@@ -1908,13 +2015,18 @@ export function SpacesClient() {
                               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_1.5rem] items-start gap-1.5">
                                 <div className="min-w-0">
                                   <span
-                                    className={`block truncate ${
+                                    className={`inline min-w-0 truncate ${
                                       row.isDone ? "line-through" : ""
                                     }`}
                                     title={row.name}
                                   >
                                     {row.name}
                                   </span>
+                                  {row.cellTypeOverride ? (
+                                    <span className="ml-1 text-xs font-normal text-[color:var(--tm-muted)]">
+                                      · {formatCellTypeLabel(row.cellTypeOverride)} row
+                                    </span>
+                                  ) : null}
                                   <div className="min-h-4 text-xs font-normal text-[color:var(--tm-muted)]">
                                     {row.isPending ? "saving..." : row.isDone ? "done" : ""}
                                   </div>
@@ -1935,6 +2047,12 @@ export function SpacesClient() {
                             {orderedColumns.map((column) => {
                               const cell = cellMap.get(`${row.id}:${column.id}`);
                               const key = `${row.id}:${column.id}`;
+                              const type = effectiveCellType(row, column);
+                              const statusColumn = statusColumnForCell(
+                                row,
+                                column,
+                                orderedColumns
+                              );
                               const assignedMember = cell?.userIdValue
                                 ? memberMap.get(cell.userIdValue)
                                 : undefined;
@@ -1944,14 +2062,17 @@ export function SpacesClient() {
                                   key={column.id}
                                   className={`border-l border-[color:var(--tm-border)] px-1.5 py-1 align-middle ${
                                     column === orderedColumns[0] ? "pl-2.5" : ""
-                                  } ${columnWidthClassName(column.type)}`}
+                                  } ${cellWidthClassName(column, type)}`}
                                 >
                                   <div className="flex min-w-0 items-center gap-1">
                                     <div className="min-w-0 flex-1">
                                       <CellEditor
-                                        cell={cell}
-                                        column={column}
-                                        value={cellDisplayValue(cell, column)}
+                                        type={type}
+                                        statusOptions={statusColumn?.statusOptions ?? []}
+                                        statusOptionsUnavailable={
+                                          type === "status" && !statusColumn
+                                        }
+                                        value={cellDisplayValue(cell, type)}
                                         saving={saving === key}
                                         onSave={(value) => updateCell(row, column, value)}
                                       />
@@ -2086,7 +2207,7 @@ export function SpacesClient() {
         <ColumnConfigPanel
           column={configuringColumn}
           statusUsageCounts={space.cells.reduce<Record<string, number>>((counts, cell) => {
-            if (cell.columnId === configuringColumn.id && cell.statusOptionId) {
+            if (cell.statusOptionId) {
               counts[cell.statusOptionId] = (counts[cell.statusOptionId] ?? 0) + 1;
             }
             return counts;
@@ -2104,8 +2225,9 @@ export function SpacesClient() {
 }
 
 type CellEditorProps = {
-  cell: MatrixCell | undefined;
-  column: MatrixColumn;
+  type: EffectiveCellType;
+  statusOptions: StatusOption[];
+  statusOptionsUnavailable: boolean;
   value: string | boolean;
   saving: boolean;
   onSave: (value: string | number | boolean | null) => void;
@@ -2132,8 +2254,11 @@ function FloatingActionMenu({
   items: FloatingMenuItem[];
   onClose: () => void;
 }) {
-  const menuWidth = 192;
-  const menuHeight = Math.max(44, items.length * 37 + 12);
+  const menuWidth = 224;
+  const menuHeight = Math.max(
+    44,
+    items.reduce((height, item) => height + (item.kind === "section" ? 52 : 37), 12)
+  );
   const gutter = 8;
   const left = Math.min(
     Math.max(gutter, anchor.right - menuWidth),
@@ -2175,21 +2300,41 @@ function FloatingActionMenu({
         style={{ left, top, width: menuWidth }}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        {items.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
-            disabled={item.disabled}
-            role="menuitem"
-            onClick={() => {
-              onClose();
-              item.onSelect();
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
+        {items.map((item) =>
+          item.kind === "section" ? (
+            <div
+              key={item.label}
+              className="border-t border-[color:var(--tm-border)] px-3 pb-1.5 pt-2 first:border-t-0"
+              role="presentation"
+            >
+              <div className="text-xs font-semibold text-[color:var(--tm-text)]">
+                {item.label}
+              </div>
+              {item.helper ? (
+                <div className="mt-0.5 text-[11px] leading-4 text-[color:var(--tm-muted)]">
+                  {item.helper}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              key={item.label}
+              type="button"
+              className="grid w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-1 px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50"
+              disabled={item.disabled}
+              role="menuitem"
+              onClick={() => {
+                onClose();
+                item.onSelect();
+              }}
+            >
+              <span className="text-xs text-[color:var(--tm-muted)]">
+                {item.active ? "✓" : ""}
+              </span>
+              <span className="truncate">{item.label}</span>
+            </button>
+          )
+        )}
       </div>
     </div>,
     document.body
@@ -2654,15 +2799,25 @@ function ColumnConfigPanel({
   );
 }
 
-function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
+function CellEditor({
+  type,
+  statusOptions,
+  statusOptionsUnavailable,
+  value,
+  saving,
+  onSave,
+}: CellEditorProps) {
   const [draft, setDraft] = useState(value);
   const [editingStatus, setEditingStatus] = useState(false);
+  const [editingDate, setEditingDate] = useState(false);
 
   useEffect(() => {
     setDraft(value);
-  }, [value]);
+    setEditingStatus(false);
+    setEditingDate(false);
+  }, [type, value]);
 
-  if (column.type === "checkbox") {
+  if (type === "checkbox") {
     return (
       <input
         type="checkbox"
@@ -2677,14 +2832,65 @@ function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
     );
   }
 
-  if (column.type === "status") {
-    if (column.statusOptions.length === 0) {
+  if (type === "date") {
+    const dateValue = typeof draft === "string" ? draft : "";
+
+    if (!editingDate) {
+      return (
+        <button
+          type="button"
+          className="flex min-h-8 w-full min-w-[5.6rem] items-center rounded-[10px] border border-transparent px-1.5 text-left text-sm tabular-nums transition hover:border-[color:var(--tm-border)] hover:bg-white/55 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-70"
+          disabled={saving}
+          title={dateValue || "Set date"}
+          aria-label={dateValue ? `Date ${formatCompactDate(dateValue)}` : "Set date"}
+          onClick={() => setEditingDate(true)}
+        >
+          {dateValue ? (
+            <span className="truncate">{formatCompactDate(dateValue)}</span>
+          ) : (
+            <span className="truncate text-[color:var(--tm-muted)]">dd mmm yy</span>
+          )}
+        </button>
+      );
+    }
+
+    return (
+      <input
+        autoFocus
+        type="date"
+        className={inputClassName("w-full min-w-[7rem] px-1.5")}
+        value={dateValue}
+        disabled={saving}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          onSave(event.target.value || null);
+        }}
+        onBlur={() => setEditingDate(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === "Escape") {
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    );
+  }
+
+  if (type === "status") {
+    if (statusOptionsUnavailable) {
+      return (
+        <span className="text-xs text-[color:var(--tm-muted)]">
+          No status column
+        </span>
+      );
+    }
+
+    if (statusOptions.length === 0) {
       return <span className="text-xs text-[color:var(--tm-muted)]">No options</span>;
     }
 
     const selectedOption =
       typeof draft === "string"
-        ? column.statusOptions.find((option) => option.id === draft)
+        ? statusOptions.find((option) => option.id === draft)
         : undefined;
 
     if (!editingStatus) {
@@ -2723,7 +2929,7 @@ function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
         }}
       >
         <option value="">Select status</option>
-        {column.statusOptions.map((option) => (
+        {statusOptions.map((option) => (
           <option key={option.id} value={option.id}>
             {option.label}
           </option>
@@ -2733,11 +2939,11 @@ function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
   }
 
   const inputType =
-    column.type === "number" ? "number" : column.type === "date" ? "date" : "text";
-  const placeholder = column.type === "user" ? "User id" : "";
+    type === "number" ? "number" : "text";
+  const placeholder = type === "user" ? "User id" : "";
 
   function saveDraft() {
-    if (column.type === "number") {
+    if (type === "number") {
       onSave(draft === "" ? null : Number(draft));
       return;
     }
@@ -2747,7 +2953,7 @@ function CellEditor({ column, value, saving, onSave }: CellEditorProps) {
   return (
     <input
       type={inputType}
-      className={inputClassName(column.type === "date" ? "w-full px-1.5" : "w-full")}
+      className={inputClassName("w-full")}
       value={typeof draft === "string" ? draft : ""}
       disabled={saving}
       placeholder={placeholder}

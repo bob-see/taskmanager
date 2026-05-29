@@ -1,5 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import {
+  effectiveCellType,
   getCurrentUserOr401,
   type MatrixColumnType,
   parseCellValue,
@@ -53,7 +54,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const [row, column] = await Promise.all([
     prisma.matrixRow.findFirst({
       where: { id: rowId, spaceId },
-      select: { id: true },
+      select: { id: true, cellTypeOverride: true },
     }),
     prisma.matrixColumn.findFirst({
       where: { id: columnId, spaceId },
@@ -68,7 +69,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     );
   }
 
-  const type = validateColumnType(column.type);
+  const type = validateColumnType(effectiveCellType(row, column));
   if (type.error) return type.error;
 
   const data: Record<string, string | number | boolean | Date | null> = {};
@@ -93,10 +94,28 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 
   if (type.value === "status" && parsedValue?.data.statusOptionId) {
+    const statusColumnId =
+      column.type === "status"
+        ? columnId
+        : (
+            await prisma.matrixColumn.findFirst({
+              where: { spaceId, type: "status" },
+              orderBy: [{ order: "asc" }, { id: "asc" }],
+              select: { id: true },
+            })
+          )?.id;
+
+    if (!statusColumnId) {
+      return Response.json(
+        { error: "No status options are available for this space" },
+        { status: 400 }
+      );
+    }
+
     const option = await prisma.columnStatusOption.findFirst({
       where: {
         id: parsedValue.data.statusOptionId,
-        columnId,
+        columnId: statusColumnId,
       },
       select: { id: true },
     });

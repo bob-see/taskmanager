@@ -101,7 +101,6 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   const cellCount = await prisma.matrixCell.count({
     where: {
-      columnId,
       statusOptionId: optionId,
     },
   });

@@ -84,6 +84,13 @@ function isSectionRow(name: string) {
   return /^--.+--$/.test(name.trim());
 }
 
+function effectiveCellType(
+  row: { cellTypeOverride: string | null },
+  column: { type: string }
+) {
+  return row.cellTypeOverride || column.type;
+}
+
 export default async function SpacePrintPage({ params, searchParams }: PrintPageProps) {
   const { spaceId } = await params;
   const query = await searchParams;
@@ -171,6 +178,7 @@ export default async function SpacePrintPage({ params, searchParams }: PrintPage
   });
 
   const cellMap = new Map(cells.map((cell) => [`${cell.rowId}:${cell.columnId}`, cell]));
+  const firstStatusColumn = space.columns.find((column) => column.type === "status");
   const rowOrder = new Map(space.rows.map((row, index) => [row.id, index]));
   const columnOrder = new Map(space.columns.map((column, index) => [column.id, index]));
   const allStatusOptions = space.columns
@@ -280,29 +288,38 @@ export default async function SpacePrintPage({ params, searchParams }: PrintPage
                 </th>
                 {space.columns.map((column) => {
                   const cell = cellMap.get(`${row.id}:${column.id}`);
+                  const type = effectiveCellType(row, column);
+                  const statusColumn =
+                    type === "status"
+                      ? column.type === "status"
+                        ? column
+                        : firstStatusColumn
+                      : undefined;
                   const statusOption =
-                    column.type === "status" && cell?.statusOptionId
-                      ? column.statusOptions.find((option) => option.id === cell.statusOptionId)
+                    statusColumn && cell?.statusOptionId
+                      ? statusColumn.statusOptions.find(
+                          (option) => option.id === cell.statusOptionId
+                        )
                       : undefined;
                   return (
                     <td key={column.id}>
                       <div className="cell-content">
                         <span className="cell-value">
-                          {column.type === "status" && statusOption ? (
+                          {type === "status" && statusOption ? (
                             <span
                               className="status-block"
                               style={statusStyle(statusOption.color)}
                               title={statusOption.label}
                             />
-                          ) : column.type === "checkbox" ? (
+                          ) : type === "checkbox" ? (
                             cell?.booleanValue ? "✓" : ""
-                          ) : column.type === "date" ? (
+                          ) : type === "date" ? (
                             formatShortDate(cell?.dateValue ?? null)
-                          ) : column.type === "number" ? (
+                          ) : type === "number" ? (
                             cell?.numberValue === null || cell?.numberValue === undefined
                               ? ""
                               : String(cell.numberValue)
-                          ) : column.type === "user" ? (
+                          ) : type === "user" ? (
                             initials(cell?.userValue?.name, cell?.userValue?.email)
                           ) : (
                             shortText(cell?.textValue)
