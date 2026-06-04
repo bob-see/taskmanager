@@ -120,6 +120,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const newNote = parseOptionalTextInput(body?.notes, "notes");
   if (newNote.error) return newNote.error;
 
+  const waitingOn = parseOptionalTextInput(body?.waitingOn, "waitingOn");
+  if (waitingOn.error) return waitingOn.error;
+
   if (body?.projectId !== undefined) {
     const projectId = parseOptionalTextInput(body.projectId, "projectId");
     if (projectId.error) return projectId.error;
@@ -222,11 +225,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
   }
 
-  if (Object.keys(data).length === 0 && !newNote.value) {
+  if (Object.keys(data).length === 0 && !newNote.value && !waitingOn.value) {
     return Response.json(
       {
         error:
-          "Body must include at least one of title, startDate, dueAt, category, notes, projectId, isPriority, repeat settings, or completed",
+          "Body must include at least one of title, startDate, dueAt, category, notes, waitingOn, projectId, isPriority, repeat settings, or completed",
       },
       { status: 400 }
     );
@@ -289,12 +292,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
       });
     }
 
-    if (newNote.value) {
+    if (newNote.value || waitingOn.value) {
       await tx.taskNote.create({
         data: {
           taskId: id,
           userId: profile.userId ?? null,
-          content: newNote.value,
+          content: newNote.value ?? "",
+          waitingOn: waitingOn.value ?? null,
         },
       });
     }

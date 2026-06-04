@@ -1,0 +1,1 @@
+ALTER TABLE `tasknote` ADD COLUMN `waitingOn` VARCHAR(191) NULL;

@@ -95,6 +95,7 @@ type TaskFormState = RepeatFormState & {
   dueAt: string;
   category: string;
   notes: string;
+  waitingOn: string;
   projectId: string;
 };
 
@@ -932,11 +933,13 @@ function CategoryCombobox({
   onBlur,
   className,
   disabled,
+  optionsLabel = "category options",
   ...props
 }: Omit<ComponentPropsWithoutRef<"input">, "value" | "onChange"> & {
   suggestions: string[];
   value: string;
   onChange: (value: string) => void;
+  optionsLabel?: string;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -992,7 +995,7 @@ function CategoryCombobox({
         />
         <button
           aria-expanded={open}
-          aria-label="Show category options"
+          aria-label={`Show ${optionsLabel}`}
           className="tm-button rounded-md border px-2 py-1 text-xs"
           disabled={disabled}
           type="button"
@@ -1112,6 +1115,7 @@ function createEmptyTaskForm(dateValue = todayInputValue()): TaskFormState {
     dueAt: "",
     category: "",
     notes: "",
+    waitingOn: "",
     projectId: "",
     ...createRepeatDefaults(dateValue),
   };
@@ -1123,7 +1127,13 @@ function isRecurringTask(task: Task) {
 
 function getTaskNotesText(task: Pick<Task, "noteHistory" | "notes">) {
   if (task.noteHistory.length > 0) {
-    return task.noteHistory.map((note) => note.content).join("\n\n");
+    return task.noteHistory
+      .map((note) =>
+        [note.content, note.waitingOn ? `Waiting on: ${note.waitingOn}` : ""]
+          .filter(Boolean)
+          .join("\n")
+      )
+      .join("\n\n");
   }
 
   return task.notes ?? "";
@@ -1141,7 +1151,13 @@ function formatTaskNotesPreview(task: Pick<Task, "noteHistory" | "notes">) {
   return task.noteHistory
     .map((note) => {
       const author = note.user?.name || "Unknown";
-      return `${author} · ${formatNoteTimestamp(note.createdAt)}\n${note.content}`;
+      return [
+        `${author} · ${formatNoteTimestamp(note.createdAt)}`,
+        note.content,
+        note.waitingOn ? `Waiting on: ${note.waitingOn}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n\n");
 }
@@ -2598,6 +2614,14 @@ export function TrackerClient({
         .map((category) => [category.toLocaleLowerCase(), category])
     ).values()
   ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  const waitingOnSuggestions = Array.from(
+    new Map(
+      tasks
+        .flatMap((task) => task.noteHistory.map((note) => note.waitingOn?.trim() ?? ""))
+        .filter(Boolean)
+        .map((waitingOn) => [waitingOn.toLocaleLowerCase(), waitingOn])
+    ).values()
+  ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
   function clearSearch() {
     setSearchQuery("");
@@ -2828,6 +2852,7 @@ export function TrackerClient({
           dueAt: form.dueAt || null,
           category: form.category || null,
           notes: form.notes.trim() || null,
+          waitingOn: form.waitingOn.trim() || null,
           projectId: form.projectId || null,
           repeatEnabled: form.repeatEnabled,
           repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
@@ -2853,6 +2878,7 @@ export function TrackerClient({
       }
 
       const submittedNote = form.notes.trim();
+      const submittedWaitingOn = form.waitingOn.trim();
       const createdTask = (await res.json()) as Task & {
         noteSaveError?: boolean;
         noteSaveErrorMessage?: string;
@@ -2866,6 +2892,7 @@ export function TrackerClient({
         setEditTaskForm({
           ...createEditTaskForm(task),
           notes: submittedNote,
+          waitingOn: submittedWaitingOn,
         });
         setError(
           createdTask.noteSaveErrorMessage ??
@@ -3499,10 +3526,13 @@ export function TrackerClient({
     if (!editTaskId || !editTaskForm) return;
 
     const pendingNoteText = editTaskForm.notes.trim();
-    const pendingNote: TaskNoteHistoryEntry | null = pendingNoteText
-      ? {
+    const pendingWaitingOn = editTaskForm.waitingOn.trim();
+    const pendingNote: TaskNoteHistoryEntry | null =
+      pendingNoteText || pendingWaitingOn
+        ? {
           id: createTempId("task-note"),
           content: pendingNoteText,
+          waitingOn: pendingWaitingOn || null,
           createdAt: new Date().toISOString(),
           user: {
             id: "current-user",
@@ -3534,6 +3564,7 @@ export function TrackerClient({
         dueAt: editTaskForm.dueAt || null,
         category: editTaskForm.category || null,
         notes: editTaskForm.notes || null,
+        waitingOn: editTaskForm.waitingOn || null,
         projectId: editTaskForm.projectId || null,
         repeatEnabled: editTaskForm.repeatEnabled,
         repeatPattern: editTaskForm.repeatEnabled ? editTaskForm.repeatPattern : null,
@@ -3561,6 +3592,7 @@ export function TrackerClient({
             ? {
                 ...prev,
                 notes: pendingNoteText,
+                waitingOn: pendingWaitingOn,
                 noteHistory: prev.noteHistory.filter((note) => note.id !== pendingNote.id),
               }
             : prev
@@ -5028,6 +5060,19 @@ export function TrackerClient({
                 setForm((prev) => ({ ...prev, notes: e.target.value }))
               }
             />
+            <label className="min-w-0 space-y-1 text-sm sm:col-span-2">
+              <div className="tm-muted italic">Waiting on</div>
+              <CategoryCombobox
+                className={`${inputClass} min-w-0 w-full`}
+                optionsLabel="waiting on options"
+                placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
+                suggestions={waitingOnSuggestions}
+                value={form.waitingOn}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, waitingOn: value }))
+                }
+              />
+            </label>
             <select
               className={`${inputClass} min-w-0 w-full`}
               value={form.projectId}
@@ -5565,6 +5610,7 @@ export function TrackerClient({
         form={editTaskForm}
         saving={editTaskSaving}
         categorySuggestions={categorySuggestions}
+        waitingOnSuggestions={waitingOnSuggestions}
         projectOptions={projectOptions}
         onClose={closeTaskEditor}
         onSubmit={submitTaskEditor}

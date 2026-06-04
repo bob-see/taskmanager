@@ -104,6 +104,9 @@ export async function POST(req: Request, ctx: Ctx) {
   const newNote = parseOptionalTextInput(body?.notes, "notes");
   if (newNote.error) return newNote.error;
 
+  const waitingOn = parseOptionalTextInput(body?.waitingOn, "waitingOn");
+  if (waitingOn.error) return waitingOn.error;
+
   const projectId = parseOptionalTextInput(body?.projectId, "projectId");
   if (projectId.error) return projectId.error;
   if (projectId.value) {
@@ -191,13 +194,14 @@ export async function POST(req: Request, ctx: Ctx) {
   });
 
   let noteSaveErrorMessage: string | null = null;
-  if (newNote.value) {
+  if (newNote.value || waitingOn.value) {
     try {
       await prisma.taskNote.create({
         data: {
           taskId: createdTask.id,
           userId: profile.userId ?? null,
-          content: newNote.value,
+          content: newNote.value ?? "",
+          waitingOn: waitingOn.value ?? null,
         },
       });
     } catch (error) {

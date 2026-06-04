@@ -22,6 +22,7 @@ export type RepeatFormState = {
 export type TaskNoteHistoryEntry = {
   id: string;
   content: string;
+  waitingOn?: string | null;
   createdAt: string | Date;
   user?: {
     id: string;
@@ -38,6 +39,7 @@ export type EditTaskFormState = RepeatFormState & {
   dueAt: string;
   category: string;
   notes: string;
+  waitingOn: string;
   projectId: string;
   noteHistory: TaskNoteHistoryEntry[];
 };
@@ -55,6 +57,7 @@ export type TaskCreateFormState = RepeatFormState & {
   dueAt: string;
   category: string;
   notes: string;
+  waitingOn: string;
   projectId: string;
 };
 
@@ -91,6 +94,7 @@ type TaskEditorModalProps = {
   form: EditTaskFormState | null;
   saving: boolean;
   categorySuggestions: string[];
+  waitingOnSuggestions: string[];
   projectOptions: ProjectOption[];
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -175,6 +179,7 @@ function CategoryCombobox({
   disabled = false,
   autoFocus = false,
   placeholder = "Category",
+  optionsLabel = "options",
 }: {
   value: string;
   suggestions: string[];
@@ -183,6 +188,7 @@ function CategoryCombobox({
   disabled?: boolean;
   autoFocus?: boolean;
   placeholder?: string;
+  optionsLabel?: string;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -225,7 +231,7 @@ function CategoryCombobox({
         />
         <button
           aria-expanded={open}
-          aria-label="Show category options"
+          aria-label={`Show ${optionsLabel}`}
           className="tm-button rounded-md border px-2 py-1 text-xs"
           disabled={disabled}
           type="button"
@@ -309,6 +315,7 @@ export function createTaskPayload<T extends TaskCreateFormState>(form: T) {
     dueAt: form.dueAt || null,
     category: form.category.trim() || null,
     notes: form.notes.trim() || null,
+    waitingOn: form.waitingOn.trim() || null,
     projectId: form.projectId || null,
     repeatEnabled: form.repeatEnabled,
     repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
@@ -502,6 +509,7 @@ export function createEditTaskForm(task: EditableTask): EditTaskFormState {
     dueAt: toDateOnly(task.dueAt),
     category: task.category ?? "",
     notes: "",
+    waitingOn: "",
     projectId: task.projectId ?? "",
     noteHistory: task.noteHistory ?? [],
     repeatEnabled: task.repeatEnabled,
@@ -530,6 +538,7 @@ export function TaskEditorModal({
   form,
   saving,
   categorySuggestions,
+  waitingOnSuggestions,
   projectOptions,
   onClose,
   onSubmit,
@@ -585,6 +594,19 @@ export function TaskEditorModal({
               onFormChange((prev) => ({ ...prev, notes: event.target.value }))
             }
           />
+          <label className="space-y-1 text-sm">
+            <div className="tm-muted italic">Waiting on</div>
+            <CategoryCombobox
+              className={`w-full ${inputClass}`}
+              optionsLabel="waiting on options"
+              placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
+              suggestions={waitingOnSuggestions}
+              value={form.waitingOn}
+              onChange={(value) =>
+                onFormChange((prev) => ({ ...prev, waitingOn: value }))
+              }
+            />
+          </label>
           <section className="space-y-2">
             <h3 className="text-sm font-medium">Note History</h3>
             {form.noteHistory.length > 0 ? (
@@ -600,7 +622,14 @@ export function TaskEditorModal({
                       {note.isPending ? <span>saving...</span> : null}
                       {note.isFailed ? <span>could not save</span> : null}
                     </div>
-                    <div className="whitespace-pre-wrap leading-5">{note.content}</div>
+                    {note.content ? (
+                      <div className="whitespace-pre-wrap leading-5">{note.content}</div>
+                    ) : null}
+                    {note.waitingOn ? (
+                      <div className="mt-1 text-[color:var(--tm-muted)] italic">
+                        Waiting on: {note.waitingOn}
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>

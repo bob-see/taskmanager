@@ -67,6 +67,7 @@ model TaskNote {
   taskId    String   @db.VarChar(36)
   userId    String?  @db.VarChar(36)
   content   String   @db.Text
+  waitingOn String?
   createdAt DateTime @default(now())
 
   task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)

@@ -203,7 +203,13 @@ function formatNoteTimestamp(value: string | Date) {
 
 function getTaskNotesText(task: Pick<OverviewTask, "noteHistory" | "notes">) {
   if (task.noteHistory.length > 0) {
-    return task.noteHistory.map((note) => note.content).join("\n\n");
+    return task.noteHistory
+      .map((note) =>
+        [note.content, note.waitingOn ? `Waiting on: ${note.waitingOn}` : ""]
+          .filter(Boolean)
+          .join("\n")
+      )
+      .join("\n\n");
   }
 
   return task.notes ?? "";
@@ -221,7 +227,13 @@ function formatTaskNotesPreview(task: Pick<OverviewTask, "noteHistory" | "notes"
   return task.noteHistory
     .map((note) => {
       const author = note.user?.name || "Unknown";
-      return `${author} · ${formatNoteTimestamp(note.createdAt)}\n${note.content}`;
+      return [
+        `${author} · ${formatNoteTimestamp(note.createdAt)}`,
+        note.content,
+        note.waitingOn ? `Waiting on: ${note.waitingOn}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n\n");
 }
@@ -304,6 +316,7 @@ function createEmptyTaskDraftState(): TaskDraftState {
     title: "",
     category: "",
     notes: "",
+    waitingOn: "",
     projectId: "",
     startDate,
     dueAt: "",
@@ -707,6 +720,22 @@ function ProfileCard({
     () => openTasks.filter((task) => matchesOverviewTaskFilter(task, selectedFilter, today)),
     [openTasks, selectedFilter, today]
   );
+  const waitingOnSuggestions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          openTasks
+            .flatMap((task) =>
+              task.noteHistory.map((note) => note.waitingOn?.trim() ?? "")
+            )
+            .filter(Boolean)
+            .map((waitingOn) => [waitingOn.toLocaleLowerCase(), waitingOn])
+        ).values()
+      ).sort((left, right) =>
+        left.localeCompare(right, undefined, { sensitivity: "base" })
+      ),
+    [openTasks]
+  );
   const displayCounts = useMemo(
     () => ({
       openNow: openTasks.filter((task) =>
@@ -990,6 +1019,7 @@ function ProfileCard({
         noteSaveErrorMessage?: string;
       };
       const submittedNote = taskDraft.notes.trim();
+      const submittedWaitingOn = taskDraft.waitingOn.trim();
 
       const projectName = createdTask.projectId
         ? projects.find((projectOption) => projectOption.id === createdTask.projectId)
@@ -1046,6 +1076,7 @@ function ProfileCard({
         setEditTaskForm({
           ...createEditTaskForm(nextTask),
           notes: submittedNote,
+          waitingOn: submittedWaitingOn,
         });
         alert(
           createdTask.noteSaveErrorMessage ??
@@ -1430,10 +1461,13 @@ function ProfileCard({
     if (!editTaskId || !editTaskForm) return;
 
     const pendingNoteText = editTaskForm.notes.trim();
-    const pendingNote: TaskNoteHistoryEntry | null = pendingNoteText
-      ? {
+    const pendingWaitingOn = editTaskForm.waitingOn.trim();
+    const pendingNote: TaskNoteHistoryEntry | null =
+      pendingNoteText || pendingWaitingOn
+        ? {
           id: createTempId("task-note"),
           content: pendingNoteText,
+          waitingOn: pendingWaitingOn || null,
           createdAt: new Date().toISOString(),
           user: {
             id: "current-user",
@@ -1465,6 +1499,7 @@ function ProfileCard({
         dueAt: editTaskForm.dueAt || null,
         category: editTaskForm.category || null,
         notes: editTaskForm.notes || null,
+        waitingOn: editTaskForm.waitingOn || null,
         projectId: editTaskForm.projectId || null,
         repeatEnabled: editTaskForm.repeatEnabled,
         repeatPattern: editTaskForm.repeatEnabled ? editTaskForm.repeatPattern : null,
@@ -1554,6 +1589,7 @@ function ProfileCard({
             ? {
                 ...prev,
                 notes: pendingNoteText,
+                waitingOn: pendingWaitingOn,
                 noteHistory: prev.noteHistory.filter((note) => note.id !== pendingNote.id),
               }
             : prev
@@ -2127,6 +2163,33 @@ function ProfileCard({
               </div>
 
               <div className="space-y-1.5">
+                <label
+                  className="text-sm font-medium text-[color:var(--tm-muted)] italic"
+                  htmlFor={`overview-task-waiting-on-${profile.id}`}
+                >
+                  Waiting on
+                </label>
+                <input
+                  id={`overview-task-waiting-on-${profile.id}`}
+                  className={`${inputClass} w-full`}
+                  placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
+                  list={`overview-waiting-on-${profile.id}`}
+                  value={taskDraft.waitingOn}
+                  onChange={(event) =>
+                    setTaskDraft((prev) => ({
+                      ...prev,
+                      waitingOn: event.target.value,
+                    }))
+                  }
+                />
+                <datalist id={`overview-waiting-on-${profile.id}`}>
+                  {waitingOnSuggestions.map((suggestion) => (
+                    <option key={suggestion} value={suggestion} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor={`overview-task-project-${profile.id}`}>
                   Project
                 </label>
@@ -2224,6 +2287,7 @@ function ProfileCard({
         form={editTaskForm}
         saving={editTaskSaving}
         categorySuggestions={categorySuggestions}
+        waitingOnSuggestions={waitingOnSuggestions}
         projectOptions={projectOptions}
         onClose={closeTaskEditor}
         onSubmit={submitTaskEditor}
