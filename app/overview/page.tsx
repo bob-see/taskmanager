@@ -76,6 +76,18 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
           id: true,
           title: true,
           notes: true,
+          noteHistory: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
           startDate: true,
           dueAt: true,
           completedOn: true,
@@ -203,6 +215,10 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
         id: task.id,
         title: task.title,
         notes: task.notes,
+        noteHistory: task.noteHistory.map((note) => ({
+          ...note,
+          createdAt: note.createdAt.toISOString(),
+        })),
         projectId: task.projectId,
         projectName: task.project?.name ?? null,
         category: task.category,

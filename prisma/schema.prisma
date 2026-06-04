@@ -20,6 +20,7 @@ model User {
   spaceMemberships SpaceMember[]
   matrixCells      MatrixCell[]     @relation("MatrixCellUserValue")
   matrixCellNotes  MatrixCellNote[]
+  taskNotes        TaskNote[]
 
   @@index([email])
   @@map("user")
@@ -49,6 +50,7 @@ model Task {
 
   profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  noteHistory TaskNote[]
 
   @@unique([profileId, recurrenceSeriesId, startDate])
   @@index([profileId, startDate])
@@ -58,6 +60,21 @@ model Task {
   @@index([profileId, recurrenceSeriesId])
   @@index([projectId])
   @@map("task")
+}
+
+model TaskNote {
+  id        String   @id @default(cuid()) @db.VarChar(36)
+  taskId    String   @db.VarChar(36)
+  userId    String?  @db.VarChar(36)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@index([userId])
+  @@map("tasknote")
 }
 
 model Profile {

@@ -19,6 +19,7 @@ import {
   type ProjectFormState,
   type RepeatFormState,
   type RepeatPattern,
+  type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
 import {
   type AverageBasis,
@@ -49,6 +50,7 @@ type Task = {
   completedOn: string | null;
   category: string | null;
   notes: string | null;
+  noteHistory: TaskNoteHistoryEntry[];
   projectId: string | null;
   recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
@@ -259,6 +261,10 @@ function todayInputValue() {
   return dateInputValue(new Date());
 }
 
+function createTempId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function parseDateOnly(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -465,6 +471,13 @@ function formatMonthTitle(date: Date) {
   });
 }
 
+function formatNoteTimestamp(value: string | Date) {
+  return new Date(value).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 function getStartOfMonthGrid(date: Date) {
   return startOfWeekMon(new Date(date.getFullYear(), date.getMonth(), 1));
 }
@@ -613,7 +626,7 @@ function getTaskColumnSortValue(task: Task, sortColumn: TaskSortColumn) {
     return toDateOnly(task.dueAt);
   }
 
-  return task.notes?.trim() ? 1 : 0;
+  return getTaskNotesText(task).trim() ? 1 : 0;
 }
 
 function sortTasksByColumn(
@@ -784,7 +797,7 @@ function matchesTaskSearch(
 
   const projectName = task.projectId ? projectById.get(task.projectId)?.name ?? "" : "";
 
-  return [task.title, task.category ?? "", task.notes ?? "", projectName].some(
+  return [task.title, task.category ?? "", getTaskNotesText(task), projectName].some(
     (value) => value.toLowerCase().includes(normalized)
   );
 }
@@ -873,7 +886,7 @@ async function loadTrackerData(profileId: string) {
     projectsRes.json(),
   ])) as [Profile[], Task[], Project[]];
 
-  return { profilesData, tasksData, projectsData };
+  return { profilesData, tasksData: tasksData.map(normalizeTask), projectsData };
 }
 
 function isTaskCompletedOnDate(task: Task, dateValue: string) {
@@ -1108,6 +1121,48 @@ function isRecurringTask(task: Task) {
   return Boolean(task.recurrenceSeriesId || task.repeatEnabled || task.repeatPattern);
 }
 
+function getTaskNotesText(task: Pick<Task, "noteHistory" | "notes">) {
+  if (task.noteHistory.length > 0) {
+    return task.noteHistory.map((note) => note.content).join("\n\n");
+  }
+
+  return task.notes ?? "";
+}
+
+function hasTaskNotes(task: Pick<Task, "noteHistory" | "notes">) {
+  return getTaskNotesText(task).trim().length > 0;
+}
+
+function formatTaskNotesPreview(task: Pick<Task, "noteHistory" | "notes">) {
+  if (task.noteHistory.length === 0) {
+    return task.notes?.trim() ?? "";
+  }
+
+  return task.noteHistory
+    .map((note) => {
+      const author = note.user?.name || "Unknown";
+      return `${author} · ${formatNoteTimestamp(note.createdAt)}\n${note.content}`;
+    })
+    .join("\n\n");
+}
+
+function normalizeTask(task: Task): Task {
+  return {
+    ...task,
+    noteHistory: task.noteHistory ?? [],
+  };
+}
+
+function isTaskFormDirty(form: TaskFormState, baseline: TaskFormState) {
+  return JSON.stringify(form) !== JSON.stringify(baseline);
+}
+
+function isEditTaskFormDirty(form: EditTaskFormState, baseline: EditTaskFormState) {
+  const { noteHistory: _formHistory, ...formValues } = form;
+  const { noteHistory: _baselineHistory, ...baselineValues } = baseline;
+  return JSON.stringify(formValues) !== JSON.stringify(baselineValues);
+}
+
 function RepeatFields<T extends RepeatFormState>({
   form,
   onChange,
@@ -1290,14 +1345,50 @@ function Modal({
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
-            className={buttonClass}
+            aria-label={`Close ${title}`}
+            className="tm-button inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-lg leading-none"
             type="button"
             onClick={onClose}
           >
-            Close
+            ×
           </button>
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+function DiscardChangesModal({
+  open,
+  onKeepEditing,
+  onDiscardChanges,
+}: {
+  open: boolean;
+  onKeepEditing: () => void;
+  onDiscardChanges: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="tm-overlay fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className={`${cardClass} w-full max-w-sm p-5 shadow-2xl`}>
+        <h2 className="text-lg font-semibold">Discard unsaved changes?</h2>
+        <p className="mt-2 text-sm text-[color:var(--tm-muted)]">
+          You have unsaved changes. If you leave now, they will be lost.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className={`${buttonClass} px-4`} type="button" onClick={onKeepEditing}>
+            Keep Editing
+          </button>
+          <button
+            className={`${primaryButtonClass} px-4`}
+            type="button"
+            onClick={onDiscardChanges}
+          >
+            Discard Changes
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1793,8 +1884,8 @@ function TaskRow({
 
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--tm-muted)]">
           {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
-          {task.notes?.trim() && (
-            <TaskNotesButton notes={task.notes.trim()} />
+          {hasTaskNotes(task) && (
+            <TaskNotesButton notes={formatTaskNotesPreview(task)} />
           )}
           {task.isPriority && <span className={priorityChipClass}>Priority</span>}
           {projectArchived && (
@@ -2005,7 +2096,9 @@ export function TrackerClient({
     averageBasis: AverageBasis;
   } | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>(() => initialData?.profiles ?? []);
-  const [tasks, setTasks] = useState<Task[]>(() => initialData?.tasks ?? []);
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    initialData?.tasks.map(normalizeTask) ?? []
+  );
   const [projects, setProjects] = useState<Project[]>(() => initialData?.projects ?? []);
   const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
@@ -2073,6 +2166,9 @@ export function TrackerClient({
     createEmptyProjectForm
   );
   const [editTaskForm, setEditTaskForm] = useState<EditTaskFormState | null>(null);
+  const [discardTarget, setDiscardTarget] = useState<"new-task" | "edit-task" | null>(
+    null
+  );
 
   async function refreshData() {
     setLoading(true);
@@ -2096,7 +2192,7 @@ export function TrackerClient({
     async function initialLoad() {
       if (initialData) {
         setProfiles(initialData.profiles);
-        setTasks(initialData.tasks);
+      setTasks(initialData.tasks.map(normalizeTask));
         setProjects(initialData.projects);
         setLoading(false);
         setError(null);
@@ -2756,10 +2852,26 @@ export function TrackerClient({
         throw new Error(body?.error ?? "Could not create task");
       }
 
-      const task = (await res.json()) as Task;
+      const submittedNote = form.notes.trim();
+      const createdTask = (await res.json()) as Task & {
+        noteSaveError?: boolean;
+        noteSaveErrorMessage?: string;
+      };
+      const task = normalizeTask(createdTask);
       setTasks((prev) => [task, ...prev]);
       setForm(createEmptyTaskForm(selectedDay));
       setNewTaskOpen(false);
+      if (createdTask.noteSaveError) {
+        setEditTaskId(task.id);
+        setEditTaskForm({
+          ...createEditTaskForm(task),
+          notes: submittedNote,
+        });
+        setError(
+          createdTask.noteSaveErrorMessage ??
+            "Task was created, but the note could not be saved. Please add the note again from task details."
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -2796,7 +2908,7 @@ export function TrackerClient({
         throw new Error(body?.error ?? "Could not create task");
       }
 
-      const task = (await res.json()) as Task;
+      const task = normalizeTask((await res.json()) as Task);
       setTasks((prev) => [task, ...prev]);
       setQuickAddValue("");
     } catch (err) {
@@ -2857,8 +2969,9 @@ export function TrackerClient({
     }
 
     const payload = (await res.json()) as Task | { task: Task; createdTask?: Task | null };
-    const task = "task" in payload ? payload.task : payload;
-    const createdTask = "task" in payload ? payload.createdTask ?? null : null;
+    const task = normalizeTask("task" in payload ? payload.task : payload);
+    const createdTask =
+      "task" in payload && payload.createdTask ? normalizeTask(payload.createdTask) : null;
 
     setTasks((prev) => {
       const replaced = prev.map((item) => (item.id === task.id ? task : item));
@@ -3339,16 +3452,80 @@ export function TrackerClient({
     setEditTaskForm(createEditTaskForm(task));
   }
 
+  function closeNewTaskDialog() {
+    if (saving) return;
+
+    if (isTaskFormDirty(form, createEmptyTaskForm(selectedDay))) {
+      setDiscardTarget("new-task");
+      return;
+    }
+
+    setNewTaskOpen(false);
+    setForm(createEmptyTaskForm(selectedDay));
+  }
+
   function closeTaskEditor() {
+    if (!editTaskForm || !editTask) {
+      setEditTaskId(null);
+      setEditTaskForm(null);
+      return;
+    }
+
+    if (isEditTaskFormDirty(editTaskForm, createEditTaskForm(editTask))) {
+      setDiscardTarget("edit-task");
+      return;
+    }
+
     setEditTaskId(null);
     setEditTaskForm(null);
+  }
+
+  function discardUnsavedChanges() {
+    if (discardTarget === "new-task") {
+      setNewTaskOpen(false);
+      setForm(createEmptyTaskForm(selectedDay));
+    }
+
+    if (discardTarget === "edit-task") {
+      setEditTaskId(null);
+      setEditTaskForm(null);
+    }
+
+    setDiscardTarget(null);
   }
 
   async function submitTaskEditor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!editTaskId || !editTaskForm) return;
 
+    const pendingNoteText = editTaskForm.notes.trim();
+    const pendingNote: TaskNoteHistoryEntry | null = pendingNoteText
+      ? {
+          id: createTempId("task-note"),
+          content: pendingNoteText,
+          createdAt: new Date().toISOString(),
+          user: {
+            id: "current-user",
+            name: profileName,
+            email: "",
+          },
+          isPending: true,
+        }
+      : null;
+
     setEditTaskSaving(true);
+    if (pendingNote) {
+      setEditTaskForm((prev) =>
+        prev ? { ...prev, noteHistory: [pendingNote, ...prev.noteHistory] } : prev
+      );
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === editTaskId
+            ? { ...task, noteHistory: [pendingNote, ...task.noteHistory] }
+            : task
+        )
+      );
+    }
 
     try {
       await updateTask(editTaskId, {
@@ -3375,9 +3552,41 @@ export function TrackerClient({
             ? editTaskForm.repeatMonthlyDay
             : null,
       });
-      closeTaskEditor();
+      setEditTaskId(null);
+      setEditTaskForm(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update task");
+      if (pendingNote) {
+        setEditTaskForm((prev) =>
+          prev
+            ? {
+                ...prev,
+                notes: pendingNoteText,
+                noteHistory: prev.noteHistory.filter((note) => note.id !== pendingNote.id),
+              }
+            : prev
+        );
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.id === editTaskId
+              ? {
+                  ...task,
+                  noteHistory: task.noteHistory.filter(
+                    (note) => note.id !== pendingNote.id
+                  ),
+                }
+              : task
+          )
+        );
+      }
+      setError(
+        pendingNote
+          ? err instanceof Error
+            ? `Could not save task note. ${err.message}`
+            : "Could not save task note. Your note text is still in the editor."
+          : err instanceof Error
+            ? err.message
+            : "Could not update task"
+      );
     } finally {
       setEditTaskSaving(false);
     }
@@ -4701,8 +4910,8 @@ export function TrackerClient({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate font-semibold">{task.title}</span>
-                              {task.notes?.trim() && (
-                                <TaskNotesButton notes={task.notes.trim()} />
+                              {hasTaskNotes(task) && (
+                                <TaskNotesButton notes={formatTaskNotesPreview(task)} />
                               )}
                             </div>
                             <div className="tm-muted mt-1 flex flex-wrap gap-1.5 text-[11px]">
@@ -4767,10 +4976,7 @@ export function TrackerClient({
       <Modal
         open={newTaskOpen}
         title="Add Task"
-        onClose={() => {
-          if (saving) return;
-          setNewTaskOpen(false);
-        }}
+        onClose={closeNewTaskDialog}
       >
         <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="tm-muted text-sm">Expanded task fields and repeat settings.</div>
@@ -4816,7 +5022,7 @@ export function TrackerClient({
             />
             <textarea
               className={`${inputClass} min-h-24 min-w-0 w-full py-2 sm:col-span-2`}
-              placeholder="Notes"
+              placeholder="Add a note..."
               value={form.notes}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, notes: e.target.value }))
@@ -4839,13 +5045,6 @@ export function TrackerClient({
                 </option>
               ))}
             </select>
-            <button
-              className={`${primaryButtonClass} min-w-24 px-4 disabled:opacity-50 sm:justify-self-start`}
-              disabled={saving}
-              type="submit"
-            >
-              Save
-            </button>
           </div>
 
           <RepeatFields
@@ -4853,6 +5052,23 @@ export function TrackerClient({
             defaultDateValue={form.startDate}
             onChange={(updater) => setForm((prev) => updater(prev))}
           />
+          <div className="flex justify-end gap-2">
+            <button
+              className={`${buttonClass} px-4 disabled:opacity-50`}
+              disabled={saving}
+              type="button"
+              onClick={closeNewTaskDialog}
+            >
+              Cancel
+            </button>
+            <button
+              className={`${primaryButtonClass} min-w-24 px-4 disabled:opacity-50`}
+              disabled={saving}
+              type="submit"
+            >
+              Save & Close
+            </button>
+          </div>
         </form>
       </Modal>
 
@@ -5355,6 +5571,11 @@ export function TrackerClient({
         onFormChange={(updater) =>
           setEditTaskForm((prev) => (prev ? updater(prev) : prev))
         }
+      />
+      <DiscardChangesModal
+        open={Boolean(discardTarget)}
+        onKeepEditing={() => setDiscardTarget(null)}
+        onDiscardChanges={discardUnsavedChanges}
       />
     </section>
   );

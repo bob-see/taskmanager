@@ -14,6 +14,7 @@ import {
   type ProjectFormState,
   type RepeatPattern,
   type TaskCreateFormState,
+  type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
 
 type OverviewProject = {
@@ -33,6 +34,7 @@ type OverviewTask = {
   id: string;
   title: string;
   notes: string | null;
+  noteHistory: TaskNoteHistoryEntry[];
   projectId: string | null;
   projectName: string | null;
   category: string | null;
@@ -127,12 +129,51 @@ const priorityChipClass =
   "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800";
 const OVERVIEW_GROUPING_STORAGE_KEY = "tm-overview-grouping-mode";
 
+function DiscardChangesModal({
+  open,
+  onKeepEditing,
+  onDiscardChanges,
+}: {
+  open: boolean;
+  onKeepEditing: () => void;
+  onDiscardChanges: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/35 px-4 py-6">
+      <div className="tm-card w-full max-w-sm rounded-[16px] border p-5 shadow-xl">
+        <h2 className="text-lg font-semibold">Discard unsaved changes?</h2>
+        <p className="mt-2 text-sm text-[color:var(--tm-muted)]">
+          You have unsaved changes. If you leave now, they will be lost.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
+            type="button"
+            onClick={onKeepEditing}
+          >
+            Keep Editing
+          </button>
+          <button className={buttonClass} type="button" onClick={onDiscardChanges}>
+            Discard Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function todayInputValue() {
   const date = new Date();
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function createTempId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function toDateOnly(value: string | null) {
@@ -151,6 +192,45 @@ function formatMobileTaskDate(value: string | null) {
     day: "numeric",
     month: "short",
   });
+}
+
+function formatNoteTimestamp(value: string | Date) {
+  return new Date(value).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function getTaskNotesText(task: Pick<OverviewTask, "noteHistory" | "notes">) {
+  if (task.noteHistory.length > 0) {
+    return task.noteHistory.map((note) => note.content).join("\n\n");
+  }
+
+  return task.notes ?? "";
+}
+
+function hasTaskNotes(task: Pick<OverviewTask, "noteHistory" | "notes">) {
+  return getTaskNotesText(task).trim().length > 0;
+}
+
+function formatTaskNotesPreview(task: Pick<OverviewTask, "noteHistory" | "notes">) {
+  if (task.noteHistory.length === 0) {
+    return task.notes?.trim() ?? "";
+  }
+
+  return task.noteHistory
+    .map((note) => {
+      const author = note.user?.name || "Unknown";
+      return `${author} · ${formatNoteTimestamp(note.createdAt)}\n${note.content}`;
+    })
+    .join("\n\n");
+}
+
+function normalizeOverviewTask(task: OverviewTask): OverviewTask {
+  return {
+    ...task,
+    noteHistory: task.noteHistory ?? [],
+  };
 }
 
 function compareTasksByCreatedAt(
@@ -233,6 +313,16 @@ function createEmptyTaskDraftState(): TaskDraftState {
 
 function createEmptyProjectDraftState(): ProjectDraftState {
   return createProjectForm();
+}
+
+function isTaskDraftDirty(draft: TaskDraftState) {
+  return JSON.stringify(draft) !== JSON.stringify(createEmptyTaskDraftState());
+}
+
+function isEditTaskFormDirty(form: EditTaskFormState, baseline: EditTaskFormState) {
+  const { noteHistory: _formHistory, ...formValues } = form;
+  const { noteHistory: _baselineHistory, ...baselineValues } = baseline;
+  return JSON.stringify(formValues) !== JSON.stringify(baselineValues);
 }
 
 function isTaskOverdue(dueAt: string) {
@@ -510,7 +600,9 @@ function ProfileCard({
   onDrop,
 }: ProfileCardProps) {
   const router = useRouter();
-  const [openTasks, setOpenTasks] = useState(profile.openTasks);
+  const [openTasks, setOpenTasks] = useState(() =>
+    profile.openTasks.map(normalizeOverviewTask)
+  );
   const [projects, setProjects] = useState(profile.projects);
   const [counts, setCounts] = useState(profile.counts);
   const [taskDraft, setTaskDraft] = useState<TaskDraftState>(createEmptyTaskDraftState);
@@ -531,6 +623,9 @@ function ProfileCard({
   const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
   const [deleteTaskModalTask, setDeleteTaskModalTask] = useState<OverviewTask | null>(null);
   const [deleteTaskMode, setDeleteTaskMode] = useState<DeleteMode>("this");
+  const [discardTarget, setDiscardTarget] = useState<"new-task" | "edit-task" | null>(
+    null
+  );
   const [showAll, setShowAll] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -794,6 +889,12 @@ function ProfileCard({
 
   function closeDialog() {
     if (saving) return;
+
+    if (isTaskDraftDirty(taskDraft)) {
+      setDiscardTarget("new-task");
+      return;
+    }
+
     setDialogOpen(false);
     setTaskDraft(createEmptyTaskDraftState());
   }
@@ -806,8 +907,35 @@ function ProfileCard({
 
   function closeTaskEditor() {
     if (editTaskSaving) return;
+    const editTask = editTaskId
+      ? openTasks.find((task) => task.id === editTaskId) ?? null
+      : null;
+
+    if (
+      editTaskForm &&
+      editTask &&
+      isEditTaskFormDirty(editTaskForm, createEditTaskForm(editTask))
+    ) {
+      setDiscardTarget("edit-task");
+      return;
+    }
+
     setEditTaskId(null);
     setEditTaskForm(null);
+  }
+
+  function discardUnsavedChanges() {
+    if (discardTarget === "new-task") {
+      setDialogOpen(false);
+      setTaskDraft(createEmptyTaskDraftState());
+    }
+
+    if (discardTarget === "edit-task") {
+      setEditTaskId(null);
+      setEditTaskForm(null);
+    }
+
+    setDiscardTarget(null);
   }
 
   function closeProjectEditor() {
@@ -845,6 +973,7 @@ function ProfileCard({
         id: string;
         title: string;
         notes?: string | null;
+        noteHistory?: TaskNoteHistoryEntry[];
         startDate: string;
         dueAt: string | null;
         category: string | null;
@@ -857,7 +986,10 @@ function ProfileCard({
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
+        noteSaveError?: boolean;
+        noteSaveErrorMessage?: string;
       };
+      const submittedNote = taskDraft.notes.trim();
 
       const projectName = createdTask.projectId
         ? projects.find((projectOption) => projectOption.id === createdTask.projectId)
@@ -868,6 +1000,7 @@ function ProfileCard({
         id: createdTask.id,
         title: createdTask.title,
         notes: createdTask.notes ?? null,
+        noteHistory: createdTask.noteHistory ?? [],
         projectId: createdTask.projectId,
         projectName,
         category: createdTask.category,
@@ -908,6 +1041,17 @@ function ProfileCard({
 
       setDialogOpen(false);
       setTaskDraft(createEmptyTaskDraftState());
+      if (createdTask.noteSaveError) {
+        setEditTaskId(nextTask.id);
+        setEditTaskForm({
+          ...createEditTaskForm(nextTask),
+          notes: submittedNote,
+        });
+        alert(
+          createdTask.noteSaveErrorMessage ??
+            "Task was created, but the note could not be saved. Please add the note again from task details."
+        );
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -1218,6 +1362,7 @@ function ProfileCard({
         dueAt: string | null;
         category: string | null;
         notes: string | null;
+        noteHistory?: TaskNoteHistoryEntry[];
         createdAt: string;
         orderIndex: number | null;
         projectId: string | null;
@@ -1284,7 +1429,34 @@ function ProfileCard({
     event.preventDefault();
     if (!editTaskId || !editTaskForm) return;
 
+    const pendingNoteText = editTaskForm.notes.trim();
+    const pendingNote: TaskNoteHistoryEntry | null = pendingNoteText
+      ? {
+          id: createTempId("task-note"),
+          content: pendingNoteText,
+          createdAt: new Date().toISOString(),
+          user: {
+            id: "current-user",
+            name: profile.name,
+            email: "",
+          },
+          isPending: true,
+        }
+      : null;
+
     setEditTaskSaving(true);
+    if (pendingNote) {
+      setEditTaskForm((prev) =>
+        prev ? { ...prev, noteHistory: [pendingNote, ...prev.noteHistory] } : prev
+      );
+      setOpenTasks((prev) =>
+        prev.map((task) =>
+          task.id === editTaskId
+            ? { ...task, noteHistory: [pendingNote, ...task.noteHistory] }
+            : task
+        )
+      );
+    }
 
     try {
       const response = await patchTask(editTaskId, {
@@ -1324,6 +1496,7 @@ function ProfileCard({
                   ...item,
                   title: savedTask.title,
                   notes: savedTask.notes,
+                  noteHistory: savedTask.noteHistory ?? item.noteHistory,
                   category: savedTask.category,
                   startDate: toDateOnly(savedTask.startDate),
                   dueAt: nextDueAt,
@@ -1372,9 +1545,41 @@ function ProfileCard({
         }
       }
 
-      closeTaskEditor();
+      setEditTaskId(null);
+      setEditTaskForm(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not update task");
+      if (pendingNote) {
+        setEditTaskForm((prev) =>
+          prev
+            ? {
+                ...prev,
+                notes: pendingNoteText,
+                noteHistory: prev.noteHistory.filter((note) => note.id !== pendingNote.id),
+              }
+            : prev
+        );
+        setOpenTasks((prev) =>
+          prev.map((task) =>
+            task.id === editTaskId
+              ? {
+                  ...task,
+                  noteHistory: task.noteHistory.filter(
+                    (note) => note.id !== pendingNote.id
+                  ),
+                }
+              : task
+          )
+        );
+      }
+      alert(
+        pendingNote
+          ? error instanceof Error
+            ? `Could not save task note. ${error.message}`
+            : "Could not save task note. Your note text is still in the editor."
+          : error instanceof Error
+            ? error.message
+            : "Could not update task"
+      );
     } finally {
       setEditTaskSaving(false);
     }
@@ -1667,8 +1872,8 @@ function ProfileCard({
                           >
                             <div className="flex items-center gap-1.5 font-medium leading-snug">
                               <span>{task.title}</span>
-                              {task.notes?.trim() && (
-                                <TaskNotesIndicator notes={task.notes.trim()} />
+                              {hasTaskNotes(task) && (
+                                <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                               )}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
@@ -1806,11 +2011,11 @@ function ProfileCard({
                               <td className="px-2 py-2.5 font-medium">
                                 <div className="inline-flex min-w-0 items-center gap-1.5">
                                   <span>{task.title}</span>
-                                  {task.notes?.trim() && (
-                                    <TaskNotesIndicator notes={task.notes.trim()} />
+                                  {hasTaskNotes(task) && (
+                                    <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                                   )}
                                 </div>
-                                {task.notes?.trim() && (
+                                {hasTaskNotes(task) && (
                                   <span className="sr-only">Has notes</span>
                                 )}
                               </td>
@@ -1858,12 +2063,13 @@ function ProfileCard({
                 <p className="mt-1 text-sm text-[color:var(--tm-muted)]">{profile.name}</p>
               </div>
               <button
+                aria-label="Close Add Task"
                 type="button"
-                className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
+                className="tm-button inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-lg leading-none"
                 onClick={closeDialog}
                 disabled={saving}
               >
-                Cancel
+                ×
               </button>
             </div>
 
@@ -1912,7 +2118,7 @@ function ProfileCard({
                 <textarea
                   id={`overview-task-notes-${profile.id}`}
                   className={`min-h-24 w-full py-2 ${inputClass}`}
-                  placeholder="Notes"
+                  placeholder="Add a note..."
                   value={taskDraft.notes}
                   onChange={(event) =>
                     setTaskDraft((prev) => ({ ...prev, notes: event.target.value }))
@@ -1994,7 +2200,7 @@ function ProfileCard({
                   className={buttonClass}
                   disabled={saving || !taskDraft.title.trim()}
                 >
-                  {saving ? "Saving…" : "Save Task"}
+                  {saving ? "Saving…" : "Save & Close"}
                 </button>
               </div>
             </form>
@@ -2024,6 +2230,11 @@ function ProfileCard({
         onFormChange={(updater) =>
           setEditTaskForm((prev) => (prev ? updater(prev) : prev))
         }
+      />
+      <DiscardChangesModal
+        open={Boolean(discardTarget)}
+        onKeepEditing={() => setDiscardTarget(null)}
+        onDiscardChanges={discardUnsavedChanges}
       />
 
       <ProjectEditorModal

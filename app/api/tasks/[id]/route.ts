@@ -82,6 +82,20 @@ export async function PATCH(req: Request, ctx: Ctx) {
         : {}),
       ...(dueAt !== undefined ? { dueAt } : {}),
     },
+    include: {
+      noteHistory: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   if (task.profile.userId && completed !== undefined) {

@@ -19,6 +19,19 @@ export type RepeatFormState = {
   repeatMonthlyDay: number;
 };
 
+export type TaskNoteHistoryEntry = {
+  id: string;
+  content: string;
+  createdAt: string | Date;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  isPending?: boolean;
+  isFailed?: boolean;
+};
+
 export type EditTaskFormState = RepeatFormState & {
   title: string;
   startDate: string;
@@ -26,6 +39,7 @@ export type EditTaskFormState = RepeatFormState & {
   category: string;
   notes: string;
   projectId: string;
+  noteHistory: TaskNoteHistoryEntry[];
 };
 
 export type ProjectFormState = {
@@ -50,6 +64,7 @@ type EditableTask = {
   dueAt: string | null;
   category: string | null;
   notes: string | null;
+  noteHistory?: TaskNoteHistoryEntry[];
   projectId: string | null;
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | null;
@@ -126,6 +141,13 @@ function parseDateOnly(value: string) {
 
 function toDateOnly(value: string | null) {
   return value ? dateInputValue(new Date(value)) : "";
+}
+
+function formatNoteDate(value: string | Date) {
+  return new Date(value).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 function getWeekdayNumber(value: string) {
@@ -254,11 +276,12 @@ function Modal({
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
-            className={buttonClass}
+            aria-label={`Close ${title}`}
+            className="tm-button inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-lg leading-none"
             type="button"
             onClick={onClose}
           >
-            Close
+            ×
           </button>
         </div>
         {children}
@@ -478,8 +501,9 @@ export function createEditTaskForm(task: EditableTask): EditTaskFormState {
     startDate,
     dueAt: toDateOnly(task.dueAt),
     category: task.category ?? "",
-    notes: task.notes ?? "",
+    notes: "",
     projectId: task.projectId ?? "",
+    noteHistory: task.noteHistory ?? [],
     repeatEnabled: task.repeatEnabled,
     repeatPattern: task.repeatPattern ?? "daily",
     repeatDays:
@@ -555,12 +579,35 @@ export function TaskEditorModal({
           />
           <textarea
             className={`min-h-28 w-full ${inputClass}`}
-            placeholder="Notes"
+            placeholder="Add a note..."
             value={form.notes}
             onChange={(event) =>
               onFormChange((prev) => ({ ...prev, notes: event.target.value }))
             }
           />
+          <section className="space-y-2">
+            <h3 className="text-sm font-medium">Note History</h3>
+            {form.noteHistory.length > 0 ? (
+              <div className="space-y-2">
+                {form.noteHistory.map((note) => (
+                  <article
+                    key={note.id}
+                    className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/30 p-3 text-sm"
+                  >
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-[color:var(--tm-muted)]">
+                      <span>{note.user?.name || "Unknown"}</span>
+                      <span>{formatNoteDate(note.createdAt)}</span>
+                      {note.isPending ? <span>saving...</span> : null}
+                      {note.isFailed ? <span>could not save</span> : null}
+                    </div>
+                    <div className="whitespace-pre-wrap leading-5">{note.content}</div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[color:var(--tm-muted)]">No notes yet.</p>
+            )}
+          </section>
           <label className="space-y-1 text-sm">
             <div className="tm-muted">Project</div>
             <select
@@ -586,13 +633,23 @@ export function TaskEditorModal({
             defaultDateValue={form.startDate}
             onChange={(updater) => onFormChange((prev) => updater(prev))}
           />
-          <button
-            className={`${primaryButtonClass} px-4 disabled:opacity-50`}
-            disabled={saving}
-            type="submit"
-          >
-            Save Task
-          </button>
+          <div className="flex justify-end gap-2">
+            <button
+              className={`${buttonClass} px-4 disabled:opacity-50`}
+              disabled={saving}
+              type="button"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
+              disabled={saving}
+              type="submit"
+            >
+              Save & Close
+            </button>
+          </div>
         </form>
       )}
     </Modal>

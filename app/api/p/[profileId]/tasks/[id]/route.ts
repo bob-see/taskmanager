@@ -74,7 +74,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
     startDate?: Date;
     dueAt?: Date | null;
     category?: string | null;
-    notes?: string | null;
     projectId?: string | null;
     recurrenceSeriesId?: string | null;
     completedAt?: Date | null;
@@ -118,11 +117,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     data.category = category.value ?? null;
   }
 
-  if (body?.notes !== undefined) {
-    const notes = parseOptionalTextInput(body.notes, "notes");
-    if (notes.error) return notes.error;
-    data.notes = notes.value ?? null;
-  }
+  const newNote = parseOptionalTextInput(body?.notes, "notes");
+  if (newNote.error) return newNote.error;
 
   if (body?.projectId !== undefined) {
     const projectId = parseOptionalTextInput(body.projectId, "projectId");
@@ -226,7 +222,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
   }
 
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).length === 0 && !newNote.value) {
     return Response.json(
       {
         error:
@@ -270,8 +266,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       });
 
       if (markedDone.count === 0) {
-        const task = await tx.task.findFirst({ where: { id, profileId } });
-        return { task, createdTask: null };
+        return { createdTask: null };
       }
       completionTransitionSucceeded = true;
     } else if (isUncompletingTask) {
@@ -285,22 +280,23 @@ export async function PATCH(req: Request, ctx: Ctx) {
       });
 
       if (markedUndone.count === 0) {
-        const task = await tx.task.findFirst({ where: { id, profileId } });
-        return { task, createdTask: null };
+        return { createdTask: null };
       }
-    } else {
+    } else if (Object.keys(data).length > 0) {
       await tx.task.update({
         where: { id },
         data,
       });
     }
 
-    const task = await tx.task.findFirst({
-      where: { id, profileId },
-    });
-
-    if (!task) {
-      throw new Error("Task not found after update");
+    if (newNote.value) {
+      await tx.taskNote.create({
+        data: {
+          taskId: id,
+          userId: profile.userId ?? null,
+          content: newNote.value,
+        },
+      });
     }
 
     let createdTask = null;
@@ -325,7 +321,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         title: data.title ?? existingTask.title,
         category:
           data.category !== undefined ? data.category : existingTask.category,
-        notes: data.notes !== undefined ? data.notes : existingTask.notes,
+        notes: existingTask.notes,
         projectId:
           data.projectId !== undefined ? data.projectId : existingTask.projectId,
         profileId,
@@ -400,50 +396,68 @@ export async function PATCH(req: Request, ctx: Ctx) {
       }
     }
 
-    return { task, createdTask };
+    return { createdTask };
   });
 
+  const updatedTask = await prisma.task.findFirst({
+    where: { id, profileId },
+    include: {
+      noteHistory: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!updatedTask) {
+    return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
   if (profile.userId) {
-    const updatedTask = result.task;
+    if (!existingTask.completedOn && updatedTask.completedOn) {
+      await createActivityLog(prisma, {
+        userId: profile.userId,
+        profileId,
+        taskId: updatedTask.id,
+        projectId: updatedTask.projectId,
+        type: "task.complete",
+        description: `Completed task "${updatedTask.title}"`,
+      });
+    } else if (existingTask.completedOn && !updatedTask.completedOn) {
+      await createActivityLog(prisma, {
+        userId: profile.userId,
+        profileId,
+        taskId: updatedTask.id,
+        projectId: updatedTask.projectId,
+        type: "task.reopen",
+        description: `Reopened task "${updatedTask.title}"`,
+      });
+    }
 
-    if (updatedTask) {
-      if (!existingTask.completedOn && updatedTask.completedOn) {
-        await createActivityLog(prisma, {
-          userId: profile.userId,
-          profileId,
-          taskId: updatedTask.id,
-          projectId: updatedTask.projectId,
-          type: "task.complete",
-          description: `Completed task "${updatedTask.title}"`,
-        });
-      } else if (existingTask.completedOn && !updatedTask.completedOn) {
-        await createActivityLog(prisma, {
-          userId: profile.userId,
-          profileId,
-          taskId: updatedTask.id,
-          projectId: updatedTask.projectId,
-          type: "task.reopen",
-          description: `Reopened task "${updatedTask.title}"`,
-        });
-      }
-
-      if (
-        body?.isPriority !== undefined &&
-        existingTask.isPriority !== updatedTask.isPriority
-      ) {
-        await createActivityLog(prisma, {
-          userId: profile.userId,
-          profileId,
-          taskId: updatedTask.id,
-          projectId: updatedTask.projectId,
-          type: "task.priority_toggle",
-          description: `${updatedTask.isPriority ? "Prioritised" : "Unprioritised"} task "${updatedTask.title}"`,
-        });
-      }
+    if (
+      body?.isPriority !== undefined &&
+      existingTask.isPriority !== updatedTask.isPriority
+    ) {
+      await createActivityLog(prisma, {
+        userId: profile.userId,
+        profileId,
+        taskId: updatedTask.id,
+        projectId: updatedTask.projectId,
+        type: "task.priority_toggle",
+        description: `${updatedTask.isPriority ? "Prioritised" : "Unprioritised"} task "${updatedTask.title}"`,
+      });
     }
   }
 
-  return Response.json(result);
+  return Response.json({ task: updatedTask, createdTask: result.createdTask });
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {

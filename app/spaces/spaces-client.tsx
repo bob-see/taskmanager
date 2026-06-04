@@ -204,6 +204,45 @@ function createTempId(prefix: string) {
   return `temp-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function DiscardChangesModal({
+  open,
+  onKeepEditing,
+  onDiscardChanges,
+}: {
+  open: boolean;
+  onKeepEditing: () => void;
+  onDiscardChanges: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/20 p-4">
+      <div className="tm-card w-full max-w-sm rounded-xl border p-5 shadow-2xl">
+        <h2 className="text-lg font-semibold">Discard unsaved changes?</h2>
+        <p className="mt-2 text-sm text-[color:var(--tm-muted)]">
+          You have unsaved changes. If you leave now, they will be lost.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            className="tm-button min-h-9 rounded-[10px] border px-3 text-sm font-medium"
+            type="button"
+            onClick={onKeepEditing}
+          >
+            Keep Editing
+          </button>
+          <button
+            className="tm-button-primary min-h-9 rounded-[10px] border px-3 text-sm font-medium"
+            type="button"
+            onClick={onDiscardChanges}
+          >
+            Discard Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getNextOrder(items: { order: number }[]) {
   return Math.max(-1, ...items.map((item) => item.order)) + 1;
 }
@@ -2354,16 +2393,32 @@ function CellDetailsPanel({
 }: CellDetailsPanelProps) {
   const [assignedUserId, setAssignedUserId] = useState(cell?.userIdValue ?? "");
   const [newNote, setNewNote] = useState("");
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   useEffect(() => {
     setAssignedUserId(cell?.userIdValue ?? "");
     setNewNote("");
+    setConfirmDiscardOpen(false);
   }, [cell?.id, cell?.userIdValue]);
+
+  const hasUnsavedChanges =
+    assignedUserId !== (cell?.userIdValue ?? "") || newNote.trim().length > 0;
+
+  function requestClose() {
+    if (saving) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+      return;
+    }
+
+    onClose();
+  }
 
   async function saveDetails() {
     const saved = await onSave(assignedUserId, newNote);
     if (saved) {
       setNewNote("");
+      onClose();
     }
   }
 
@@ -2375,7 +2430,7 @@ function CellDetailsPanel({
       aria-label="Cell details"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
-          onClose();
+          requestClose();
         }
       }}
     >
@@ -2389,10 +2444,11 @@ function CellDetailsPanel({
           </div>
           <button
             type="button"
-            className="tm-button min-h-8 rounded-[10px] border px-2 text-xs font-medium"
-            onClick={onClose}
+            aria-label="Close cell details"
+            className="tm-button inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-lg leading-none"
+            onClick={requestClose}
           >
-            Close
+            ×
           </button>
         </div>
 
@@ -2481,7 +2537,7 @@ function CellDetailsPanel({
           <button
             type="button"
             className="tm-button min-h-9 rounded-[10px] border px-3 text-sm font-medium"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={saving}
           >
             Cancel
@@ -2493,13 +2549,21 @@ function CellDetailsPanel({
             disabled={saving}
             title={
               currentMember
-                ? "Save cell details"
+                ? "Save & Close"
                 : "Member information is still loading"
             }
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Saving..." : "Save & Close"}
           </button>
         </div>
+        <DiscardChangesModal
+          open={confirmDiscardOpen}
+          onKeepEditing={() => setConfirmDiscardOpen(false)}
+          onDiscardChanges={() => {
+            setConfirmDiscardOpen(false);
+            onClose();
+          }}
+        />
       </div>
     </div>
   );

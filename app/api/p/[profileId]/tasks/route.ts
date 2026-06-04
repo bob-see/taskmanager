@@ -43,6 +43,20 @@ export async function GET(_req: Request, ctx: Ctx) {
   const tasks = await prisma.task.findMany({
     where: { profileId },
     orderBy: [{ completedOn: "asc" }, { createdAt: "desc" }],
+    include: {
+      noteHistory: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   return Response.json(tasks);
@@ -87,8 +101,8 @@ export async function POST(req: Request, ctx: Ctx) {
   const category = parseOptionalTextInput(body?.category, "category");
   if (category.error) return category.error;
 
-  const notes = parseOptionalTextInput(body?.notes, "notes");
-  if (notes.error) return notes.error;
+  const newNote = parseOptionalTextInput(body?.notes, "notes");
+  if (newNote.error) return newNote.error;
 
   const projectId = parseOptionalTextInput(body?.projectId, "projectId");
   if (projectId.error) return projectId.error;
@@ -149,7 +163,7 @@ export async function POST(req: Request, ctx: Ctx) {
     ? toLocalDayStart(startDate.value)
     : startDate.value;
 
-  const task = await prisma.$transaction(async (tx: any) => {
+  const createdTask = await prisma.$transaction(async (tx: any) => {
     const orderIndex = await getNextTaskOrderIndex(tx, profileId);
     const createdTask = await tx.task.create({
       data: {
@@ -159,7 +173,6 @@ export async function POST(req: Request, ctx: Ctx) {
         orderIndex,
         ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
         ...(category.value !== undefined ? { category: category.value } : {}),
-        ...(notes.value !== undefined ? { notes: notes.value } : {}),
         ...(projectId.value !== undefined ? { projectId: projectId.value } : {}),
         ...normalizedRepeat.value,
       },
@@ -174,19 +187,77 @@ export async function POST(req: Request, ctx: Ctx) {
         })
       : createdTask;
 
-    if (profile.userId) {
-      await createActivityLog(tx as any, {
-        userId: profile.userId,
-        profileId,
-        taskId: task.id,
-        projectId: task.projectId,
-        type: "task.create",
-        description: `Created task "${task.title}"`,
-      });
-    }
-
     return task;
   });
+
+  let noteSaveErrorMessage: string | null = null;
+  if (newNote.value) {
+    try {
+      await prisma.taskNote.create({
+        data: {
+          taskId: createdTask.id,
+          userId: profile.userId ?? null,
+          content: newNote.value,
+        },
+      });
+    } catch (error) {
+      console.error("Task note create failed after task creation", {
+        taskId: createdTask.id,
+        profileId,
+        error,
+      });
+      noteSaveErrorMessage =
+        "Task was created, but the note could not be saved. Please add the note again from task details.";
+    }
+  }
+
+  if (profile.userId) {
+    try {
+      await createActivityLog(prisma, {
+        userId: profile.userId,
+        profileId,
+        taskId: createdTask.id,
+        projectId: createdTask.projectId,
+        type: "task.create",
+        description: `Created task "${createdTask.title}"`,
+      });
+    } catch (error) {
+      console.error("Task create activity log failed", {
+        taskId: createdTask.id,
+        profileId,
+        error,
+      });
+    }
+  }
+
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: createdTask.id },
+    include: {
+      noteHistory: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (noteSaveErrorMessage) {
+    return Response.json(
+      {
+        ...task,
+        noteSaveError: true,
+        noteSaveErrorMessage,
+      },
+      { status: 201 }
+    );
+  }
 
   return Response.json(task, { status: 201 });
 }
