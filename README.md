@@ -1,3 +1,25 @@
+# TaskManager
+
+## Project Documentation
+
+Before making significant architectural, workflow or UI changes, review:
+
+- PROJECT_PLAYBOOK.md
+- HOW_TO_WORK_WITH_TASKMANAGER.md
+- docs/DECISIONS.md
+
+These documents contain the project's design philosophy, development standards, architectural decisions and AI guidance.
+
+TaskManager prioritises:
+
+- Speed
+- Simplicity
+- Visibility
+- Low friction
+
+When in doubt, follow the Playbook.
+
+---
 
 The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
 
