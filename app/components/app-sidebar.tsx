@@ -22,6 +22,8 @@ type AppSidebarProps = {
   currentUser: SidebarUser;
 };
 
+const lostAllowedEmails = new Set(["bob@darcy.com.au", "robert.bob.see@gmail.com"]);
+
 function itemClassName(active: boolean, disabled = false) {
   return [
     "flex items-center rounded-xl px-3 py-2 text-sm transition",
@@ -37,6 +39,9 @@ function itemClassName(active: boolean, disabled = false) {
 export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const showLostLink = currentUser.email
+    ? lostAllowedEmails.has(currentUser.email.toLocaleLowerCase())
+    : false;
   const activeProfile = profiles.find((profile) => {
     const href = `/p/${profile.id}`;
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -53,9 +58,11 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
           ? "Activity"
           : pathname === "/users"
             ? "Users"
-            : pathname === "/reports"
-              ? "Reports"
-              : "Workspace");
+            : pathname === "/lost"
+              ? "Hatch Countdown"
+              : pathname === "/reports"
+                ? "Reports"
+                : "Workspace");
 
   function renderNavigation(onNavigate?: () => void) {
     return (
@@ -134,6 +141,15 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
               >
                 Activity
               </Link>
+              {showLostLink ? (
+                <Link
+                  href="/lost"
+                  className={itemClassName(pathname === "/lost")}
+                  onClick={onNavigate}
+                >
+                  LOST
+                </Link>
+              ) : null}
               {currentUser.role === "admin" ? (
                 <Link
                   href="/users"
