@@ -9,6 +9,8 @@ const FAILURE_SYMBOLS = ["𓂀", "𓊽", "𓆣", "𓃭", "𓏏", "𓇳", "𓁹",
 const STORAGE_KEY = "tm-lost-countdown-state-v3";
 const SESSION_KEY = "tm-lost-countdown-browser-session-v3";
 const LOCKED_STATUS = "Input remains locked until the final four minutes.";
+const FINAL_FOUR_STATUS = "ENTER THE NUMBERS";
+const FINAL_MINUTE_STATUS = "SYSTEM FAILURE IMMINENT";
 
 type LogEntry = {
   id: string;
@@ -38,18 +40,6 @@ function formatLogTime(timestamp: number) {
   });
 }
 
-function formatLastEntry(timestamp: number | null) {
-  if (!timestamp) return "No accepted entry";
-
-  return new Date(timestamp).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function createLog(message: string, timestamp = Date.now()): LogEntry {
   return {
     id: `${timestamp}-${Math.random().toString(36).slice(2)}`,
@@ -66,6 +56,18 @@ function createInitialState(message = "Countdown initiated."): StoredLostState {
     failure: false,
     lastResetAt: null,
     logs: [createLog(message, now)],
+    status: LOCKED_STATUS,
+  };
+}
+
+function resetStateWithLog(message: string): StoredLostState {
+  const now = Date.now();
+
+  return {
+    endAt: now + INITIAL_SECONDS * 1000,
+    failure: false,
+    lastResetAt: null,
+    logs: [createLog(message, now), createLog("Countdown started.", now)],
     status: LOCKED_STATUS,
   };
 }
@@ -116,6 +118,10 @@ function getSecondsUntil(endAt: number) {
   return Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
 }
 
+function hasLog(logs: LogEntry[], message: string) {
+  return logs.some((log) => log.message === message);
+}
+
 export function LostCountdownClient() {
   const [endAt, setEndAt] = useState(() => Date.now() + INITIAL_SECONDS * 1000);
   const [secondsRemaining, setSecondsRemaining] = useState(INITIAL_SECONDS);
@@ -127,16 +133,21 @@ export function LostCountdownClient() {
   const [successPulse, setSuccessPulse] = useState(false);
   const [failureFlash, setFailureFlash] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(true);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const expiredLoggedRef = useRef(false);
 
   const inputEnabled = secondsRemaining <= FINAL_WINDOW_SECONDS && secondsRemaining > 0 && !failure;
+  const finalThirtySeconds = secondsRemaining <= 30 && secondsRemaining > 0 && !failure;
   const finalMinute = secondsRemaining <= 60 && secondsRemaining > 0 && !failure;
   const finalTwoMinutes = secondsRemaining <= 120 && secondsRemaining > 0 && !failure;
   const warning = inputEnabled && !finalTwoMinutes && !failure;
   const terminalState = failure
     ? "failure"
-    : finalMinute
+    : finalThirtySeconds
+      ? "heartbeat"
+      : finalMinute
       ? "critical"
       : finalTwoMinutes
         ? "danger"
@@ -173,6 +184,37 @@ export function LostCountdownClient() {
       ...current,
       logs: [createLog(message), ...current.logs].slice(0, 20),
     }));
+  }
+
+  function jumpTo(seconds: number, logMessage: string, nextStatus: string) {
+    const now = Date.now();
+    updateStoredState((current) => ({
+      ...current,
+      endAt: now + seconds * 1000,
+      failure: false,
+      status: nextStatus,
+      logs: [createLog(logMessage, now), ...current.logs].slice(0, 20),
+    }));
+    setSequenceFields(SEQUENCE.map(() => ""));
+    setOverrideOpen(false);
+    window.setTimeout(() => inputRefs.current[0]?.focus(), 0);
+  }
+
+  function triggerFailure(message = "Failure triggered.") {
+    updateStoredState((current) => ({
+      ...current,
+      endAt: Date.now(),
+      failure: true,
+      status: "SYSTEM FAILURE",
+      logs: [createLog(message), ...current.logs].slice(0, 20),
+    }));
+    setOverrideOpen(false);
+  }
+
+  function resetCountdownFromOverride() {
+    persistState(resetStateWithLog("System reset."));
+    setSequenceFields(SEQUENCE.map(() => ""));
+    setOverrideOpen(false);
   }
 
   useEffect(() => {
@@ -233,6 +275,73 @@ export function LostCountdownClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endAt, failure, initialized]);
 
+  useEffect(() => {
+    if (!initialized || failure || secondsRemaining <= 0) return;
+
+    if (secondsRemaining <= 60) {
+      if (hasLog(logs, "System failure imminent.")) return;
+
+      updateStoredState((current) => ({
+        ...current,
+        status:
+          current.status === "Incorrect sequence." || current.status === "System reset successful."
+            ? current.status
+            : FINAL_MINUTE_STATUS,
+        logs: hasLog(current.logs, "System failure imminent.")
+          ? current.logs
+          : [createLog("System failure imminent."), ...current.logs].slice(0, 20),
+      }));
+      return;
+    }
+
+    if (secondsRemaining <= FINAL_WINDOW_SECONDS) {
+      if (hasLog(logs, "Final four minute protocol active.")) return;
+
+      updateStoredState((current) => ({
+        ...current,
+        status:
+          current.status === LOCKED_STATUS ||
+          current.status === FINAL_MINUTE_STATUS ||
+          current.status === FINAL_FOUR_STATUS
+            ? FINAL_FOUR_STATUS
+            : current.status,
+        logs: hasLog(current.logs, "Final four minute protocol active.")
+          ? current.logs
+          : [createLog("Final four minute protocol active."), ...current.logs].slice(0, 20),
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failure, initialized, logs, secondsRemaining, status]);
+
+  useEffect(() => {
+    if (!initialized) return;
+
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === "KeyL") {
+        event.preventDefault();
+        setOverrideOpen(true);
+        addLog("Maintenance override detected.");
+        return;
+      }
+
+      if (!event.shiftKey || !event.altKey) return;
+
+      if (event.code === "Digit4") {
+        event.preventDefault();
+        jumpTo(240, "Test override: final four minutes activated.", FINAL_FOUR_STATUS);
+      }
+
+      if (event.code === "Digit1") {
+        event.preventDefault();
+        jumpTo(60, "Test override: final minute activated.", FINAL_MINUTE_STATUS);
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized]);
+
   function resetSystem(message = "System reset successful.") {
     const now = Date.now();
     persistState({
@@ -282,7 +391,7 @@ export function LostCountdownClient() {
     updateStoredState((current) => ({
       ...current,
       status: "Incorrect sequence.",
-      logs: [createLog("Incorrect sequence."), ...current.logs].slice(0, 20),
+      logs: [createLog("Sequence rejected."), ...current.logs].slice(0, 20),
     }));
     setSequenceFields(SEQUENCE.map(() => ""));
     setFailureFlash(true);
@@ -291,7 +400,13 @@ export function LostCountdownClient() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#030403] text-[#d7f7b2]">
+    <main
+      className={`min-h-screen overflow-hidden text-[#d7f7b2] ${
+        failure
+          ? "bg-[radial-gradient(circle_at_50%_30%,rgba(127,29,29,0.32),#030101_66%)]"
+          : "bg-[#030403]"
+      }`}
+    >
       <div className="relative min-h-screen px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(73,119,72,0.2),transparent_34%),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.028)_1px,transparent_1px)] bg-[length:auto,42px_42px,42px_42px]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_78%,rgba(125,96,43,0.12),transparent_28%),radial-gradient(circle_at_86%_18%,rgba(35,79,54,0.16),transparent_30%)]" />
@@ -322,10 +437,12 @@ export function LostCountdownClient() {
                 className={`relative overflow-hidden rounded-[24px] border p-5 shadow-[inset_0_0_56px_rgba(0,0,0,0.9),0_0_36px_rgba(0,0,0,0.45)] sm:p-8 ${
                   terminalState === "failure"
                     ? "animate-pulse border-red-500/60 bg-[radial-gradient(circle_at_50%_42%,rgba(153,27,27,0.5),#070202_64%)]"
-                    : successPulse
+                  : successPulse
                       ? "border-lime-200/60 bg-[radial-gradient(circle_at_50%_42%,rgba(101,163,13,0.35),#031006_66%)]"
                       : failureFlash
                         ? "border-amber-200/60 bg-[radial-gradient(circle_at_50%_42%,rgba(180,83,9,0.38),#080704_66%)]"
+                        : terminalState === "heartbeat"
+                          ? "animate-[heartbeat_0.9s_ease-in-out_infinite] border-red-300/60 bg-[radial-gradient(circle_at_50%_42%,rgba(153,27,27,0.42),#050806_66%)]"
                         : terminalState === "critical"
                           ? "animate-pulse border-red-400/55 bg-[radial-gradient(circle_at_50%_42%,rgba(127,29,29,0.36),#050806_66%)]"
                           : terminalState === "danger"
@@ -359,7 +476,7 @@ export function LostCountdownClient() {
                         type="button"
                         className="rounded-[14px] border border-red-200/55 bg-red-500/24 px-6 py-4 font-mono text-sm font-semibold uppercase tracking-[0.22em] text-red-50 shadow-[0_0_24px_rgba(248,113,113,0.28)] transition hover:bg-red-500/34"
                         onClick={() => {
-                          persistState(createInitialState("Countdown initiated."));
+                          persistState(resetStateWithLog("System reset."));
                           setSequenceFields(SEQUENCE.map(() => ""));
                         }}
                       >
@@ -370,7 +487,9 @@ export function LostCountdownClient() {
                     <>
                       <div
                         className={`max-w-[96%] whitespace-nowrap font-mono text-[clamp(3.9rem,10.8vw,8.9rem)] font-bold leading-none tracking-[-0.005em] ${
-                          terminalState === "critical"
+                          terminalState === "heartbeat"
+                            ? "text-red-100 drop-shadow-[0_0_36px_rgba(248,113,113,0.78)]"
+                          : terminalState === "critical"
                             ? "text-red-100 drop-shadow-[0_0_32px_rgba(248,113,113,0.68)]"
                             : terminalState === "danger"
                               ? "text-red-100 drop-shadow-[0_0_28px_rgba(248,113,113,0.5)]"
@@ -383,7 +502,9 @@ export function LostCountdownClient() {
                       </div>
                       <div
                         className={`font-mono text-sm uppercase tracking-[0.28em] ${
-                          terminalState === "critical"
+                          terminalState === "heartbeat"
+                            ? "text-red-100"
+                          : terminalState === "critical"
                             ? "text-red-100"
                             : terminalState === "danger"
                               ? "text-red-200"
@@ -392,7 +513,9 @@ export function LostCountdownClient() {
                                 : "text-lime-100/70"
                         }`}
                       >
-                        {terminalState === "critical"
+                        {terminalState === "heartbeat"
+                          ? "System failure imminent"
+                          : terminalState === "critical"
                           ? "Critical window"
                           : terminalState === "danger"
                             ? "Warning: countdown breach imminent"
@@ -413,7 +536,7 @@ export function LostCountdownClient() {
                       className={`h-3 rounded-full border ${
                         terminalState === "failure"
                           ? "border-red-400/40 bg-red-500/30"
-                          : terminalState === "critical" || terminalState === "danger"
+                          : terminalState === "heartbeat" || terminalState === "critical" || terminalState === "danger"
                             ? "border-red-300/45 bg-red-400/30"
                             : terminalState === "warning"
                               ? "border-amber-300/45 bg-amber-300/30"
@@ -422,6 +545,16 @@ export function LostCountdownClient() {
                     />
                   ))}
                 </div>
+
+                <button
+                  type="button"
+                  className="mb-5 inline-flex w-full items-center justify-center gap-2 rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-lime-100/60 transition hover:bg-white/[0.06]"
+                  onClick={() => setSoundMuted((current) => !current)}
+                >
+                  <span aria-hidden="true">{soundMuted ? "🔇" : "🔊"}</span>
+                  {soundMuted ? "Audio muted" : "Audio armed"}
+                </button>
+                {/* TODO: Wire local warning/alarm audio files when assets are available. */}
 
                 <form className="space-y-3.5" onSubmit={submitSequence}>
                   <label className="block font-mono text-xs uppercase tracking-[0.22em] text-amber-100/70">
@@ -437,7 +570,9 @@ export function LostCountdownClient() {
                         aria-label={`Sequence number ${index + 1}`}
                         className={`h-11 min-w-0 rounded-[10px] border bg-[#050805] px-1 text-center font-mono text-sm outline-none transition sm:text-base ${
                           inputEnabled
-                            ? "border-amber-300/55 text-amber-100 shadow-[0_0_18px_rgba(245,158,11,0.18)]"
+                            ? terminalState === "heartbeat" || terminalState === "critical" || terminalState === "danger"
+                              ? "border-red-300/60 text-red-100 shadow-[0_0_20px_rgba(248,113,113,0.24)]"
+                              : "border-amber-300/60 text-amber-100 shadow-[0_0_22px_rgba(245,158,11,0.24)]"
                             : "border-lime-200/15 text-lime-100/35"
                         }`}
                         disabled={!inputEnabled}
@@ -452,7 +587,13 @@ export function LostCountdownClient() {
                   <button
                     type="submit"
                     disabled={!inputEnabled}
-                    className="w-full rounded-[12px] border border-amber-200/25 bg-amber-200/10 px-4 py-3 font-mono text-sm uppercase tracking-[0.18em] text-amber-100 transition enabled:hover:bg-amber-200/18 disabled:cursor-not-allowed disabled:opacity-40"
+                    className={`w-full rounded-[12px] border px-4 py-3 font-mono text-sm uppercase tracking-[0.18em] transition enabled:hover:bg-amber-200/18 disabled:cursor-not-allowed disabled:opacity-40 ${
+                      inputEnabled
+                        ? terminalState === "heartbeat" || terminalState === "critical" || terminalState === "danger"
+                          ? "animate-pulse border-red-300/45 bg-red-500/16 text-red-100 shadow-[0_0_24px_rgba(248,113,113,0.24)]"
+                          : "animate-pulse border-amber-200/45 bg-amber-200/14 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.22)]"
+                        : "border-amber-200/25 bg-amber-200/10 text-amber-100"
+                    }`}
                   >
                     Execute
                   </button>
@@ -464,15 +605,43 @@ export function LostCountdownClient() {
                       ? "border-red-400/35 bg-red-950/35 text-red-200"
                       : status === "Incorrect sequence."
                         ? "border-amber-300/35 bg-amber-950/30 text-amber-100"
-                        : "border-lime-200/18 bg-lime-950/20 text-lime-100/75"
+                        : terminalState === "heartbeat" || terminalState === "critical" || terminalState === "danger"
+                          ? "border-red-300/40 bg-red-950/28 text-red-100 shadow-[0_0_22px_rgba(248,113,113,0.16)]"
+                          : terminalState === "warning"
+                            ? "border-amber-300/40 bg-amber-950/28 text-amber-100 shadow-[0_0_22px_rgba(245,158,11,0.16)]"
+                            : "border-lime-200/18 bg-lime-950/20 text-lime-100/75"
                   }`}
                 >
                   {failure ? "SYSTEM FAILURE" : status}
                 </div>
 
                 <div className="mt-4 rounded-[14px] border border-white/10 bg-white/[0.03] p-3 font-mono text-xs leading-5 text-lime-100/55">
-                  <div className="mb-1 uppercase tracking-[0.18em] text-amber-100/55">Last entry</div>
-                  <div className="text-lime-100/75">{formatLastEntry(lastResetAt)}</div>
+                  {lastResetAt ? (
+                    <>
+                      <div className="mb-2 uppercase tracking-[0.18em] text-amber-100/55">
+                        Last accepted entry
+                      </div>
+                      <div className="text-lime-100/80">4 8 15 16 23 42</div>
+                      <div className="mt-2 text-lime-100/65">
+                        {new Date(lastResetAt).toLocaleDateString(undefined, {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </div>
+                      <div className="text-lime-100/65">
+                        {new Date(lastResetAt).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="uppercase tracking-[0.18em] text-amber-100/55">
+                      No accepted entry
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 rounded-[14px] border border-white/10 bg-white/[0.03] p-3 font-mono text-xs leading-5 text-lime-100/55">
@@ -502,6 +671,51 @@ export function LostCountdownClient() {
           </div>
         </section>
       </div>
+      {overrideOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-[22px] border border-amber-200/25 bg-[linear-gradient(180deg,#11130d,#050604)] p-5 font-mono text-amber-100 shadow-[0_0_48px_rgba(245,158,11,0.16)]">
+            <div className="border-b border-amber-200/15 pb-4">
+              <div className="text-xs uppercase tracking-[0.28em] text-amber-100/60">
+                Dharma Initiative
+              </div>
+              <h2 className="mt-2 text-xl font-semibold uppercase tracking-[0.18em]">
+                Maintenance Override
+              </h2>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              <button
+                type="button"
+                className="rounded-[12px] border border-amber-300/30 bg-amber-200/10 px-4 py-3 text-left text-sm uppercase tracking-[0.12em] transition hover:bg-amber-200/18"
+                onClick={() => jumpTo(240, "Test override: final four minutes activated.", FINAL_FOUR_STATUS)}
+              >
+                Activate Final Four Minute Protocol
+              </button>
+              <button
+                type="button"
+                className="rounded-[12px] border border-red-300/30 bg-red-500/12 px-4 py-3 text-left text-sm uppercase tracking-[0.12em] transition hover:bg-red-500/20"
+                onClick={() => triggerFailure("Failure triggered.")}
+              >
+                Trigger System Failure
+              </button>
+              <button
+                type="button"
+                className="rounded-[12px] border border-lime-200/25 bg-lime-300/10 px-4 py-3 text-left text-sm uppercase tracking-[0.12em] transition hover:bg-lime-300/16"
+                onClick={resetCountdownFromOverride}
+              >
+                Reset Countdown
+              </button>
+              <button
+                type="button"
+                className="rounded-[12px] border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm uppercase tracking-[0.12em] text-amber-100/70 transition hover:bg-white/[0.07]"
+                onClick={() => setOverrideOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <style jsx>{`
         @keyframes marquee {
           from {
@@ -509,6 +723,19 @@ export function LostCountdownClient() {
           }
           to {
             transform: translateX(-33.333%);
+          }
+        }
+        @keyframes heartbeat {
+          0%,
+          100% {
+            box-shadow:
+              inset 0 0 56px rgba(0, 0, 0, 0.9),
+              0 0 24px rgba(248, 113, 113, 0.12);
+          }
+          40% {
+            box-shadow:
+              inset 0 0 56px rgba(0, 0, 0, 0.9),
+              0 0 42px rgba(248, 113, 113, 0.34);
           }
         }
       `}</style>

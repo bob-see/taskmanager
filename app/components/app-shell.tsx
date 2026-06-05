@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AppSidebar } from "@/app/components/app-sidebar";
+import { HatchStatusWidget } from "@/app/lost/hatch-status-widget";
 
 type ShellProfile = {
   id: string;
@@ -23,6 +24,7 @@ export function AppShell({ children, profiles, currentUser }: AppShellProps) {
     <div className="min-h-screen overflow-x-clip bg-[color:var(--tm-bg)] text-[color:var(--tm-text)] md:flex">
       <AppSidebar profiles={profiles} currentUser={currentUser} />
       <div className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
+      <HatchStatusWidget />
     </div>
   );
 }
