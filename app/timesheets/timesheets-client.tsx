@@ -73,7 +73,6 @@ const primaryButtonClass =
 const segmentClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentButtonClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentButtonActiveClass = "tm-tab-active rounded-full px-3 py-1.5";
-const WEEK_STORAGE_KEY = "tm-timesheets-week-start";
 const ROUNDING_STORAGE_KEY = "tm-timesheets-rounding-mode";
 const ACTIVITY_COLLAPSE_THRESHOLD = 8;
 const profileColourPalette = [
@@ -216,8 +215,16 @@ export function TimesheetsClient({
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(WEEK_STORAGE_KEY, selectedWeekStart);
-  }, [selectedWeekStart]);
+    const currentWeekStart = toDateOnly(startOfWeek(new Date()));
+
+    if (selectedWeekStart !== currentWeekStart) {
+      setDetailSelection(null);
+      void loadWeekData(currentWeekStart);
+    }
+  // Only reset to the active week on initial page load. Manual week navigation after
+  // load should remain under the user's control.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(ROUNDING_STORAGE_KEY, roundingMode);
