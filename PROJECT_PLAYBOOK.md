@@ -1,6 +1,6 @@
 # TaskManager Project Playbook
 
-Version: 1.0
+Version: 1.1
 
 # AI Developer Instructions
 
@@ -76,6 +76,106 @@ Whenever choosing between more functionality and more visibility, prefer visibil
 ## Notes Matter
 
 Task notes preserve context and act as progress logs and memory aids.
+
+---
+
+# Project History
+
+TaskManager began as a personal productivity application designed to help a single user manage multiple responsibilities across different areas of work.
+
+Original use cases included:
+
+- Real Estate Administration
+- DREAM Development
+- Sales Support
+- Personal Tasks
+- Prospecting Activities
+
+Traditional task management systems created excessive friction when switching between contexts.
+
+TaskManager was created to solve this problem through:
+
+- Profiles
+- Overview-based workflows
+- Lightweight task capture
+- Context preservation
+
+The project later evolved into a multi-user application supporting:
+
+- Authentication
+- User isolation
+- Activity tracking
+- Timesheets
+- Collaborative Spaces
+- Shared workflows
+
+---
+
+# Architecture Principles
+
+## Server First
+
+Security decisions belong on the server.
+
+Never rely on client-side restrictions.
+
+---
+
+## Database Is Source Of Truth
+
+Avoid duplicate state where practical.
+
+Prefer deriving information from the database.
+
+---
+
+## Incremental Growth
+
+Prefer extending existing functionality rather than creating parallel systems.
+
+Example:
+
+Good:
+Add capability to Overview.
+
+Bad:
+Create Overview2.
+
+---
+
+## Backwards Compatibility
+
+Existing workflows should continue functioning wherever practical.
+
+Avoid breaking existing user habits without a strong reason.
+
+---
+
+# Lessons Learned
+
+## Users Prefer Overview
+
+Most task activity occurs on the Overview screen.
+
+New functionality should be considered for Overview first.
+
+---
+
+## Notes Improve Context
+
+Users are more likely to complete long-running tasks when notes preserve progress and context.
+
+---
+
+## Context Switching Is Expensive
+
+Reducing navigation is often more valuable than adding functionality.
+
+---
+
+## Simplicity Wins
+
+Avoid complexity unless it clearly improves workflow.
 
 ---
 

@@ -34,6 +34,32 @@ TaskManager prioritises:
 
 ---
 
+# Design Questions
+
+Before adding a new screen ask:
+
+Can this be added to Overview?
+
+Before adding a new workflow ask:
+
+Can an existing workflow be extended?
+
+Before adding a new setting ask:
+
+Will users actually change it?
+
+Before adding complexity ask:
+
+Is this solving a real problem that exists today?
+
+Before creating a new module ask:
+
+Can this be achieved by extending an existing module?
+
+TaskManager should grow through practical use rather than feature accumulation.
+
+---
+
 ## Deployment Reminder
 
 Before major changes:
