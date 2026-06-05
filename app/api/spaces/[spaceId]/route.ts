@@ -3,6 +3,7 @@ import {
   getCurrentUserOr401,
   requireSpaceMember,
 } from "@/app/api/spaces/shared";
+import { visibleUserIds } from "@/app/api/users/visibility";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -67,7 +68,28 @@ export async function GET(_req: Request, ctx: Ctx) {
     },
   });
 
-  return Response.json({ ...space, cells, currentMember: membership.member });
+  const visibleNoteUserIds = await visibleUserIds(
+    currentUser.user,
+    cells.flatMap((cell) => cell.noteHistory.map((note) => note.userId))
+  );
+  const visibleCells = cells.map((cell) => ({
+    ...cell,
+    noteHistory: cell.noteHistory.map((note) =>
+      visibleNoteUserIds.has(note.userId)
+        ? note
+        : {
+            ...note,
+            userId: "",
+            user: {
+              id: "",
+              name: "Hidden user",
+              email: null,
+            },
+          }
+    ),
+  }));
+
+  return Response.json({ ...space, cells: visibleCells, currentMember: membership.member });
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {

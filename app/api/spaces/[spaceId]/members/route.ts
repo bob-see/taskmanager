@@ -5,6 +5,7 @@ import {
   requireSpaceMember,
   requireSpaceOwner,
 } from "@/app/api/spaces/shared";
+import { canSeeUser, visibleUserWhere } from "@/app/api/users/visibility";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -28,7 +29,10 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (membership.error) return membership.error;
 
   const members = await prisma.spaceMember.findMany({
-    where: { spaceId },
+    where: {
+      spaceId,
+      user: visibleUserWhere(currentUser.user),
+    },
     orderBy: [{ role: "desc" }, { id: "asc" }],
     select: memberSelect,
   });
@@ -70,6 +74,13 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json(
       { error: "No user found with that email" },
       { status: 404 }
+    );
+  }
+
+  if (!(await canSeeUser(currentUser.user, user.id))) {
+    return Response.json(
+      { error: "You cannot add users outside your Groups" },
+      { status: 403 }
     );
   }
 

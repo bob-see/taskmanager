@@ -18,12 +18,40 @@ model User {
 
   profiles         Profile[]
   spaceMemberships SpaceMember[]
+  groupMemberships UserGroup[]
   matrixCells      MatrixCell[]     @relation("MatrixCellUserValue")
   matrixCellNotes  MatrixCellNote[]
   taskNotes        TaskNote[]
 
   @@index([email])
   @@map("user")
+}
+
+model Group {
+  id          String      @id @default(cuid()) @db.VarChar(36)
+  name        String      @unique @db.VarChar(191)
+  description String?     @db.Text
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  memberships UserGroup[]
+
+  @@index([name])
+  @@map("usergroup")
+}
+
+model UserGroup {
+  id        String   @id @default(cuid()) @db.VarChar(36)
+  userId    String   @db.VarChar(36)
+  groupId   String   @db.VarChar(36)
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("usergroupmember")
 }
 
 model Task {
@@ -48,8 +76,8 @@ model Task {
   repeatWeeklyDay    Int?
   repeatMonthlyDay   Int?
 
-  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  profile     Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  project     Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
   noteHistory TaskNote[]
 
   @@unique([profileId, recurrenceSeriesId, startDate])

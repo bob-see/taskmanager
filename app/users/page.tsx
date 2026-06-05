@@ -41,6 +41,14 @@ function normalizeRole(value: string) {
   return value === "admin" ? "admin" : "user";
 }
 
+function readStringArray(formData: FormData, key: string) {
+  return formData
+    .getAll(key)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function usersRedirect(params: Record<string, string>) {
   const searchParams = new URLSearchParams(params);
   redirect(`/users?${searchParams.toString()}`);
@@ -126,12 +134,163 @@ async function resetPassword(formData: FormData) {
   usersRedirect({ success: "password-reset" });
 }
 
+async function createGroup(formData: FormData) {
+  "use server";
+
+  const admin = await requireAdmin();
+  if (!admin) return notFound();
+
+  const name = readString(formData, "name");
+  const description = readString(formData, "description");
+
+  if (!name) {
+    usersRedirect({ error: "missing-group-name" });
+  }
+
+  try {
+    await prisma.group.create({
+      data: {
+        name,
+        description: description || null,
+      },
+    });
+  } catch (error) {
+    if (isPrismaError(error, "P2002")) {
+      usersRedirect({ error: "duplicate-group" });
+    }
+
+    throw error;
+  }
+
+  revalidatePath("/users");
+  usersRedirect({ success: "group-created" });
+}
+
+async function updateGroup(formData: FormData) {
+  "use server";
+
+  const admin = await requireAdmin();
+  if (!admin) return notFound();
+
+  const id = readString(formData, "id");
+  const name = readString(formData, "name");
+  const description = readString(formData, "description");
+
+  if (!id || !name) {
+    usersRedirect({ error: "missing-group-name" });
+  }
+
+  try {
+    await prisma.group.update({
+      where: { id },
+      data: {
+        name,
+        description: description || null,
+      },
+    });
+  } catch (error) {
+    if (isPrismaError(error, "P2002")) {
+      usersRedirect({ error: "duplicate-group" });
+    }
+
+    throw error;
+  }
+
+  revalidatePath("/users");
+  usersRedirect({ success: "group-updated" });
+}
+
+async function deleteGroup(formData: FormData) {
+  "use server";
+
+  const admin = await requireAdmin();
+  if (!admin) return notFound();
+
+  const id = readString(formData, "id");
+
+  if (!id) {
+    usersRedirect({ error: "missing-group-id" });
+  }
+
+  await prisma.group.delete({
+    where: { id },
+  });
+
+  revalidatePath("/users");
+  usersRedirect({ success: "group-deleted" });
+}
+
+async function updateUserGroups(formData: FormData) {
+  "use server";
+
+  const admin = await requireAdmin();
+  if (!admin) return notFound();
+
+  const userId = readString(formData, "userId");
+  const groupIds = readStringArray(formData, "groupIds");
+
+  if (!userId) {
+    usersRedirect({ error: "missing-user-id" });
+  }
+
+  const [userExists, validGroupCount] = await Promise.all([
+    prisma.user.count({
+      where: { id: userId },
+    }),
+    groupIds.length > 0
+      ? prisma.group.count({
+          where: {
+            id: {
+              in: groupIds,
+            },
+          },
+        })
+      : Promise.resolve(0),
+  ]);
+
+  if (userExists === 0) {
+    usersRedirect({ error: "missing-user-id" });
+  }
+
+  if (validGroupCount !== groupIds.length) {
+    usersRedirect({ error: "missing-group-id" });
+  }
+
+  await prisma.$transaction([
+    prisma.userGroup.deleteMany({
+      where: { userId },
+    }),
+    ...(groupIds.length > 0
+      ? [
+          prisma.userGroup.createMany({
+            data: groupIds.map((groupId) => ({
+              userId,
+              groupId,
+            })),
+            skipDuplicates: true,
+          }),
+        ]
+      : []),
+  ]);
+
+  revalidatePath("/users");
+  usersRedirect({ success: "groups-updated" });
+}
+
 function messageFor(error?: string, success?: string) {
   if (error === "duplicate-email") return "A user with that email already exists.";
+  if (error === "duplicate-group") return "A group with that name already exists.";
   if (error === "missing-create-fields") return "Name, email and password are required.";
   if (error === "missing-reset-fields") return "Choose a new password before resetting.";
+  if (error === "missing-group-name") return "Group name is required.";
+  if (error === "missing-group-id") return "Choose a group before deleting.";
+  if (error === "missing-user-id") return "Choose a user before updating groups.";
   if (success === "created") return "User created.";
   if (success === "password-reset") return "Password reset.";
+  if (success === "group-created") return "Group created.";
+  if (success === "group-updated") return "Group updated.";
+  if (success === "group-deleted") return "Group deleted.";
+  if (success === "groups-updated") return "User groups updated.";
   return null;
 }
 
@@ -157,16 +316,38 @@ export default async function UsersPage({
   );
   const isError = Boolean(resolvedSearchParams.error);
 
-  const users = await prisma.user.findMany({
-    orderBy: [{ createdAt: "asc" }, { email: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      createdAt: true,
-    },
-  });
+  const [users, groups] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: [{ createdAt: "asc" }, { email: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        groupMemberships: {
+          include: {
+            group: true,
+          },
+          orderBy: {
+            group: {
+              name: "asc",
+            },
+          },
+        },
+      },
+    }),
+    prisma.group.findMany({
+      orderBy: [{ name: "asc" }, { createdAt: "asc" }],
+      include: {
+        _count: {
+          select: {
+            memberships: true,
+          },
+        },
+      },
+    }),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">
@@ -235,15 +416,102 @@ export default async function UsersPage({
           </form>
         </article>
 
-        <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
+        <article className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
+          <h2 className="text-lg font-semibold tracking-tight">Create group</h2>
+          <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+            Groups control which users can see and interact with each other.
+          </p>
+          <form action={createGroup} className="mt-4 grid gap-3">
+            <label className="space-y-1 text-sm">
+              <div className="text-[color:var(--tm-muted)]">Name</div>
+              <input name="name" className={`w-full ${inputClass}`} required />
+            </label>
+            <label className="space-y-1 text-sm">
+              <div className="text-[color:var(--tm-muted)]">Description</div>
+              <input name="description" className={`w-full ${inputClass}`} />
+            </label>
+            <div className="flex justify-end">
+              <button type="submit" className={primaryButtonClass}>
+                Create group
+              </button>
+            </div>
+          </form>
+        </article>
+
+        <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5 xl:col-span-2">
+          <h2 className="text-lg font-semibold tracking-tight">Groups</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead>
+                <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Description</th>
+                  <th className="px-3 py-2">Users</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-4 text-[color:var(--tm-muted)]" colSpan={4}>
+                      No groups yet.
+                    </td>
+                  </tr>
+                ) : (
+                  groups.map((group) => (
+                    <tr key={group.id} className="tm-table-row border-b last:border-0">
+                      <td className="px-3 py-3">
+                        <form action={updateGroup} className="grid gap-2">
+                          <input type="hidden" name="id" value={group.id} />
+                          <input
+                            name="name"
+                            className={`w-full ${inputClass}`}
+                            defaultValue={group.name}
+                            required
+                          />
+                          <input
+                            name="description"
+                            className={`w-full ${inputClass}`}
+                            defaultValue={group.description ?? ""}
+                            placeholder="Description"
+                          />
+                          <button type="submit" className={buttonClass}>
+                            Save
+                          </button>
+                        </form>
+                      </td>
+                      <td className="px-3 py-3 text-[color:var(--tm-muted)]">
+                        {group.description || "No description"}
+                      </td>
+                      <td className="px-3 py-3 text-[color:var(--tm-muted)]">
+                        {group._count.memberships}
+                      </td>
+                      <td className="px-3 py-3">
+                        <form action={deleteGroup}>
+                          <input type="hidden" name="id" value={group.id} />
+                          <button type="submit" className={buttonClass}>
+                            Delete
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5 xl:col-span-2">
           <h2 className="text-lg font-semibold tracking-tight">Existing users</h2>
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Email</th>
                   <th className="px-3 py-2">Role</th>
+                  <th className="px-3 py-2">Groups</th>
                   <th className="px-3 py-2">Created</th>
                   <th className="px-3 py-2">Reset password</th>
                 </tr>
@@ -262,6 +530,39 @@ export default async function UsersPage({
                       <span className="tm-chip inline-flex rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
                         {user.role}
                       </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <form action={updateUserGroups} className="grid gap-2">
+                        <input type="hidden" name="userId" value={user.id} />
+                        <div className="grid max-h-32 gap-1 overflow-y-auto rounded-[10px] border border-[color:var(--tm-border)] bg-white/35 p-2">
+                          {groups.length === 0 ? (
+                            <span className="text-xs text-[color:var(--tm-muted)]">
+                              Create a group first.
+                            </span>
+                          ) : (
+                            groups.map((group) => {
+                              const checked = user.groupMemberships.some(
+                                (membership) => membership.groupId === group.id
+                              );
+
+                              return (
+                                <label key={group.id} className="flex items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    name="groupIds"
+                                    value={group.id}
+                                    defaultChecked={checked}
+                                  />
+                                  <span>{group.name}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                        <button type="submit" className={buttonClass}>
+                          Update groups
+                        </button>
+                      </form>
                     </td>
                     <td className="px-3 py-3 text-[color:var(--tm-muted)]">
                       {formatCreatedAt(user.createdAt)}

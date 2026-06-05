@@ -7,6 +7,7 @@ import {
   requireSpaceMember,
   validateColumnType,
 } from "@/app/api/spaces/shared";
+import { canSeeUser, visibleUserIds } from "@/app/api/users/visibility";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -129,12 +130,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 
   if (type.value === "user" && parsedValue?.data.userIdValue) {
-    const user = await prisma.user.findUnique({
-      where: { id: parsedValue.data.userIdValue },
-      select: { id: true },
-    });
-
-    if (!user) {
+    if (!(await canSeeUser(currentUser.user, parsedValue.data.userIdValue))) {
       return Response.json({ error: "User not found" }, { status: 404 });
     }
   }
@@ -219,5 +215,25 @@ export async function PATCH(req: Request, ctx: Ctx) {
     },
   });
 
-  return Response.json(updatedCell);
+  const visibleNoteUserIds = await visibleUserIds(
+    currentUser.user,
+    updatedCell.noteHistory.map((note) => note.userId)
+  );
+
+  return Response.json({
+    ...updatedCell,
+    noteHistory: updatedCell.noteHistory.map((note) =>
+      visibleNoteUserIds.has(note.userId)
+        ? note
+        : {
+            ...note,
+            userId: "",
+            user: {
+              id: "",
+              name: "Hidden user",
+              email: null,
+            },
+          }
+    ),
+  });
 }
