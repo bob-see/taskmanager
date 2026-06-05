@@ -75,6 +75,14 @@ const segmentButtonClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentButtonActiveClass = "tm-tab-active rounded-full px-3 py-1.5";
 const WEEK_STORAGE_KEY = "tm-timesheets-week-start";
 const ROUNDING_STORAGE_KEY = "tm-timesheets-rounding-mode";
+const ACTIVITY_COLLAPSE_THRESHOLD = 8;
+const profileColourPalette = [
+  { bar: "rgba(74, 124, 89, 0.72)", surface: "rgba(74, 124, 89, 0.1)", border: "rgba(74, 124, 89, 0.24)" },
+  { bar: "rgba(184, 123, 46, 0.72)", surface: "rgba(184, 123, 46, 0.1)", border: "rgba(184, 123, 46, 0.24)" },
+  { bar: "rgba(64, 112, 155, 0.72)", surface: "rgba(64, 112, 155, 0.1)", border: "rgba(64, 112, 155, 0.24)" },
+  { bar: "rgba(130, 91, 145, 0.68)", surface: "rgba(130, 91, 145, 0.1)", border: "rgba(130, 91, 145, 0.22)" },
+  { bar: "rgba(116, 117, 70, 0.72)", surface: "rgba(116, 117, 70, 0.1)", border: "rgba(116, 117, 70, 0.24)" },
+];
 
 function createManualEntryForm(profiles: TimesheetProfile[], dateValue: string): ManualEntryFormState {
   return {
@@ -145,6 +153,22 @@ function formatTimerStarted(value: string) {
   }).format(new Date(value));
 }
 
+function formatActivityRange(entry: TimesheetEntry) {
+  return `${formatDateTime(entry.startTime)} - ${
+    entry.endTime ? formatDateTime(entry.endTime) : "now"
+  }`;
+}
+
+function getProfileColour(profileId: string) {
+  let hash = 0;
+
+  for (const char of profileId) {
+    hash = (hash * 31 + char.charCodeAt(0)) % profileColourPalette.length;
+  }
+
+  return profileColourPalette[hash];
+}
+
 function getEntryDayKey(entry: TimesheetEntry) {
   return toDateOnly(new Date(entry.startTime));
 }
@@ -171,6 +195,9 @@ export function TimesheetsClient({
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [pendingDeleteEntryId, setPendingDeleteEntryId] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
+  const [activityExpansionOverride, setActivityExpansionOverride] = useState<
+    "expanded" | "collapsed" | null
+  >(null);
 
   const weekDays = useMemo(() => getWeekDays(selectedWeekStart), [selectedWeekStart]);
   const roundingOptions: Array<{ value: TimesheetRoundingMode; label: string }> = [
@@ -195,6 +222,10 @@ export function TimesheetsClient({
   useEffect(() => {
     window.localStorage.setItem(ROUNDING_STORAGE_KEY, roundingMode);
   }, [roundingMode]);
+
+  useEffect(() => {
+    setActivityExpansionOverride(null);
+  }, [selectedWeekStart]);
 
   useEffect(() => {
     if (!activeTimer) {
@@ -352,6 +383,101 @@ export function TimesheetsClient({
       : entriesByProfileDay.get(`${detailSelection.profileId}:${detailSelection.dayKey}`) ?? [];
   }, [detailSelection, entriesByProfileDay, entriesByProfileWeek]);
 
+  const selectedActivityDate = useMemo(() => {
+    if (detailSelection?.dayKey && detailSelection.dayKey !== "week") {
+      return detailSelection.dayKey;
+    }
+
+    const todayKey = toDateOnly(new Date());
+    const selectedWeekHasToday = weekDays.some((day) => day.key === todayKey);
+    return selectedWeekHasToday ? todayKey : selectedWeekStart;
+  }, [detailSelection, selectedWeekStart, weekDays]);
+
+  useEffect(() => {
+    setActivityExpansionOverride(null);
+  }, [selectedActivityDate]);
+
+  const runningTimerMinutes = activeTimer && now !== null
+    ? calculateLoggedMinutes(new Date(activeTimer.startTime), new Date(now), "exact").durationMinutes
+    : 0;
+
+  const runningTimerLoggedMinutes = activeTimer && now !== null
+    ? calculateLoggedMinutes(new Date(activeTimer.startTime), new Date(now), roundingMode).loggedMinutes
+    : 0;
+
+  const activityEntries = useMemo(() => {
+    const completedEntries = entries
+      .filter((entry) => getEntryDayKey(entry) === selectedActivityDate)
+      .sort((left, right) => left.startTime.localeCompare(right.startTime));
+
+    if (activeTimer && getEntryDayKey(activeTimer) === selectedActivityDate) {
+      return [...completedEntries, activeTimer].sort((left, right) =>
+        left.startTime.localeCompare(right.startTime)
+      );
+    }
+
+    return completedEntries;
+  }, [activeTimer, entries, selectedActivityDate]);
+
+  const todaySplitRows = useMemo(() => {
+    const totals = new Map<string, { profileName: string; minutes: number }>();
+
+    for (const entry of entries) {
+      if (getEntryDayKey(entry) !== selectedActivityDate) continue;
+
+      const existing = totals.get(entry.profileId) ?? {
+        profileName: entry.profileName,
+        minutes: 0,
+      };
+      existing.minutes += getEffectiveLoggedMinutes(entry, roundingMode);
+      totals.set(entry.profileId, existing);
+    }
+
+    if (activeTimer && getEntryDayKey(activeTimer) === selectedActivityDate) {
+      const existing = totals.get(activeTimer.profileId) ?? {
+        profileName: activeTimer.profileName,
+        minutes: 0,
+      };
+      existing.minutes += runningTimerLoggedMinutes;
+      totals.set(activeTimer.profileId, existing);
+    }
+
+    return Array.from(totals.entries())
+      .map(([profileId, value]) => ({ profileId, ...value }))
+      .filter((row) => row.minutes > 0)
+      .sort((left, right) => right.minutes - left.minutes || left.profileName.localeCompare(right.profileName));
+  }, [activeTimer, entries, roundingMode, runningTimerLoggedMinutes, selectedActivityDate]);
+
+  const todayTotalMinutes = useMemo(
+    () => todaySplitRows.reduce((sum, row) => sum + row.minutes, 0),
+    [todaySplitRows]
+  );
+
+  const longestActivityMinutes = useMemo(() => {
+    return activityEntries.reduce((longest, entry) => {
+      const duration = entry.endTime
+        ? getActualDurationMinutes(entry)
+        : runningTimerMinutes;
+      return Math.max(longest, duration);
+    }, 0);
+  }, [activityEntries, runningTimerMinutes]);
+
+  const contextSwitches = useMemo(() => {
+    return activityEntries.reduce((count, entry, index) => {
+      if (index === 0) return count;
+      return activityEntries[index - 1].profileId === entry.profileId ? count : count + 1;
+    }, 0);
+  }, [activityEntries]);
+
+  const activityHasManyEntries = activityEntries.length > ACTIVITY_COLLAPSE_THRESHOLD;
+  const activityDefaultExpanded = activityEntries.length > 0 && !activityHasManyEntries;
+  const showActivityEntries =
+    activityEntries.length > 0 &&
+    (activityExpansionOverride
+      ? activityExpansionOverride === "expanded"
+      : activityDefaultExpanded);
+  const maxTodaySplitMinutes = todaySplitRows[0]?.minutes ?? 0;
+
   const selectedProfileName = detailSelection
     ? profiles.find((profile) => profile.id === detailSelection.profileId)?.name ?? "Profile"
     : "";
@@ -490,9 +616,7 @@ export function TimesheetsClient({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const activeTimerElapsed = activeTimer && now !== null
-    ? calculateLoggedMinutes(new Date(activeTimer.startTime), new Date(now), "exact").durationMinutes
-    : 0;
+  const activeTimerElapsed = runningTimerMinutes;
 
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
@@ -557,8 +681,12 @@ export function TimesheetsClient({
           </div>
         </div>
 
-        <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <article className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
+        <section className="mt-6 grid items-start gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:items-stretch">
+          <article
+            className={`tm-card rounded-[14px] border p-4 shadow-sm md:p-5 ${
+              activeTimer ? "ring-1 ring-amber-700/20 shadow-[0_10px_28px_rgba(120,78,24,0.1)]" : ""
+            }`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold tracking-tight">Live timer</h2>
@@ -574,7 +702,7 @@ export function TimesheetsClient({
             </div>
 
             {activeTimer ? (
-              <div className="mt-4 rounded-[12px] border border-[color:var(--tm-border)] bg-white/60 p-4">
+              <div className="mt-4 rounded-[12px] border border-amber-700/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium">{activeTimer.profileName}</div>
@@ -630,6 +758,68 @@ export function TimesheetsClient({
                 </button>
               </div>
             )}
+
+            <div className="mt-5 border-t border-[color:var(--tm-border)] pt-4">
+              <h3 className="text-sm font-semibold tracking-tight">Today&apos;s Stats</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[color:var(--tm-border)] bg-white/45 px-3 py-2 text-sm">
+                  <span className="text-[color:var(--tm-muted)]">Today Total</span>
+                  <span className="font-medium">{formatDuration(todayTotalMinutes)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[color:var(--tm-border)] bg-white/45 px-3 py-2 text-sm">
+                  <span className="text-[color:var(--tm-muted)]">Sessions</span>
+                  <span className="font-medium">{activityEntries.length}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[color:var(--tm-border)] bg-white/45 px-3 py-2 text-sm">
+                  <span className="text-[color:var(--tm-muted)]">Context Switches</span>
+                  <span className="font-medium">{contextSwitches}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[color:var(--tm-border)] bg-white/45 px-3 py-2 text-sm">
+                  <span className="text-[color:var(--tm-muted)]">Longest Block</span>
+                  <span className="font-medium">
+                    {longestActivityMinutes > 0 ? formatDuration(longestActivityMinutes) : "0m"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 border-t border-[color:var(--tm-border)] pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold tracking-tight">Today&apos;s Time Split</h3>
+                <span className="text-xs text-[color:var(--tm-muted)]">{roundingMode}</span>
+              </div>
+
+              {todaySplitRows.length === 0 ? (
+                <div className="mt-3 rounded-[10px] border border-dashed border-[color:var(--tm-border)] bg-white/35 px-3 py-2 text-sm text-[color:var(--tm-muted)]">
+                  No time logged today.
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-2.5">
+                  {todaySplitRows.map((row) => {
+                    const colour = getProfileColour(row.profileId);
+                    const percentage = maxTodaySplitMinutes > 0
+                      ? Math.max(7, Math.round((row.minutes / maxTodaySplitMinutes) * 100))
+                      : 0;
+
+                    return (
+                      <div key={row.profileId} className="grid grid-cols-[minmax(72px,1fr)_minmax(0,2fr)_auto] items-center gap-2 text-sm">
+                        <span className="min-w-0 truncate font-medium">{row.profileName}</span>
+                        <div className="h-2 overflow-hidden rounded-full bg-white/55">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${percentage}%`, backgroundColor: colour.bar }}
+                          />
+                        </div>
+                        <span className="shrink-0 text-[color:var(--tm-muted)]">
+                          {formatDuration(row.minutes)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
           </article>
 
           <article className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
@@ -906,6 +1096,71 @@ export function TimesheetsClient({
                   })}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-4 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Today&apos;s Activity · {formatDateHeading(selectedActivityDate)} ·{" "}
+                {activityEntries.length} {activityEntries.length === 1 ? "session" : "sessions"} ·{" "}
+                {formatDuration(todayTotalMinutes)}
+              </h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                Chronological start and stop activity for the selected date.
+              </p>
+            </div>
+            {activityEntries.length > 0 && (
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() =>
+                  setActivityExpansionOverride(showActivityEntries ? "collapsed" : "expanded")
+                }
+              >
+                {showActivityEntries ? "Collapse" : "Expand"}
+              </button>
+            )}
+          </div>
+
+          {activityEntries.length === 0 ? (
+            <div className="mt-3 rounded-[10px] border border-dashed border-[color:var(--tm-border)] bg-white/35 px-3 py-2 text-sm text-[color:var(--tm-muted)]">
+              No activity logged today.
+            </div>
+          ) : showActivityEntries ? (
+            <div className="mt-4 grid gap-2 lg:grid-cols-2">
+              {activityEntries.map((entry) => {
+                const isRunning = !entry.endTime;
+                const duration = isRunning ? runningTimerMinutes : getActualDurationMinutes(entry);
+                const colour = getProfileColour(entry.profileId);
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="rounded-[10px] border px-3 py-2 text-sm"
+                    style={{ backgroundColor: colour.surface, borderColor: colour.border }}
+                  >
+                    <div className="grid gap-2 md:grid-cols-[minmax(112px,1fr)_minmax(90px,0.8fr)_auto] md:items-center">
+                      <div className="font-medium">{formatActivityRange(entry)}</div>
+                      <div className="min-w-0 truncate">{entry.profileName}</div>
+                      <div className="font-medium text-[color:var(--tm-muted)]">
+                        {isRunning ? `Running ${formatDuration(duration)}` : formatDuration(duration)}
+                      </div>
+                    </div>
+                    {entry.notes && (
+                      <div className="mt-1 text-xs text-[color:var(--tm-muted)]">
+                        {entry.notes}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-[10px] border border-dashed border-[color:var(--tm-border)] bg-white/35 px-3 py-2 text-sm text-[color:var(--tm-muted)]">
+              Activity list collapsed.
             </div>
           )}
         </section>
