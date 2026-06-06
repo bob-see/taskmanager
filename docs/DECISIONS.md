@@ -96,3 +96,42 @@ The first successful implementation was property campaign tracking and shared op
 
 Impact:
 Future development should focus on workflow visibility, status tracking and collaboration.
+
+---
+
+### 2026-06-06 - Groups Control User Visibility
+
+Context:
+TaskManager needed a way to allow task assignment and Collaborative Spaces membership without exposing every user to every other user.
+
+Decision:
+Groups were introduced as the visibility and collaboration boundary between users.
+
+Reasoning:
+Profiles already represent work contexts and should not become permission boundaries. Groups provide a cleaner model for deciding which users can see and interact with each other.
+
+Impact:
+
+- Standard users can only see users who share at least one group with them.
+- Admins can belong to multiple groups.
+- Collaborative Spaces member picker is group-scoped.
+- Future assigned-task functionality will use the same visibility rule.
+
+---
+
+### 2026-06-06 - Use Prisma Relation Mode For Legacy Database Compatibility
+
+Context:
+Adding group tables caused MySQL errors when Prisma attempted to create physical foreign keys against legacy MyISAM tables.
+
+Decision:
+Use Prisma relation mode so Prisma manages relationships at the application layer instead of relying on database-level foreign keys.
+
+Reasoning:
+The live Railway/MariaDB database contains legacy MyISAM tables from earlier project history. MyISAM does not support foreign keys. Prisma relation mode avoids breaking existing data while allowing relational modelling in Prisma.
+
+Impact:
+
+- Avoids foreign key errors during schema updates.
+- Requires continued care in API/server code to enforce relationships and cascading behaviour.
+- This should be documented in the Operations Manual.

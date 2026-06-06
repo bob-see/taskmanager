@@ -178,6 +178,24 @@ Store backups in:
 /backups
 ```
 
+## Database History and Prisma Relation Mode
+
+TaskManager began with an earlier database setup and later moved to Railway/MariaDB.
+
+Some legacy tables may use MyISAM.
+
+MyISAM does not support database-level foreign keys.
+
+Prisma may fail with errors such as "Failed to open the referenced table" when attempting to create physical foreign keys.
+
+The current approach is to use Prisma relation mode.
+
+Do not blindly change relationMode or add physical foreign keys without checking table engines first.
+
+Before future schema changes, check whether affected tables are MyISAM or InnoDB.
+
+If foreign-key issues occur, inspect table definitions before deleting or renaming tables.
+
 ---
 
 # Prisma Operations
@@ -199,6 +217,25 @@ npx prisma generate
 ```bash
 npx prisma studio
 ```
+
+### Prisma db push foreign-key error
+
+Symptom:
+`npx prisma db push` fails with:
+"Failed to open the referenced table"
+
+Likely cause:
+The referenced table may be MyISAM or otherwise incompatible with physical foreign keys.
+
+Recommended steps:
+
+1. Do not repeatedly rerun db push.
+2. Inspect table definitions.
+3. Confirm Prisma relation mode.
+4. Avoid deleting existing data.
+5. Run `npx prisma validate`.
+6. Run `npx prisma generate`.
+7. Run `npm run build`.
 
 ---
 

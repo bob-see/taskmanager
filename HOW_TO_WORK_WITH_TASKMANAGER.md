@@ -34,6 +34,16 @@ TaskManager prioritises:
 
 ---
 
+## User Visibility Rules
+
+- Before exposing users in any picker, dropdown, search result or API response, check group visibility.
+- Standard users should only receive users who share a group with them.
+- Admin users may operate across the groups they belong to.
+- Do not expose out-of-group users and rely on the frontend to hide them.
+- Future task assignment must use this same visibility model.
+
+---
+
 # Design Questions
 
 Before adding a new screen ask:

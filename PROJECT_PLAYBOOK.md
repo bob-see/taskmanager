@@ -77,6 +77,22 @@ Whenever choosing between more functionality and more visibility, prefer visibil
 
 Task notes preserve context and act as progress logs and memory aids.
 
+## Groups and Visibility Philosophy
+
+Groups control user visibility and collaboration scope.
+
+Profiles are still work contexts, not permissions.
+
+Users may belong to multiple groups.
+
+Admins can be members of multiple groups.
+
+Standard users should only see users who share at least one group with them.
+
+Collaborative Spaces member selection must respect group visibility.
+
+Future assigned-task functionality should use the same group visibility rules.
+
 ---
 
 # Project History
@@ -195,6 +211,9 @@ Avoid complexity unless it clearly improves workflow.
 - Validate ownership server-side
 - Preserve multi-user isolation
 - Validate authentication and authorisation on every API route
+- User visibility restrictions must be enforced server-side
+- Frontend filtering is only a convenience and must not be the only protection
+- API endpoints that return users must respect group visibility
 
 ---
 
