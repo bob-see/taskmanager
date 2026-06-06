@@ -13,16 +13,31 @@ type ShellUser = {
   role?: string | null;
 };
 
+type DelegatedCounts = {
+  assignedToMe: number;
+  assignedByMe: number;
+};
+
 type AppShellProps = {
   children: ReactNode;
   profiles: ShellProfile[];
   currentUser: ShellUser;
+  delegatedCounts: DelegatedCounts;
 };
 
-export function AppShell({ children, profiles, currentUser }: AppShellProps) {
+export function AppShell({
+  children,
+  profiles,
+  currentUser,
+  delegatedCounts,
+}: AppShellProps) {
   return (
     <div className="min-h-screen overflow-x-clip bg-[color:var(--tm-bg)] text-[color:var(--tm-text)] md:flex">
-      <AppSidebar profiles={profiles} currentUser={currentUser} />
+      <AppSidebar
+        profiles={profiles}
+        currentUser={currentUser}
+        delegatedCounts={delegatedCounts}
+      />
       <div className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
       <HatchStatusWidget />
     </div>

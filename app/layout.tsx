@@ -71,12 +71,32 @@ export default async function RootLayout({
         email,
       },
       select: {
+        id: true,
         name: true,
         email: true,
         role: true,
       },
     }),
   ]);
+
+  const delegatedCounts = currentUser
+    ? await Promise.all([
+        prisma.delegatedTask.count({
+          where: {
+            assignedToUserId: currentUser.id,
+            status: "PENDING",
+          },
+        }),
+        prisma.delegatedTask.count({
+          where: {
+            assignedByUserId: currentUser.id,
+            status: {
+              not: "CLOSED",
+            },
+          },
+        }),
+      ])
+    : [0, 0];
 
   return (
     <html lang="en">
@@ -89,6 +109,10 @@ export default async function RootLayout({
             name: currentUser?.name ?? session.user.name,
             email: currentUser?.email ?? email,
             role: currentUser?.role,
+          }}
+          delegatedCounts={{
+            assignedToMe: delegatedCounts[0],
+            assignedByMe: delegatedCounts[1],
           }}
         >
           {children}

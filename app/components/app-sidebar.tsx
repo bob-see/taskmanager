@@ -17,9 +17,15 @@ type SidebarUser = {
   role?: string | null;
 };
 
+type DelegatedCounts = {
+  assignedToMe: number;
+  assignedByMe: number;
+};
+
 type AppSidebarProps = {
   profiles: SidebarProfile[];
   currentUser: SidebarUser;
+  delegatedCounts: DelegatedCounts;
 };
 
 const lostAllowedEmails = new Set(["bob@darcy.com.au", "robert.bob.see@gmail.com"]);
@@ -36,7 +42,21 @@ function itemClassName(active: boolean, disabled = false) {
     .join(" ");
 }
 
-export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
+function CountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+
+  return (
+    <span className="ml-auto inline-flex min-w-6 items-center justify-center rounded-full border border-[color:var(--tm-border)] bg-white/70 px-2 py-0.5 text-xs font-semibold text-[color:var(--tm-muted)]">
+      {count}
+    </span>
+  );
+}
+
+export function AppSidebar({
+  profiles,
+  currentUser,
+  delegatedCounts,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const showLostLink = currentUser.email
@@ -50,6 +70,10 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
     activeProfile?.name ??
     (pathname === "/overview"
       ? "Overview"
+      : pathname === "/delegated/assigned-to-me"
+        ? "Assigned To Me"
+      : pathname === "/delegated/assigned-by-me"
+        ? "Assigned By Me"
       : pathname === "/spaces"
         ? "Collaborative Spaces"
       : pathname === "/timesheets"
@@ -112,6 +136,30 @@ export function AppSidebar({ profiles, currentUser }: AppSidebarProps) {
                   </Link>
                 );
               })}
+            </nav>
+          </section>
+
+          <section className="border-t border-[color:var(--tm-border)] pt-4">
+            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+              Delegated
+            </p>
+            <nav className="mt-2 flex flex-col gap-1">
+              <Link
+                href="/delegated/assigned-to-me"
+                className={itemClassName(pathname === "/delegated/assigned-to-me")}
+                onClick={onNavigate}
+              >
+                <span className="truncate">Assigned To Me</span>
+                <CountBadge count={delegatedCounts.assignedToMe} />
+              </Link>
+              <Link
+                href="/delegated/assigned-by-me"
+                className={itemClassName(pathname === "/delegated/assigned-by-me")}
+                onClick={onNavigate}
+              >
+                <span className="truncate">Assigned By Me</span>
+                <CountBadge count={delegatedCounts.assignedByMe} />
+              </Link>
             </nav>
           </section>
 
