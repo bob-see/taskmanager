@@ -17,12 +17,14 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  profiles         Profile[]
-  spaceMemberships SpaceMember[]
-  groupMemberships UserGroup[]
-  matrixCells      MatrixCell[]     @relation("MatrixCellUserValue")
-  matrixCellNotes  MatrixCellNote[]
-  taskNotes        TaskNote[]
+  profiles               Profile[]
+  spaceMemberships       SpaceMember[]
+  groupMemberships       UserGroup[]
+  matrixCells            MatrixCell[]     @relation("MatrixCellUserValue")
+  matrixCellNotes        MatrixCellNote[]
+  taskNotes              TaskNote[]
+  sentDelegatedTasks     DelegatedTask[]  @relation("DelegatedTaskAssignedBy")
+  receivedDelegatedTasks DelegatedTask[]  @relation("DelegatedTaskAssignedTo")
 
   @@index([email])
   @@map("user")
@@ -77,9 +79,10 @@ model Task {
   repeatWeeklyDay    Int?
   repeatMonthlyDay   Int?
 
-  profile     Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  project     Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  noteHistory TaskNote[]
+  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  noteHistory   TaskNote[]
+  delegatedTask DelegatedTask?
 
   @@unique([profileId, recurrenceSeriesId, startDate])
   @@index([profileId, startDate])
@@ -89,6 +92,39 @@ model Task {
   @@index([profileId, recurrenceSeriesId])
   @@index([projectId])
   @@map("task")
+}
+
+enum DelegatedTaskStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+  DECLINED
+}
+
+model DelegatedTask {
+  id               String              @id @default(cuid()) @db.VarChar(36)
+  taskId           String              @db.VarChar(36)
+  assignedByUserId String?             @db.VarChar(36)
+  assignedToUserId String?             @db.VarChar(36)
+  status           DelegatedTaskStatus @default(PENDING)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  respondedAt      DateTime?
+  acceptedAt       DateTime?
+  completedAt      DateTime?
+  closedAt         DateTime?
+
+  task           Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  assignedByUser User? @relation("DelegatedTaskAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  assignedToUser User? @relation("DelegatedTaskAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId])
+  @@index([assignedByUserId])
+  @@index([assignedToUserId])
+  @@index([status])
+  @@map("delegatedtask")
 }
 
 model TaskNote {
