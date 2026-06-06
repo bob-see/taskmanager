@@ -21,6 +21,7 @@ import {
   type RepeatPattern,
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
+import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 import {
   type AverageBasis,
   endOfMonth,
@@ -61,6 +62,10 @@ type Task = {
   createdAt: string;
   orderIndex: number | null;
   isPriority: boolean;
+  delegatedTask: {
+    id: string;
+    status: string;
+  } | null;
 };
 
 type Project = {
@@ -1165,6 +1170,7 @@ function formatTaskNotesPreview(task: Pick<Task, "noteHistory" | "notes">) {
 function normalizeTask(task: Task): Task {
   return {
     ...task,
+    delegatedTask: task.delegatedTask ?? null,
     noteHistory: task.noteHistory ?? [],
   };
 }
@@ -1530,6 +1536,7 @@ function TaskActionMenu({
   onTogglePriority,
   onOpenEditModal,
   onToggleCompleted,
+  onDelegate,
   onDelete,
 }: {
   task: Task;
@@ -1541,6 +1548,7 @@ function TaskActionMenu({
   onTogglePriority: (task: Task) => void;
   onOpenEditModal: (task: Task) => void;
   onToggleCompleted: (task: Task) => void;
+  onDelegate: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -1558,7 +1566,7 @@ function TaskActionMenu({
 
     const rect = button.getBoundingClientRect();
     const menuWidth = 176;
-    const menuHeight = menuRef.current?.offsetHeight ?? (showSnoozeAction ? 188 : 152);
+    const menuHeight = menuRef.current?.offsetHeight ?? (showSnoozeAction ? 224 : 188);
     const gutter = 12;
     const left = Math.min(
       Math.max(gutter, rect.right - menuWidth),
@@ -1690,6 +1698,15 @@ function TaskActionMenu({
               {completedActionLabel ?? (isTaskCompleted(task) ? "Open" : "Done")}
             </button>
             <button
+              className={taskActionMenuItemClass}
+              disabled={Boolean(task.delegatedTask)}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onDelegate)}
+            >
+              {task.delegatedTask ? "Already delegated" : "Delegate Task"}
+            </button>
+            <button
               className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
               role="menuitem"
               type="button"
@@ -1732,6 +1749,7 @@ function TaskRow({
   onSnoozePreset,
   onPickSnoozeDate,
   onTogglePriority,
+  onDelegate,
   onDelete,
   draggable = false,
   dragActive = false,
@@ -1768,6 +1786,7 @@ function TaskRow({
   onSnoozePreset: (task: Task, preset: SnoozePreset) => void;
   onPickSnoozeDate: (task: Task) => void;
   onTogglePriority: (task: Task) => void;
+  onDelegate: (task: Task) => void;
   onDelete: (task: Task) => void;
   draggable?: boolean;
   dragActive?: boolean;
@@ -1925,6 +1944,7 @@ function TaskRow({
             onToggleCompleted={(selectedTask) =>
               onToggleCompleted(selectedTask, !isTaskCompleted(selectedTask))
             }
+            onDelegate={onDelegate}
             onDelete={onDelete}
           />
         </div>
@@ -2138,6 +2158,7 @@ export function TrackerClient({
   const [deleteProjectSaving, setDeleteProjectSaving] = useState(false);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [editTaskSaving, setEditTaskSaving] = useState(false);
+  const [delegateTask, setDelegateTask] = useState<Task | null>(null);
   const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
   const [completionPendingTaskIds, setCompletionPendingTaskIds] = useState<string[]>([]);
   const [editingTitleTaskId, setEditingTitleTaskId] = useState<string | null>(null);
@@ -3479,6 +3500,32 @@ export function TrackerClient({
     setEditTaskForm(createEditTaskForm(task));
   }
 
+  function openDelegateTask(task: Task) {
+    if (task.delegatedTask) {
+      setError("This task has already been delegated.");
+      return;
+    }
+
+    setDelegateTask(task);
+  }
+
+  function markTaskDelegated(delegation?: { id: string; status: string }) {
+    if (!delegateTask) return;
+
+    const delegatedTask = {
+      id: delegation?.id ?? delegateTask.id,
+      status: delegation?.status ?? "PENDING",
+    };
+
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === delegateTask.id ? { ...task, delegatedTask } : task
+      )
+    );
+    setDelegateTask(null);
+    router.refresh();
+  }
+
   function closeNewTaskDialog() {
     if (saving) return;
 
@@ -4518,6 +4565,7 @@ export function TrackerClient({
                           onSnoozePreset={snoozeTask}
                           onPickSnoozeDate={openSingleTaskSnoozeDate}
                           onTogglePriority={toggleTaskPriority}
+                          onDelegate={openDelegateTask}
                           showSnoozeAction={!isTaskCompleted(task)}
                           snoozeDisabled={bulkSaving}
                           onDelete={requestDeleteTask}
@@ -4755,6 +4803,7 @@ export function TrackerClient({
                                   onSnoozePreset={snoozeTask}
                                   onPickSnoozeDate={openSingleTaskSnoozeDate}
                                   onTogglePriority={toggleTaskPriority}
+                                  onDelegate={openDelegateTask}
                                   showSnoozeAction
                                   snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
@@ -4991,6 +5040,7 @@ export function TrackerClient({
                                   )
                               )
                             }
+                            onDelegate={openDelegateTask}
                             onDelete={requestDeleteTask}
                           />
                         </td>
@@ -5604,6 +5654,21 @@ export function TrackerClient({
           </div>
         )}
       </Modal>
+
+      <DelegateTaskModal
+        open={Boolean(delegateTask)}
+        mode={
+          delegateTask
+            ? {
+                mode: "existing",
+                taskId: delegateTask.id,
+                taskTitle: delegateTask.title,
+              }
+            : { mode: "new" }
+        }
+        onClose={() => setDelegateTask(null)}
+        onDelegated={markTaskDelegated}
+      />
 
       <TaskEditorModal
         open={Boolean(editTaskId && editTaskForm)}

@@ -44,6 +44,12 @@ export async function GET(_req: Request, ctx: Ctx) {
     where: { profileId },
     orderBy: [{ completedOn: "asc" }, { createdAt: "desc" }],
     include: {
+      delegatedTask: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
       noteHistory: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -237,6 +243,12 @@ export async function POST(req: Request, ctx: Ctx) {
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: createdTask.id },
     include: {
+      delegatedTask: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
       noteHistory: {
         orderBy: { createdAt: "desc" },
         include: {

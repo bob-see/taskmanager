@@ -88,6 +88,12 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
               },
             },
           },
+          delegatedTask: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
           startDate: true,
           dueAt: true,
           completedOn: true,
@@ -215,6 +221,7 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
         id: task.id,
         title: task.title,
         notes: task.notes,
+        delegatedTask: task.delegatedTask,
         noteHistory: task.noteHistory.map((note) => ({
           ...note,
           createdAt: note.createdAt.toISOString(),

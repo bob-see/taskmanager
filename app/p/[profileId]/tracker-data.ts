@@ -58,6 +58,12 @@ export async function getTrackerPageData(profileId: string, email: string) {
             },
           },
         },
+        delegatedTask: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
         projectId: true,
         recurrenceSeriesId: true,
         repeatEnabled: true,
@@ -98,6 +104,7 @@ export async function getTrackerPageData(profileId: string, email: string) {
       completedOn: serializeDate(task.completedOn),
       repeatPattern: task.repeatPattern as TrackerInitialData["tasks"][number]["repeatPattern"],
       createdAt: task.createdAt.toISOString(),
+      delegatedTask: task.delegatedTask,
       noteHistory: task.noteHistory.map((note) => ({
         ...note,
         createdAt: note.createdAt.toISOString(),

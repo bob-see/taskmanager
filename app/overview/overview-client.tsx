@@ -16,6 +16,7 @@ import {
   type TaskCreateFormState,
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
+import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 
 type OverviewProject = {
   id: string;
@@ -34,6 +35,10 @@ type OverviewTask = {
   id: string;
   title: string;
   notes: string | null;
+  delegatedTask: {
+    id: string;
+    status: string;
+  } | null;
   noteHistory: TaskNoteHistoryEntry[];
   projectId: string | null;
   projectName: string | null;
@@ -241,6 +246,7 @@ function formatTaskNotesPreview(task: Pick<OverviewTask, "noteHistory" | "notes"
 function normalizeOverviewTask(task: OverviewTask): OverviewTask {
   return {
     ...task,
+    delegatedTask: task.delegatedTask ?? null,
     noteHistory: task.noteHistory ?? [],
   };
 }
@@ -627,6 +633,7 @@ function ProfileCard({
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [editTaskForm, setEditTaskForm] = useState<EditTaskFormState | null>(null);
   const [editTaskSaving, setEditTaskSaving] = useState(false);
+  const [delegateTask, setDelegateTask] = useState<OverviewTask | null>(null);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editProjectForm, setEditProjectForm] = useState<ProjectFormState | null>(null);
   const [editProjectSaving, setEditProjectSaving] = useState(false);
@@ -1015,6 +1022,7 @@ function ProfileCard({
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
+        delegatedTask?: OverviewTask["delegatedTask"];
         noteSaveError?: boolean;
         noteSaveErrorMessage?: string;
       };
@@ -1030,6 +1038,7 @@ function ProfileCard({
         id: createdTask.id,
         title: createdTask.title,
         notes: createdTask.notes ?? null,
+        delegatedTask: createdTask.delegatedTask ?? null,
         noteHistory: createdTask.noteHistory ?? [],
         projectId: createdTask.projectId,
         projectName,
@@ -1356,6 +1365,33 @@ function ProfileCard({
     setContextMenu(null);
     setEditTaskId(task.id);
     setEditTaskForm(createEditTaskForm(task));
+  }
+
+  function openDelegateTask(task: OverviewTask) {
+    setContextMenu(null);
+    if (task.delegatedTask) {
+      alert("This task has already been delegated.");
+      return;
+    }
+
+    setDelegateTask(task);
+  }
+
+  function markTaskDelegated(delegation?: { id: string; status: string }) {
+    if (!delegateTask) return;
+
+    const delegatedTask = {
+      id: delegation?.id ?? delegateTask.id,
+      status: delegation?.status ?? "PENDING",
+    };
+
+    setOpenTasks((prev) =>
+      prev.map((task) =>
+        task.id === delegateTask.id ? { ...task, delegatedTask } : task
+      )
+    );
+    setDelegateTask(null);
+    router.refresh();
   }
 
   function openProjectEditor(group: TaskGroup) {
@@ -2282,6 +2318,21 @@ function ProfileCard({
         onFormChange={(updater) => setProjectDraft((prev) => updater(prev))}
       />
 
+      <DelegateTaskModal
+        open={Boolean(delegateTask)}
+        mode={
+          delegateTask
+            ? {
+                mode: "existing",
+                taskId: delegateTask.id,
+                taskTitle: delegateTask.title,
+              }
+            : { mode: "new" }
+        }
+        onClose={() => setDelegateTask(null)}
+        onDelegated={markTaskDelegated}
+      />
+
       <TaskEditorModal
         open={Boolean(editTaskId && editTaskForm)}
         form={editTaskForm}
@@ -2471,6 +2522,14 @@ function ProfileCard({
                 disabled={busyAction}
               >
                 {contextMenu.task.isPriority ? "Unprioritise" : "Prioritise"}
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                onClick={() => openDelegateTask(contextMenu.task)}
+                disabled={busyAction || Boolean(contextMenu.task.delegatedTask)}
+              >
+                {contextMenu.task.delegatedTask ? "Already delegated" : "Delegate Task"}
               </button>
             </>
           ) : (

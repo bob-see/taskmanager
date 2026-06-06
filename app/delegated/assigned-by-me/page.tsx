@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
 import { DelegatedTaskList, type DelegatedTaskListItem } from "../delegated-task-list";
+import { NewDelegatedTaskButton } from "../new-delegated-task-button";
 
 export default async function AssignedByMePage() {
   const session = await getServerSession(authOptions);
@@ -57,8 +58,11 @@ export default async function AssignedByMePage() {
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Assigned By Me</h1>
         </div>
-        <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
-          {items.length} total
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
+            {items.length} total
+          </div>
+          <NewDelegatedTaskButton />
         </div>
       </div>
 

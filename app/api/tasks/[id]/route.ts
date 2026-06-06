@@ -83,6 +83,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
       ...(dueAt !== undefined ? { dueAt } : {}),
     },
     include: {
+      delegatedTask: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
       noteHistory: {
         orderBy: { createdAt: "desc" },
         include: {

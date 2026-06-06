@@ -22,6 +22,12 @@ export async function GET() {
     },
     orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
     include: {
+      delegatedTask: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
       noteHistory: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -139,6 +145,12 @@ export async function POST(req: Request) {
     return tx.task.findUniqueOrThrow({
       where: { id: createdTask.id },
       include: {
+        delegatedTask: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
         noteHistory: {
           orderBy: { createdAt: "desc" },
           include: {

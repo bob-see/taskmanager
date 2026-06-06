@@ -406,6 +406,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const updatedTask = await prisma.task.findFirst({
     where: { id, profileId },
     include: {
+      delegatedTask: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
       noteHistory: {
         orderBy: { createdAt: "desc" },
         include: {
