@@ -5,7 +5,7 @@ import {
   requireSpaceMember,
   requireSpaceOwner,
 } from "@/app/api/spaces/shared";
-import { canSeeUser, visibleUserWhere } from "@/app/api/users/visibility";
+import { canSeeUser, scopedVisibleUserWhere } from "@/app/api/users/visibility";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -31,7 +31,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const members = await prisma.spaceMember.findMany({
     where: {
       spaceId,
-      user: visibleUserWhere(currentUser.user),
+      user: await scopedVisibleUserWhere(currentUser.user),
     },
     orderBy: [{ role: "desc" }, { id: "asc" }],
     select: memberSelect,

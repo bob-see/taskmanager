@@ -654,6 +654,8 @@ export function SpacesClient() {
   async function loadUsers() {
     setLoadingUsers(true);
     setError("");
+    setUsers([]);
+    setSelectedMemberUserId("");
     try {
       const res = await fetch("/api/users", { cache: "no-store" });
       if (!res.ok) {
@@ -779,10 +781,10 @@ export function SpacesClient() {
   }, [membersOpen, space?.id]);
 
   useEffect(() => {
-    if (membersOpen && canManageMembers && users.length === 0) {
+    if (membersOpen && canManageMembers) {
       loadUsers();
     }
-  }, [membersOpen, canManageMembers, users.length]);
+  }, [membersOpen, canManageMembers, space?.id]);
 
   useEffect(() => {
     if (!activeCell) return;

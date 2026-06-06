@@ -9,9 +9,25 @@ export function isAdminUser(user: VisibilityUser) {
   return user.role === "admin";
 }
 
-export function visibleUserWhere(currentUser: VisibilityUser) {
+export async function scopedVisibleUserWhere(currentUser: VisibilityUser) {
   if (isAdminUser(currentUser)) {
     return {};
+  }
+
+  const memberships = await prisma.userGroup.findMany({
+    where: {
+      userId: currentUser.id,
+    },
+    select: {
+      groupId: true,
+    },
+  });
+  const groupIds = memberships.map((membership) => membership.groupId);
+
+  if (groupIds.length === 0) {
+    return {
+      id: currentUser.id,
+    };
   }
 
   return {
@@ -20,12 +36,8 @@ export function visibleUserWhere(currentUser: VisibilityUser) {
       {
         groupMemberships: {
           some: {
-            group: {
-              memberships: {
-                some: {
-                  userId: currentUser.id,
-                },
-              },
+            groupId: {
+              in: groupIds,
             },
           },
         },
@@ -47,15 +59,21 @@ export async function canSeeUser(currentUser: VisibilityUser, targetUserId: stri
     return userCount > 0;
   }
 
+  const currentUserGroups = await prisma.userGroup.findMany({
+    where: { userId: currentUser.id },
+    select: { groupId: true },
+  });
+  const groupIds = currentUserGroups.map((membership) => membership.groupId);
+
+  if (groupIds.length === 0) {
+    return false;
+  }
+
   const sharedGroupCount = await prisma.userGroup.count({
     where: {
       userId: targetUserId,
-      group: {
-        memberships: {
-          some: {
-            userId: currentUser.id,
-          },
-        },
+      groupId: {
+        in: groupIds,
       },
     },
   });
@@ -78,7 +96,7 @@ export async function visibleUserIds(currentUser: VisibilityUser, userIds: strin
             in: uniqueUserIds,
           },
         },
-        visibleUserWhere(currentUser),
+        await scopedVisibleUserWhere(currentUser),
       ],
     },
     select: {
