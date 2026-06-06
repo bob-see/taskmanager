@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
 import { DelegatedTaskList, type DelegatedTaskListItem } from "../delegated-task-list";
+import { DelegatedResponseActions } from "../delegated-response-actions";
 
 export default async function AssignedToMePage() {
   const session = await getServerSession(authOptions);
@@ -66,6 +67,11 @@ export default async function AssignedToMePage() {
         items={items}
         emptyMessage="Nothing has been delegated to you."
         userColumnLabel="Assigned By"
+        renderActions={(item) =>
+          item.status === "PENDING" ? (
+            <DelegatedResponseActions delegatedTaskId={item.id} />
+          ) : null
+        }
       />
     </main>
   );

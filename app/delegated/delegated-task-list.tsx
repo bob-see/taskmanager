@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { DelegatedStatusBadge, type DelegatedTaskStatus } from "./delegated-status-badge";
 
 export type DelegatedTaskListItem = {
@@ -18,6 +19,7 @@ type DelegatedTaskListProps = {
   items: DelegatedTaskListItem[];
   emptyMessage: string;
   userColumnLabel: string;
+  renderActions?: (item: DelegatedTaskListItem) => ReactNode;
 };
 
 function formatDate(value: Date) {
@@ -37,7 +39,10 @@ export function DelegatedTaskList({
   items,
   emptyMessage,
   userColumnLabel,
+  renderActions,
 }: DelegatedTaskListProps) {
+  const columnCount = renderActions ? 6 : 5;
+
   return (
     <section className="mt-6 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
       <div className="overflow-x-auto">
@@ -49,12 +54,13 @@ export function DelegatedTaskList({
               <th className="px-3 py-2">{userColumnLabel}</th>
               <th className="px-3 py-2">Created</th>
               <th className="px-3 py-2">Due</th>
+              {renderActions ? <th className="px-3 py-2 text-right">Actions</th> : null}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td className="px-3 py-4 text-[color:var(--tm-muted)]" colSpan={5}>
+                <td className="px-3 py-4 text-[color:var(--tm-muted)]" colSpan={columnCount}>
                   {emptyMessage}
                 </td>
               </tr>
@@ -76,6 +82,9 @@ export function DelegatedTaskList({
                   <td className="px-3 py-3 text-[color:var(--tm-muted)]">
                     {item.task.dueAt ? formatDate(item.task.dueAt) : "None"}
                   </td>
+                  {renderActions ? (
+                    <td className="px-3 py-3 text-right">{renderActions(item)}</td>
+                  ) : null}
                 </tr>
               ))
             )}
