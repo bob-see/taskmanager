@@ -53,6 +53,17 @@ Tasks support:
 	•	completion tracking
 	•	rollover behaviour
 
+Delegated Tasks
+
+Delegated tasks are shared task objects used when one user assigns work to another user.
+
+Important principle:
+	•	A delegated task remains shared
+	•	The assignee does the work
+	•	The original delegator reviews completion and closes the delegated task
+	•	The original task stays in its originating profile/project
+	•	Delegation does not move profile ownership, project ownership or task origin
+
 ⸻
 
 🚀 Features
@@ -76,12 +87,36 @@ Productivity Tools
 	•	Project assignment
 	•	Progress tracking
 	•	Reporting averages (Calendar vs Work week)
+	•	Delegated tasks with accept/decline, lifecycle actions and shared notes
 
 Organisation
 	•	Category memory per profile
 	•	Project progress bars
 	•	Archive support
 	•	Search across tasks and projects
+
+Delegated Task Workflow
+	•	Create a new delegated task from the Delegated section
+	•	Delegate an existing task from task actions
+	•	Assigned To Me shows tasks received from other users
+	•	Assigned By Me shows tasks delegated to others
+	•	Receiver can Accept or Decline pending delegated tasks
+	•	Accepted tasks can be moved to In Progress by the assignee
+	•	In Progress tasks can be marked Completed by the assignee
+	•	Completed delegated tasks remain visible for the delegator to review
+	•	The delegator closes completed delegated tasks after review
+	•	Shared notes/activity are attached to the underlying task and visible to both participants
+	•	Lifecycle: Pending → Accepted → In Progress → Completed → Closed
+
+Delegated Task Visual Indicators
+	•	Sender initials badge beside delegated task titles
+	•	Delegated status badge wherever delegated tasks appear
+	•	Completed delegated tasks display as Awaiting Review
+	•	Delegated rows use subtle visual treatment without changing normal task rows
+
+Admin / Restricted Features
+	•	LOST hatch countdown access is restricted to robert.bob.see@gmail.com
+	•	The LOST page is protected server-side and hidden from other users
 
 ⸻
 
@@ -116,6 +151,11 @@ The goal of this app is to bridge the gap between simple task lists and heavy pr
 	•	real-world scheduling behaviour
 	•	fast daily workflows
 	•	meaningful insights into output
+
+Future Notes / TODOs
+	•	Add a local development database/playground for safer delegated workflow testing
+	•	Add notification badges for new delegated notes and status updates
+	•	Consider richer delegated task metadata or hover details later, while keeping rows compact
 
 ⸻
 
@@ -566,6 +606,45 @@ Behaviour
 
 Manual sorting is now the default tracker sort mode, ensuring tasks open in the user-defined priority order immediately.
 
+
+____
+
+🤝 Delegated Tasks — Shared Workflows
+
+Summary
+
+Delegated Tasks introduce lightweight shared work without turning TaskManager into a heavy project management system.
+
+Key behaviour
+	•	New delegated tasks can be created from the Delegated section
+	•	Existing tasks can be delegated from task actions
+	•	Assigned To Me shows tasks received by the current user
+	•	Assigned By Me shows tasks the current user delegated
+	•	Receivers can Accept or Decline pending tasks
+	•	Accepted tasks move through In Progress and Completed
+	•	Delegators review Completed tasks and Close them
+	•	Shared notes/activity are attached to the underlying task
+
+Lifecycle
+	•	Pending
+	•	Accepted
+	•	In Progress
+	•	Completed / Awaiting Review
+	•	Closed
+
+Important principle
+
+Delegated tasks remain shared objects. The original task remains in its originating profile/project and is not duplicated or moved into the assignee's workspace. The assignee performs the work, while the original delegator remains responsible for reviewing completion and closing the delegated task.
+
+Visual indicators
+	•	Sender initials badge identifies who delegated the task
+	•	Delegated status badge shows the lifecycle state
+	•	Completed delegated tasks are labelled Awaiting Review so the delegator knows to review and close
+
+Future follow-ups
+	•	Notification badges for new delegated notes/status updates
+	•	Richer delegated task metadata or hover details
+	•	Local development database/playground for testing collaboration workflows
 
 ____
 
@@ -1605,4 +1684,3 @@ Private project – not licensed for distribution.
 :::
 
 ⸻
-

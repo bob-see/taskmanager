@@ -44,6 +44,73 @@ TaskManager prioritises:
 
 ---
 
+## Delegated Tasks
+
+Delegated Tasks are shared task workflows between a delegator and an assignee.
+
+Core principle:
+
+- A delegated task remains a shared object.
+- The assignee does the work.
+- The original delegator reviews completion and closes the delegated task.
+- The underlying task stays in its originating profile/project.
+- Do not move profile ownership, project ownership or task origin during delegation.
+
+Pages:
+
+- Assigned To Me shows delegated tasks received by the current user.
+- Assigned By Me shows delegated tasks created by the current user.
+
+Creation:
+
+- Users can create a new delegated task.
+- Users can delegate an existing task.
+- Delegating an existing task must not duplicate the task or move it to the receiver's profile.
+
+Lifecycle:
+
+- Pending
+- Accepted
+- In Progress
+- Completed
+- Closed
+
+Workflow:
+
+- Pending tasks can be Accepted or Declined by the assignee.
+- Accepted tasks can be started by the assignee.
+- In Progress tasks can be marked Completed by the assignee.
+- Completed tasks are Awaiting Review for the delegator.
+- The delegator closes completed tasks after review.
+
+Notes/activity:
+
+- Both participants can add shared notes.
+- Notes attach to the underlying Task through the existing TaskNote system.
+- No delegated-note editing/deleting workflow exists yet.
+
+Visual indicators:
+
+- Sender initials badge identifies who delegated the task.
+- Delegated status badge identifies lifecycle state.
+- Completed delegated tasks display as Awaiting Review.
+
+Future TODOs:
+
+- Add notification badges for new delegated notes and status updates.
+- Consider richer delegated metadata/hover details later.
+- Maintain a local development database/playground for safer delegated workflow testing.
+
+---
+
+## Restricted Features
+
+- LOST hatch countdown is Bob-only.
+- Only robert.bob.see@gmail.com should see the floating LOST timer or LOST menu link.
+- The LOST route must remain protected server-side.
+
+---
+
 # Design Questions
 
 Before adding a new screen ask:

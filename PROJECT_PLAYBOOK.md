@@ -77,6 +77,14 @@ Whenever choosing between more functionality and more visibility, prefer visibil
 
 Task notes preserve context and act as progress logs and memory aids.
 
+## Delegated Work Stays Shared
+
+Delegated tasks should stay lightweight and shared.
+
+The assignee does the work, but the original delegator reviews completion and closes the delegated task.
+
+The underlying task remains in its originating profile/project. Delegation must not move task profile ownership, project ownership or task origin.
+
 ## Groups and Visibility Philosophy
 
 Groups control user visibility and collaboration scope.
@@ -199,6 +207,7 @@ Avoid complexity unless it clearly improves workflow.
 
 - Profiles
 - Overview
+- Delegated Tasks
 - Timesheets
 - Activity Log
 - Collaborative Spaces
@@ -214,6 +223,53 @@ Avoid complexity unless it clearly improves workflow.
 - User visibility restrictions must be enforced server-side
 - Frontend filtering is only a convenience and must not be the only protection
 - API endpoints that return users must respect group visibility
+- Delegated task actions must validate the actor and lifecycle transition server-side
+- LOST hatch countdown access is restricted to robert.bob.see@gmail.com and must remain protected server-side
+
+---
+
+# Delegated Tasks
+
+Delegated Tasks support shared task assignment without turning TaskManager into a heavy project management system.
+
+## Overview
+
+- Assigned To Me shows delegated tasks received by the current user.
+- Assigned By Me shows delegated tasks the current user created.
+- New delegated tasks can be created from the Delegated section.
+- Existing tasks can be delegated from task actions.
+- Shared notes/activity use the existing TaskNote system.
+
+## Lifecycle
+
+Pending → Accepted → In Progress → Completed → Closed
+
+- Pending tasks may be Accepted or Declined by the assignee.
+- Accepted tasks may be started by the assignee.
+- In Progress tasks may be marked Completed by the assignee.
+- Completed tasks are Awaiting Review for the delegator.
+- The delegator closes completed tasks after review.
+
+## Product Principles
+
+- Delegated tasks remain shared objects.
+- Do not duplicate delegated tasks.
+- Do not move delegated tasks into the assignee's profile/project.
+- Preserve the existing Assigned To Me / Assigned By Me structure.
+- Preserve the underlying task's originating profile/project.
+- Prefer compact visual indicators over noisy row treatments.
+
+## Visual Indicators
+
+- Sender initials badge beside delegated task titles.
+- Delegated status badge wherever delegated tasks appear.
+- Awaiting Review state for completed delegated tasks.
+
+## Future TODOs
+
+- Local development database/playground for collaboration testing.
+- Notification badges for new delegated notes/status updates.
+- Possible richer delegated task metadata/hover details later.
 
 ---
 

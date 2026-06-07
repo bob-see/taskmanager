@@ -43,6 +43,15 @@ function getSecondsUntil(endAt: number) {
   return Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
 }
 
+function TimerPanel({ value }: { value: string }) {
+  return (
+    <span className="relative inline-flex h-7 min-w-5 items-center justify-center overflow-hidden rounded-[3px] border border-black/70 bg-[linear-gradient(180deg,#20231d_0%,#0b0d0b_50%,#171913_100%)] px-1 text-[18px] font-semibold leading-none text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.13),inset_0_-1px_0_rgba(0,0,0,0.72)]">
+      <span className="absolute inset-x-0 top-1/2 h-px bg-black/75" />
+      <span className="relative">{value}</span>
+    </span>
+  );
+}
+
 export function HatchStatusWidget() {
   const pathname = usePathname();
   const [secondsRemaining, setSecondsRemaining] = useState(INITIAL_SECONDS);
@@ -84,20 +93,31 @@ export function HatchStatusWidget() {
   return (
     <Link
       href="/lost"
-      className={`fixed bottom-4 right-4 z-40 rounded-[14px] border px-3 py-2 font-mono text-sm shadow-[0_14px_32px_rgba(0,0,0,0.28)] transition hover:scale-[1.02] ${
+      className={`fixed bottom-4 right-4 z-40 inline-flex items-center gap-1 rounded-[8px] border bg-[linear-gradient(180deg,#26271f_0%,#11130f_62%,#080908_100%)] px-2 py-1.5 font-mono shadow-[0_16px_34px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-black/70 transition hover:scale-[1.02] ${
         failure
-          ? "border-red-300/45 bg-red-950/85 text-red-100 shadow-[0_0_24px_rgba(248,113,113,0.25)]"
+          ? "border-red-300/45 shadow-[0_0_24px_rgba(248,113,113,0.25),inset_0_1px_0_rgba(255,255,255,0.08)]"
           : finalMinute
-            ? "animate-pulse border-red-300/45 bg-red-950/80 text-red-100 shadow-[0_0_22px_rgba(248,113,113,0.22)]"
+            ? "animate-pulse border-red-300/45 shadow-[0_0_22px_rgba(248,113,113,0.22),inset_0_1px_0_rgba(255,255,255,0.08)]"
             : danger
-              ? "border-red-300/35 bg-red-950/75 text-red-100"
+              ? "border-red-300/35"
               : warning
-                ? "border-amber-300/35 bg-amber-950/75 text-amber-100"
-                : "border-lime-200/25 bg-lime-950/75 text-lime-100"
+                ? "border-amber-300/35"
+                : "border-zinc-500/45"
       }`}
       aria-label="Open LOST hatch countdown"
     >
-      {failure ? "FAILURE" : formatCountdown(secondsRemaining)}
+      {(failure ? "FAILURE" : formatCountdown(secondsRemaining)).split("").map((value, index) =>
+        value === ":" ? (
+          <span
+            key={`${value}-${index}`}
+            className="px-0.5 text-base font-semibold leading-none text-zinc-300"
+          >
+            :
+          </span>
+        ) : (
+          <TimerPanel key={`${value}-${index}`} value={value} />
+        )
+      )}
     </Link>
   );
 }
