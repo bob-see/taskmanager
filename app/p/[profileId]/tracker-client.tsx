@@ -23,6 +23,11 @@ import {
 } from "@/app/components/editors";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 import {
+  DelegatedSenderBadge,
+  DelegatedTaskStatusPill,
+} from "@/app/delegated/delegated-task-indicators";
+import type { DelegatedTaskStatus } from "@/app/delegated/delegated-status-badge";
+import {
   type AverageBasis,
   endOfMonth,
   endOfWeekSun,
@@ -64,7 +69,11 @@ type Task = {
   isPriority: boolean;
   delegatedTask: {
     id: string;
-    status: string;
+    status: DelegatedTaskStatus;
+    assignedByUser: {
+      name: string | null;
+      email: string | null;
+    } | null;
   } | null;
 };
 
@@ -1807,6 +1816,8 @@ function TaskRow({
           ? "bg-amber-100/20"
           : "bg-transparent"
       } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
+        task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
+      } ${
         draggable ? "cursor-grab" : ""
       } ${dragActive ? "opacity-60" : ""} ${
         dragOverPosition === "before"
@@ -1858,8 +1869,13 @@ function TaskRow({
               type="button"
               onClick={() => onStartTitleEdit(task)}
             >
-              <span className={`line-clamp-1 ${isTaskCompleted(task) ? "line-through opacity-70" : ""}`}>
-                {task.title}
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                {task.delegatedTask ? (
+                  <DelegatedSenderBadge sender={task.delegatedTask.assignedByUser} />
+                ) : null}
+                <span className={`line-clamp-1 ${isTaskCompleted(task) ? "line-through opacity-70" : ""}`}>
+                  {task.title}
+                </span>
               </span>
             </button>
           )}
@@ -1918,6 +1934,9 @@ function TaskRow({
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--tm-muted)]">
+          {task.delegatedTask ? (
+            <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+          ) : null}
           {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
           {hasTaskNotes(task) && (
             <TaskNotesButton notes={formatTaskNotesPreview(task)} />
@@ -3509,12 +3528,13 @@ export function TrackerClient({
     setDelegateTask(task);
   }
 
-  function markTaskDelegated(delegation?: { id: string; status: string }) {
+  function markTaskDelegated(delegation?: { id: string; status: DelegatedTaskStatus }) {
     if (!delegateTask) return;
 
     const delegatedTask = {
       id: delegation?.id ?? delegateTask.id,
       status: delegation?.status ?? "PENDING",
+      assignedByUser: null,
     };
 
     setTasks((prev) =>
@@ -4981,21 +5001,31 @@ export function TrackerClient({
                     {matrixTasks.map((task) => (
                       <tr
                         key={task.id}
-                        className={`tm-table-row border-t align-top ${
+                        className={`tm-table-row border-t border-l-4 border-l-transparent align-top ${
                           task.isPriority
                             ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
                             : ""
+                        } ${
+                          task.delegatedTask ? "border-l-sky-200/70" : ""
                         }`}
                       >
                         <td className={matrixCellClass}>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              {task.delegatedTask ? (
+                                <DelegatedSenderBadge
+                                  sender={task.delegatedTask.assignedByUser}
+                                />
+                              ) : null}
                               <span className="truncate font-semibold">{task.title}</span>
                               {hasTaskNotes(task) && (
                                 <TaskNotesButton notes={formatTaskNotesPreview(task)} />
                               )}
                             </div>
                             <div className="tm-muted mt-1 flex flex-wrap gap-1.5 text-[11px]">
+                              {task.delegatedTask ? (
+                                <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+                              ) : null}
                               {showStartChipInTables && (
                                 <span className={smallChipClass}>
                                   Start {formatShortDate(toDateOnly(task.startDate))}

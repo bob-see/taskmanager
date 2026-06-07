@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
+import { DelegatedLifecycleActions } from "../delegated-lifecycle-actions";
 import { DelegatedTaskList, type DelegatedTaskListItem } from "../delegated-task-list";
 import { DelegatedResponseActions } from "../delegated-response-actions";
 
@@ -28,8 +29,21 @@ export default async function AssignedToMePage() {
       createdAt: true,
       task: {
         select: {
+          id: true,
           title: true,
           dueAt: true,
+          noteHistory: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       },
       assignedByUser: {
@@ -47,6 +61,7 @@ export default async function AssignedToMePage() {
     createdAt: item.createdAt,
     task: item.task,
     user: item.assignedByUser,
+    sender: item.assignedByUser,
   }));
 
   return (
@@ -70,6 +85,10 @@ export default async function AssignedToMePage() {
         renderActions={(item) =>
           item.status === "PENDING" ? (
             <DelegatedResponseActions delegatedTaskId={item.id} />
+          ) : item.status === "ACCEPTED" ? (
+            <DelegatedLifecycleActions delegatedTaskId={item.id} action="start" />
+          ) : item.status === "IN_PROGRESS" ? (
+            <DelegatedLifecycleActions delegatedTaskId={item.id} action="complete" />
           ) : null
         }
       />

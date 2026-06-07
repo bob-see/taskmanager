@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
+import { DelegatedLifecycleActions } from "../delegated-lifecycle-actions";
 import { DelegatedTaskList, type DelegatedTaskListItem } from "../delegated-task-list";
 import { NewDelegatedTaskButton } from "../new-delegated-task-button";
 
@@ -28,11 +29,30 @@ export default async function AssignedByMePage() {
       createdAt: true,
       task: {
         select: {
+          id: true,
           title: true,
           dueAt: true,
+          noteHistory: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       },
       assignedToUser: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+      assignedByUser: {
         select: {
           name: true,
           email: true,
@@ -47,6 +67,7 @@ export default async function AssignedByMePage() {
     createdAt: item.createdAt,
     task: item.task,
     user: item.assignedToUser,
+    sender: item.assignedByUser,
   }));
 
   return (
@@ -70,6 +91,11 @@ export default async function AssignedByMePage() {
         items={items}
         emptyMessage="You have not delegated any tasks."
         userColumnLabel="Assigned To"
+        renderActions={(item) =>
+          item.status === "COMPLETED" ? (
+            <DelegatedLifecycleActions delegatedTaskId={item.id} action="close" />
+          ) : null
+        }
       />
     </main>
   );

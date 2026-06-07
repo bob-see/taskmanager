@@ -3,6 +3,11 @@
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
+  DelegatedSenderBadge,
+  DelegatedTaskStatusPill,
+} from "@/app/delegated/delegated-task-indicators";
+import type { DelegatedTaskStatus } from "@/app/delegated/delegated-status-badge";
+import {
   ProjectEditorModal,
   RepeatFields,
   TaskEditorModal,
@@ -37,7 +42,11 @@ type OverviewTask = {
   notes: string | null;
   delegatedTask: {
     id: string;
-    status: string;
+    status: DelegatedTaskStatus;
+    assignedByUser: {
+      name: string | null;
+      email: string | null;
+    } | null;
   } | null;
   noteHistory: TaskNoteHistoryEntry[];
   projectId: string | null;
@@ -1377,12 +1386,13 @@ function ProfileCard({
     setDelegateTask(task);
   }
 
-  function markTaskDelegated(delegation?: { id: string; status: string }) {
+  function markTaskDelegated(delegation?: { id: string; status: DelegatedTaskStatus }) {
     if (!delegateTask) return;
 
     const delegatedTask = {
       id: delegation?.id ?? delegateTask.id,
       status: delegation?.status ?? "PENDING",
+      assignedByUser: null,
     };
 
     setOpenTasks((prev) =>
@@ -1939,25 +1949,27 @@ function ProfileCard({
                               task.isPriority
                                 ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
                                 : ""
+                            } ${
+                              task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
                             }`}
                             onContextMenu={(event) => openTaskContextMenu(event, task)}
                           >
-                            <div className="flex items-center gap-1.5 font-medium leading-snug">
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5 font-medium leading-snug">
+                              {task.delegatedTask ? (
+                                <DelegatedSenderBadge
+                                  sender={task.delegatedTask.assignedByUser}
+                                />
+                              ) : null}
                               <span>{task.title}</span>
                               {hasTaskNotes(task) && (
                                 <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                               )}
                             </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
-                              <span className="tm-chip rounded-full border px-2 py-0.5">
-                                {groupingMode === "project"
-                                  ? group.label
-                                  : task.projectName || "Unassigned"}
-                              </span>
-                              <span className="tm-chip rounded-full border px-2 py-0.5">
-                                {task.category ?? "Uncategorized"}
-                              </span>
-                            </div>
+                            {task.delegatedTask ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
+                                <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+                              </div>
+                            ) : null}
                           </article>
                         ))}
                       </div>
@@ -1973,13 +1985,12 @@ function ProfileCard({
               <thead>
                 <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                   <th className="px-2 py-2">Title</th>
-                  <th className="px-2 py-2">Details</th>
                 </tr>
               </thead>
               <tbody>
                 {groupedVisibleTasks.length === 0 ? (
                   <tr>
-                    <td className="px-2 py-3 text-sm text-[color:var(--tm-muted)]" colSpan={2}>
+                    <td className="px-2 py-3 text-sm text-[color:var(--tm-muted)]">
                       {selectedFilter === "all-open" ? "No open tasks." : "No matching tasks"}
                     </td>
                   </tr>
@@ -2030,7 +2041,7 @@ function ProfileCard({
                               : undefined
                           }
                         >
-                          <td colSpan={2} className="px-2 py-2">
+                          <td className="px-2 py-2">
                             <button
                               type="button"
                               className="inline-flex items-center gap-2 text-sm font-medium"
@@ -2054,10 +2065,12 @@ function ProfileCard({
                           group.tasks.map((task) => (
                             <tr
                               key={task.id}
-                              className={`tm-table-row border-b border-[color:var(--tm-border)] align-top ${
+                              className={`tm-table-row border-b border-l-4 border-l-transparent border-[color:var(--tm-border)] align-top ${
                                 task.isPriority
                                   ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
                                   : ""
+                              } ${
+                                task.delegatedTask ? "border-l-sky-200/70" : ""
                               } ${
                                 taskReordering ? "cursor-grabbing" : "cursor-grab"
                               } ${
@@ -2081,18 +2094,23 @@ function ProfileCard({
                               onContextMenu={(event) => openTaskContextMenu(event, task)}
                             >
                               <td className="px-2 py-2.5 font-medium">
-                                <div className="inline-flex min-w-0 items-center gap-1.5">
-                                  <span>{task.title}</span>
+                                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                  {task.delegatedTask ? (
+                                    <DelegatedSenderBadge
+                                      sender={task.delegatedTask.assignedByUser}
+                                    />
+                                  ) : null}
+                                  <span className="min-w-0 break-words">{task.title}</span>
                                   {hasTaskNotes(task) && (
                                     <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                                   )}
+                                  {task.delegatedTask ? (
+                                    <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+                                  ) : null}
                                 </div>
                                 {hasTaskNotes(task) && (
                                   <span className="sr-only">Has notes</span>
                                 )}
-                              </td>
-                              <td className="px-2 py-2.5 text-xs text-[color:var(--tm-muted)]">
-                                {task.category ?? "Uncategorized"}
                               </td>
                             </tr>
                           ))}

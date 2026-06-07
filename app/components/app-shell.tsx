@@ -23,6 +23,7 @@ type AppShellProps = {
   profiles: ShellProfile[];
   currentUser: ShellUser;
   delegatedCounts: DelegatedCounts;
+  showLostAccess: boolean;
 };
 
 export function AppShell({
@@ -30,6 +31,7 @@ export function AppShell({
   profiles,
   currentUser,
   delegatedCounts,
+  showLostAccess,
 }: AppShellProps) {
   return (
     <div className="min-h-screen overflow-x-clip bg-[color:var(--tm-bg)] text-[color:var(--tm-text)] md:flex">
@@ -39,7 +41,7 @@ export function AppShell({
         delegatedCounts={delegatedCounts}
       />
       <div className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
-      <HatchStatusWidget />
+      {showLostAccess ? <HatchStatusWidget /> : null}
     </div>
   );
 }

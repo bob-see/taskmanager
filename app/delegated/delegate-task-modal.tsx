@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import type { DelegatedTaskStatus } from "./delegated-status-badge";
 
 type DelegationUser = {
   id: string;
@@ -22,7 +23,7 @@ type DelegateTaskModalProps = {
   open: boolean;
   mode: ExistingTaskMode | NewTaskMode;
   onClose: () => void;
-  onDelegated: (delegation?: { id: string; status: string }) => void;
+  onDelegated: (delegation?: { id: string; status: DelegatedTaskStatus }) => void;
 };
 
 const inputClass =

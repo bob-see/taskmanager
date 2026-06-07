@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { prisma } from "@/app/lib/prisma";
 import { AppShell } from "@/app/components/app-shell";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { canAccessLost } from "@/app/lost/access";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -114,6 +115,7 @@ export default async function RootLayout({
             assignedToMe: delegatedCounts[0],
             assignedByMe: delegatedCounts[1],
           }}
+          showLostAccess={canAccessLost(currentUser?.email ?? email)}
         >
           {children}
         </AppShell>

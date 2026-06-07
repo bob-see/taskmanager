@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import { DelegatedTaskNotes, type DelegatedTaskNote } from "./delegated-task-notes";
+import { DelegatedSenderBadge } from "./delegated-task-indicators";
 import { DelegatedStatusBadge, type DelegatedTaskStatus } from "./delegated-status-badge";
 
 export type DelegatedTaskListItem = {
@@ -6,10 +8,16 @@ export type DelegatedTaskListItem = {
   status: DelegatedTaskStatus;
   createdAt: Date;
   task: {
+    id: string;
     title: string;
     dueAt: Date | null;
+    noteHistory: DelegatedTaskNote[];
   };
   user: {
+    name: string | null;
+    email: string | null;
+  } | null;
+  sender: {
     name: string | null;
     email: string | null;
   } | null;
@@ -66,26 +74,39 @@ export function DelegatedTaskList({
               </tr>
             ) : (
               items.map((item) => (
-                <tr key={item.id} className="tm-table-row border-b last:border-0">
-                  <td className="max-w-md px-3 py-3 font-medium">
-                    <span className="line-clamp-2">{item.task.title}</span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <DelegatedStatusBadge status={item.status} />
-                  </td>
-                  <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                    {formatUser(item.user)}
-                  </td>
-                  <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                    {formatDate(item.createdAt)}
-                  </td>
-                  <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                    {item.task.dueAt ? formatDate(item.task.dueAt) : "None"}
-                  </td>
-                  {renderActions ? (
-                    <td className="px-3 py-3 text-right">{renderActions(item)}</td>
-                  ) : null}
-                </tr>
+                <Fragment key={item.id}>
+                  <tr className="tm-table-row border-b-0 border-l-4 border-l-sky-200/70">
+                    <td className="max-w-md px-3 py-3 font-medium">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <DelegatedSenderBadge sender={item.sender} />
+                        <span className="line-clamp-2">{item.task.title}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <DelegatedStatusBadge status={item.status} />
+                    </td>
+                    <td className="px-3 py-3 text-[color:var(--tm-muted)]">
+                      {formatUser(item.user)}
+                    </td>
+                    <td className="px-3 py-3 text-[color:var(--tm-muted)]">
+                      {formatDate(item.createdAt)}
+                    </td>
+                    <td className="px-3 py-3 text-[color:var(--tm-muted)]">
+                      {item.task.dueAt ? formatDate(item.task.dueAt) : "None"}
+                    </td>
+                    {renderActions ? (
+                      <td className="px-3 py-3 text-right">{renderActions(item)}</td>
+                    ) : null}
+                  </tr>
+                  <tr className="border-b last:border-0">
+                    <td className="px-3 pb-4" colSpan={columnCount}>
+                      <DelegatedTaskNotes
+                        delegatedTaskId={item.id}
+                        notes={item.task.noteHistory}
+                      />
+                    </td>
+                  </tr>
+                </Fragment>
               ))
             )}
           </tbody>

@@ -62,6 +62,12 @@ export async function getTrackerPageData(profileId: string, email: string) {
           select: {
             id: true,
             status: true,
+            assignedByUser: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
           },
         },
         projectId: true,

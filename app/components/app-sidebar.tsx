@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
+import { canAccessLost } from "@/app/lost/access";
 
 type SidebarProfile = {
   id: string;
@@ -27,8 +28,6 @@ type AppSidebarProps = {
   currentUser: SidebarUser;
   delegatedCounts: DelegatedCounts;
 };
-
-const lostAllowedEmails = new Set(["bob@darcy.com.au", "robert.bob.see@gmail.com"]);
 
 function itemClassName(active: boolean, disabled = false) {
   return [
@@ -59,9 +58,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const showLostLink = currentUser.email
-    ? lostAllowedEmails.has(currentUser.email.toLocaleLowerCase())
-    : false;
+  const showLostLink = canAccessLost(currentUser.email);
   const activeProfile = profiles.find((profile) => {
     const href = `/p/${profile.id}`;
     return pathname === href || pathname.startsWith(`${href}/`);

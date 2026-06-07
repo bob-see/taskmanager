@@ -92,6 +92,12 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
             select: {
               id: true,
               status: true,
+              assignedByUser: {
+                select: {
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
           startDate: true,
