@@ -171,9 +171,8 @@ function formatCompactDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return value;
   return new Intl.DateTimeFormat(undefined, {
-    day: "2-digit",
+    day: "numeric",
     month: "short",
-    year: "2-digit",
   }).format(new Date(year, month - 1, day));
 }
 
@@ -2360,7 +2359,7 @@ export function SpacesClient() {
                                 <td
                                   key={column.id}
                                   className={`border-l border-[color:var(--tm-border)] px-1.5 py-1 align-middle ${
-                                    column === orderedColumns[0] ? "pl-2.5" : ""
+                                    column === orderedColumns[0] && type !== "date" ? "pl-2.5" : ""
                                   } ${
                                     column.archivedAt ? "bg-slate-50/70 opacity-70" : ""
                                   } ${cellWidthClassName(column, type)}`}
@@ -3201,6 +3200,7 @@ function CellEditor({
   const [draft, setDraft] = useState(value);
   const [editingStatus, setEditingStatus] = useState(false);
   const [editingDate, setEditingDate] = useState(false);
+  const pickerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setDraft(value);
@@ -3225,44 +3225,95 @@ function CellEditor({
 
   if (type === "date") {
     const dateValue = typeof draft === "string" ? draft : "";
+    const savedDateValue = typeof value === "string" ? value : "";
+
+    function saveDate(nextValue = dateValue) {
+      onSave(nextValue || null);
+      setEditingDate(false);
+    }
+
+    function cancelDateEditing() {
+      setDraft(savedDateValue);
+      setEditingDate(false);
+    }
+
+    function openDatePicker() {
+      const pickerInput = pickerInputRef.current;
+      if (!pickerInput) return;
+      if (typeof pickerInput.showPicker === "function") {
+        pickerInput.showPicker();
+        return;
+      }
+      pickerInput.focus();
+      pickerInput.click();
+    }
 
     if (!editingDate) {
       return (
-        <button
-          type="button"
-          className="flex min-h-8 w-full min-w-[5.6rem] items-center rounded-[10px] border border-transparent px-1.5 text-left text-sm tabular-nums transition hover:border-[color:var(--tm-border)] hover:bg-white/55 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-70"
-          disabled={saving || disabled}
-          title={dateValue || "Set date"}
-          aria-label={dateValue ? `Date ${formatCompactDate(dateValue)}` : "Set date"}
-          onClick={() => setEditingDate(true)}
-        >
-          {dateValue ? (
-            <span className="truncate">{formatCompactDate(dateValue)}</span>
-          ) : (
-            <span className="truncate text-[color:var(--tm-muted)]">dd mmm yy</span>
-          )}
-        </button>
+        <div className="relative min-w-0">
+          <button
+            type="button"
+            className="flex min-h-8 w-full min-w-0 items-center rounded-[10px] border border-transparent px-1.5 text-left text-xs tabular-nums transition hover:border-[color:var(--tm-border)] hover:bg-white/55 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-70"
+            disabled={saving || disabled}
+            title={dateValue || "Set date"}
+            aria-label={dateValue ? `Date ${formatCompactDate(dateValue)}` : "Set date"}
+            onClick={(event) => {
+              event.stopPropagation();
+              openDatePicker();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                setEditingDate(true);
+              }
+            }}
+          >
+            {dateValue ? (
+              <span className="truncate">{formatCompactDate(dateValue)}</span>
+            ) : (
+              <span className="truncate text-[color:var(--tm-muted)]">dd mmm</span>
+            )}
+          </button>
+          <input
+            ref={pickerInputRef}
+            type="date"
+            className="pointer-events-none absolute h-px w-px opacity-0"
+            tabIndex={-1}
+            value={dateValue}
+            disabled={saving || disabled}
+            aria-hidden="true"
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setDraft(nextValue);
+              saveDate(nextValue);
+            }}
+          />
+        </div>
       );
     }
 
     return (
-      <input
-        autoFocus
-        type="date"
-        className={inputClassName("w-full min-w-[7rem] px-1.5")}
-        value={dateValue}
-        disabled={saving || disabled}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          onSave(event.target.value || null);
-        }}
-        onBlur={() => setEditingDate(false)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === "Escape") {
-            event.currentTarget.blur();
-          }
-        }}
-      />
+      <div className="min-w-0">
+        <input
+          autoFocus
+          type="date"
+          className={inputClassName("tm-matrix-date-input w-full min-w-0 px-1.5")}
+          value={dateValue}
+          disabled={saving || disabled}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => saveDate()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              saveDate();
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              cancelDateEditing();
+            }
+          }}
+        />
+      </div>
     );
   }
 

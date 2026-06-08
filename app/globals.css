@@ -40,6 +40,10 @@ body {
   color: var(--tm-muted);
 }
 
+.tm-matrix-date-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
 .tm-button {
   background: rgba(255, 255, 255, 0.76) !important;
   border-color: var(--tm-border) !important;
