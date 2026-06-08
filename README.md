@@ -19,6 +19,10 @@ TaskManager prioritises:
 
 When in doubt, follow the Playbook.
 
+Collaborative Spaces columns support two lifecycle actions: Archive Column hides
+a column from the active board while preserving its cells, and Delete Column
+permanently removes only empty columns after confirmation.
+
 ---
 
 The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.

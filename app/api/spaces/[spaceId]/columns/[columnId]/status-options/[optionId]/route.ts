@@ -11,7 +11,7 @@ type Ctx = {
 
 async function getStatusColumn(spaceId: string, columnId: string) {
   const column = await prisma.matrixColumn.findFirst({
-    where: { id: columnId, spaceId },
+    where: { id: columnId, spaceId, archivedAt: null },
     select: { id: true, type: true },
   });
 

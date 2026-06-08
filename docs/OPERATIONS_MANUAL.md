@@ -274,6 +274,12 @@ Check:
 - Timesheets
 - Collaborative Spaces
 
+Collaborative Spaces column checks:
+
+- Archive Column hides the column from the active board and preserves its data.
+- Delete Column requires confirmation and is blocked while cells/cards still
+  reference the column.
+
 ## Review Logs
 
 If deployment fails:

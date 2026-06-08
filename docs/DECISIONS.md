@@ -97,6 +97,12 @@ The first successful implementation was property campaign tracking and shared op
 Impact:
 Future development should focus on workflow visibility, status tracking and collaboration.
 
+Column lifecycle:
+Collaborative Space columns can be archived or permanently deleted. Archived
+columns are hidden from active boards while preserving their existing cells.
+Permanent deletion is destructive and must not be allowed while cells still
+reference the column.
+
 ---
 
 ### 2026-06-06 - Groups Control User Visibility

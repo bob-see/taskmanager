@@ -19,7 +19,7 @@ export async function POST(req: Request, ctx: Ctx) {
   if (membership.error) return membership.error;
 
   const column = await prisma.matrixColumn.findFirst({
-    where: { id: columnId, spaceId },
+    where: { id: columnId, spaceId, archivedAt: null },
     select: { id: true, type: true },
   });
 

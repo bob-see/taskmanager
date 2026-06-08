@@ -36,7 +36,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const column = await prisma.$transaction(async (tx) => {
     const result = await tx.matrixColumn.aggregate({
-      where: { spaceId },
+      where: { spaceId, archivedAt: null },
       _max: { order: true },
     });
 

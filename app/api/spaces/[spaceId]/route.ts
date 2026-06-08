@@ -9,8 +9,10 @@ type Ctx = {
   params: Promise<{ spaceId: string }>;
 };
 
-export async function GET(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
   const { spaceId } = await ctx.params;
+  const includeArchivedColumns =
+    new URL(req.url).searchParams.get("includeArchivedColumns") === "1";
 
   const currentUser = await getCurrentUserOr401();
   if (currentUser.error) return currentUser.error;
@@ -29,6 +31,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         orderBy: [{ order: "asc" }, { id: "asc" }],
       },
       columns: {
+        where: includeArchivedColumns ? undefined : { archivedAt: null },
         orderBy: [{ order: "asc" }, { id: "asc" }],
         include: {
           statusOptions: {
@@ -50,6 +53,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       },
       column: {
         spaceId,
+        ...(includeArchivedColumns ? {} : { archivedAt: null }),
       },
     },
     include: {
@@ -89,7 +93,19 @@ export async function GET(_req: Request, ctx: Ctx) {
     ),
   }));
 
-  return Response.json({ ...space, cells: visibleCells, currentMember: membership.member });
+  const archivedColumnCount = await prisma.matrixColumn.count({
+    where: {
+      spaceId,
+      archivedAt: { not: null },
+    },
+  });
+
+  return Response.json({
+    ...space,
+    cells: visibleCells,
+    archivedColumnCount,
+    currentMember: membership.member,
+  });
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {

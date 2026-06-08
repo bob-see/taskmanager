@@ -58,7 +58,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       select: { id: true, cellTypeOverride: true },
     }),
     prisma.matrixColumn.findFirst({
-      where: { id: columnId, spaceId },
+      where: { id: columnId, spaceId, archivedAt: null },
       select: { id: true, type: true },
     }),
   ]);
@@ -100,7 +100,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         ? columnId
         : (
             await prisma.matrixColumn.findFirst({
-              where: { spaceId, type: "status" },
+              where: { spaceId, type: "status", archivedAt: null },
               orderBy: [{ order: "asc" }, { id: "asc" }],
               select: { id: true },
             })

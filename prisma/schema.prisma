@@ -270,11 +270,12 @@ model MatrixRow {
 }
 
 model MatrixColumn {
-  id      String @id @default(cuid()) @db.VarChar(36)
-  spaceId String @db.VarChar(36)
-  name    String
-  type    String @db.VarChar(32)
-  order   Int
+  id         String    @id @default(cuid()) @db.VarChar(36)
+  spaceId    String    @db.VarChar(36)
+  name       String
+  type       String    @db.VarChar(32)
+  order      Int
+  archivedAt DateTime?
 
   space         CollaborativeSpace   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   statusOptions ColumnStatusOption[]
