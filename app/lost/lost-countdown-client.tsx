@@ -1,365 +1,53 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useRef, useState } from "react";
+import {
+  FINAL_FOUR_STATUS,
+  SEQUENCE,
+  formatLogTime,
+  type LostGlyphSlot,
+  useLostTimer,
+} from "@/app/lost/lost-timer-provider";
 
-const INITIAL_SECONDS = 108 * 60;
-const FINAL_WINDOW_SECONDS = 4 * 60;
-const SEQUENCE = ["4", "8", "15", "16", "23", "42"] as const;
-const FAILURE_SYMBOLS = ["𓂀", "𓊽", "𓆣", "𓃭", "𓏏", "𓇳", "𓁹", "𓎛"];
-const STORAGE_KEY = "tm-lost-countdown-state-v3";
-const SESSION_KEY = "tm-lost-countdown-browser-session-v3";
-const LOCKED_STATUS = "Input remains locked until the final four minutes.";
-const FINAL_FOUR_STATUS = "ENTER THE NUMBERS";
-const FINAL_MINUTE_STATUS = "SYSTEM FAILURE IMMINENT";
-
-type LogEntry = {
-  id: string;
-  message: string;
-  timestamp: number;
-};
-
-type StoredLostState = {
-  endAt: number;
-  failure: boolean;
-  lastResetAt: number | null;
-  logs: LogEntry[];
-  status: string;
-};
-
-function formatCountdown(totalSeconds: number) {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function formatLogTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function createLog(message: string, timestamp = Date.now()): LogEntry {
-  return {
-    id: `${timestamp}-${Math.random().toString(36).slice(2)}`,
-    message,
-    timestamp,
-  };
-}
-
-function createInitialState(message = "Countdown initiated."): StoredLostState {
-  const now = Date.now();
-
-  return {
-    endAt: now + INITIAL_SECONDS * 1000,
-    failure: false,
-    lastResetAt: null,
-    logs: [createLog(message, now)],
-    status: LOCKED_STATUS,
-  };
-}
-
-function resetStateWithLog(message: string): StoredLostState {
-  const now = Date.now();
-
-  return {
-    endAt: now + INITIAL_SECONDS * 1000,
-    failure: false,
-    lastResetAt: null,
-    logs: [createLog(message, now), createLog("Countdown started.", now)],
-    status: LOCKED_STATUS,
-  };
-}
-
-function readStoredState(): StoredLostState | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<StoredLostState>;
-    if (
-      typeof parsed.endAt !== "number" ||
-      typeof parsed.failure !== "boolean" ||
-      !Array.isArray(parsed.logs) ||
-      typeof parsed.status !== "string"
-    ) {
-      return null;
-    }
-
-    return {
-      endAt: parsed.endAt,
-      failure: parsed.failure,
-      lastResetAt: typeof parsed.lastResetAt === "number" ? parsed.lastResetAt : null,
-      logs: parsed.logs.filter(
-        (log): log is LogEntry =>
-          typeof log?.id === "string" &&
-          typeof log.message === "string" &&
-          typeof log.timestamp === "number"
-      ),
-      status: parsed.status,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredState(state: StoredLostState) {
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      ...state,
-      logs: state.logs.slice(0, 20),
-    })
-  );
-}
-
-function getSecondsUntil(endAt: number) {
-  return Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-}
-
-function hasLog(logs: LogEntry[], message: string) {
-  return logs.some((log) => log.message === message);
+function getGlyphPath(slot: LostGlyphSlot, size: "medium" | "large") {
+  return `/images/lost/glyphs/h${slot.glyph}-${slot.tone}-${size}.png`;
 }
 
 export function LostCountdownClient() {
-  const [endAt, setEndAt] = useState(() => Date.now() + INITIAL_SECONDS * 1000);
-  const [secondsRemaining, setSecondsRemaining] = useState(INITIAL_SECONDS);
+  const {
+    displayValue,
+    failure,
+    failureWhiteFlash,
+    glyphSlots,
+    inputEnabled,
+    jumpTo,
+    lastResetAt,
+    logs,
+    overrideOpen,
+    playKeypress,
+    rejectSequence,
+    resetCountdownFromOverride,
+    resetSystem,
+    setOverrideOpen,
+    setSoundMuted,
+    soundMuted,
+    status,
+    successPulse,
+    terminalState,
+    triggerFailure,
+  } = useLostTimer();
   const [sequenceFields, setSequenceFields] = useState<string[]>(() => SEQUENCE.map(() => ""));
-  const [status, setStatus] = useState(LOCKED_STATUS);
-  const [failure, setFailure] = useState(false);
-  const [lastResetAt, setLastResetAt] = useState<number | null>(null);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [successPulse, setSuccessPulse] = useState(false);
   const [failureFlash, setFailureFlash] = useState(false);
-  const [initialized, setInitialized] = useState(false);
-  const [overrideOpen, setOverrideOpen] = useState(false);
-  const [soundMuted, setSoundMuted] = useState(true);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const expiredLoggedRef = useRef(false);
-
-  const inputEnabled = secondsRemaining <= FINAL_WINDOW_SECONDS && secondsRemaining > 0 && !failure;
-  const finalThirtySeconds = secondsRemaining <= 30 && secondsRemaining > 0 && !failure;
-  const finalMinute = secondsRemaining <= 60 && secondsRemaining > 0 && !failure;
-  const finalTwoMinutes = secondsRemaining <= 120 && secondsRemaining > 0 && !failure;
-  const warning = inputEnabled && !finalTwoMinutes && !failure;
-  const terminalState = failure
-    ? "failure"
-    : finalThirtySeconds
-      ? "heartbeat"
-      : finalMinute
-      ? "critical"
-      : finalTwoMinutes
-        ? "danger"
-        : warning
-          ? "warning"
-          : "normal";
-
-  const displayValue = useMemo(() => formatCountdown(secondsRemaining), [secondsRemaining]);
-
-  function persistState(nextState: StoredLostState) {
-    setEndAt(nextState.endAt);
-    setFailure(nextState.failure);
-    setLastResetAt(nextState.lastResetAt);
-    setLogs(nextState.logs.slice(0, 20));
-    setStatus(nextState.status);
-    setSecondsRemaining(nextState.failure ? 0 : getSecondsUntil(nextState.endAt));
-    expiredLoggedRef.current = nextState.failure;
-    writeStoredState(nextState);
-  }
-
-  function updateStoredState(updater: (current: StoredLostState) => StoredLostState) {
-    const current: StoredLostState = {
-      endAt,
-      failure,
-      lastResetAt,
-      logs,
-      status,
-    };
-    persistState(updater(current));
-  }
-
-  function addLog(message: string) {
-    updateStoredState((current) => ({
-      ...current,
-      logs: [createLog(message), ...current.logs].slice(0, 20),
-    }));
-  }
-
-  function jumpTo(seconds: number, logMessage: string, nextStatus: string) {
-    const now = Date.now();
-    updateStoredState((current) => ({
-      ...current,
-      endAt: now + seconds * 1000,
-      failure: false,
-      status: nextStatus,
-      logs: [createLog(logMessage, now), ...current.logs].slice(0, 20),
-    }));
-    setSequenceFields(SEQUENCE.map(() => ""));
-    setOverrideOpen(false);
-    window.setTimeout(() => inputRefs.current[0]?.focus(), 0);
-  }
-
-  function triggerFailure(message = "Failure triggered.") {
-    updateStoredState((current) => ({
-      ...current,
-      endAt: Date.now(),
-      failure: true,
-      status: "SYSTEM FAILURE",
-      logs: [createLog(message), ...current.logs].slice(0, 20),
-    }));
-    setOverrideOpen(false);
-  }
-
-  function resetCountdownFromOverride() {
-    persistState(resetStateWithLog("System reset."));
-    setSequenceFields(SEQUENCE.map(() => ""));
-    setOverrideOpen(false);
-  }
-
-  useEffect(() => {
-    const hasActiveBrowserSession = window.sessionStorage.getItem(SESSION_KEY) === "active";
-    window.sessionStorage.setItem(SESSION_KEY, "active");
-
-    if (!hasActiveBrowserSession) {
-      persistState(createInitialState());
-      setInitialized(true);
-      return;
-    }
-
-    const storedState = readStoredState();
-    if (!storedState) {
-      persistState(createInitialState());
-      setInitialized(true);
-      return;
-    }
-
-    if (!storedState.failure && storedState.endAt <= Date.now()) {
-      persistState({
-        ...storedState,
-        failure: true,
-        status: "SYSTEM FAILURE",
-        logs: [createLog("Timer expired."), ...storedState.logs].slice(0, 20),
-      });
-      setInitialized(true);
-      return;
-    }
-
-    persistState({
-      ...storedState,
-      logs: [createLog("Manual page restart."), ...storedState.logs].slice(0, 20),
-    });
-    setInitialized(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!initialized || failure) return;
-
-    const timer = window.setInterval(() => {
-      const nextSeconds = getSecondsUntil(endAt);
-      setSecondsRemaining(nextSeconds);
-
-      if (nextSeconds <= 0 && !expiredLoggedRef.current) {
-        expiredLoggedRef.current = true;
-        updateStoredState((current) => ({
-          ...current,
-          failure: true,
-          status: "SYSTEM FAILURE",
-          logs: [createLog("Timer expired."), ...current.logs].slice(0, 20),
-        }));
-      }
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endAt, failure, initialized]);
-
-  useEffect(() => {
-    if (!initialized || failure || secondsRemaining <= 0) return;
-
-    if (secondsRemaining <= 60) {
-      if (hasLog(logs, "System failure imminent.")) return;
-
-      updateStoredState((current) => ({
-        ...current,
-        status:
-          current.status === "Incorrect sequence." || current.status === "System reset successful."
-            ? current.status
-            : FINAL_MINUTE_STATUS,
-        logs: hasLog(current.logs, "System failure imminent.")
-          ? current.logs
-          : [createLog("System failure imminent."), ...current.logs].slice(0, 20),
-      }));
-      return;
-    }
-
-    if (secondsRemaining <= FINAL_WINDOW_SECONDS) {
-      if (hasLog(logs, "Final four minute protocol active.")) return;
-
-      updateStoredState((current) => ({
-        ...current,
-        status:
-          current.status === LOCKED_STATUS ||
-          current.status === FINAL_MINUTE_STATUS ||
-          current.status === FINAL_FOUR_STATUS
-            ? FINAL_FOUR_STATUS
-            : current.status,
-        logs: hasLog(current.logs, "Final four minute protocol active.")
-          ? current.logs
-          : [createLog("Final four minute protocol active."), ...current.logs].slice(0, 20),
-      }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [failure, initialized, logs, secondsRemaining, status]);
-
-  useEffect(() => {
-    if (!initialized) return;
-
-    function handleShortcut(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === "KeyL") {
-        event.preventDefault();
-        setOverrideOpen(true);
-        addLog("Maintenance override detected.");
-        return;
-      }
-
-      if (!event.shiftKey || !event.altKey) return;
-
-      if (event.code === "Digit4") {
-        event.preventDefault();
-        jumpTo(240, "Test override: final four minutes activated.", FINAL_FOUR_STATUS);
-      }
-
-      if (event.code === "Digit1") {
-        event.preventDefault();
-        jumpTo(60, "Test override: final minute activated.", FINAL_MINUTE_STATUS);
-      }
-    }
-
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialized]);
-
-  function resetSystem(message = "System reset successful.") {
-    const now = Date.now();
-    persistState({
-      endAt: now + INITIAL_SECONDS * 1000,
-      failure: false,
-      lastResetAt: now,
-      logs: [createLog("Sequence accepted. Timer reset.", now), ...logs].slice(0, 20),
-      status: message,
-    });
-    setSequenceFields(SEQUENCE.map(() => ""));
-    setSuccessPulse(true);
-    window.setTimeout(() => setSuccessPulse(false), 900);
-  }
 
   function handleFieldChange(index: number, value: string) {
     if (!inputEnabled) return;
 
     const normalized = value.replace(/\D/g, "").slice(0, 2);
+    if (normalized.length > sequenceFields[index].length) {
+      playKeypress();
+    }
     setSequenceFields((current) => {
       const next = [...current];
       next[index] = normalized;
@@ -385,14 +73,11 @@ export function LostCountdownClient() {
 
     if (sequenceAccepted) {
       resetSystem();
+      setSequenceFields(SEQUENCE.map(() => ""));
       return;
     }
 
-    updateStoredState((current) => ({
-      ...current,
-      status: "Incorrect sequence.",
-      logs: [createLog("Sequence rejected."), ...current.logs].slice(0, 20),
-    }));
+    rejectSequence();
     setSequenceFields(SEQUENCE.map(() => ""));
     setFailureFlash(true);
     window.setTimeout(() => setFailureFlash(false), 700);
@@ -430,6 +115,9 @@ export function LostCountdownClient() {
           <div className="relative flex flex-1 items-center justify-center rounded-[34px] border border-[#48513c] bg-[linear-gradient(135deg,#25271f,#080908_42%,#17130c)] p-4 shadow-[0_42px_110px_rgba(0,0,0,0.78),inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_18px_40px_rgba(255,255,255,0.035)] sm:p-7">
             <div className="absolute inset-3 rounded-[28px] border-[10px] border-[#070807] shadow-[inset_0_0_48px_rgba(0,0,0,0.95),0_0_0_1px_rgba(255,255,255,0.06)] sm:inset-5" />
             <div className="absolute inset-7 rounded-[20px] border border-amber-100/10 bg-[linear-gradient(90deg,rgba(255,255,255,0.035),transparent_18%,transparent_82%,rgba(255,255,255,0.025))]" />
+            {failureWhiteFlash ? (
+              <div className="pointer-events-none absolute inset-0 z-30 rounded-[34px] bg-white/90 shadow-[0_0_120px_rgba(255,255,255,0.95)]" />
+            ) : null}
             <div className="pointer-events-none absolute left-10 top-9 h-2 w-2 rounded-full bg-lime-200/35 shadow-[0_0_18px_rgba(190,242,100,0.55)]" />
             <div className="pointer-events-none absolute right-10 top-9 h-2 w-2 rounded-full bg-amber-200/30 shadow-[0_0_18px_rgba(253,230,138,0.48)]" />
             <div className="relative grid w-full gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
@@ -467,16 +155,43 @@ export function LostCountdownClient() {
                         <div>Sequence not entered</div>
                         <div>Initiating lockdown</div>
                       </div>
-                      <div className="w-full overflow-hidden border-y border-red-400/30 bg-black/45 py-3 font-mono text-5xl text-red-100 drop-shadow-[0_0_18px_rgba(248,113,113,0.78)] sm:text-7xl">
-                        <div className="animate-[marquee_8s_linear_infinite] whitespace-nowrap">
-                          {[...FAILURE_SYMBOLS, ...FAILURE_SYMBOLS, ...FAILURE_SYMBOLS].join("   ")}
+                      <div className="w-full border-y border-red-400/30 bg-black/45 px-2 py-4 shadow-[inset_0_0_28px_rgba(0,0,0,0.8)] sm:px-5 sm:py-6">
+                        <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 sm:gap-4">
+                          {glyphSlots.map((slot, index) => (
+                            <div
+                              key={`${slot.tone}-${index}`}
+                              className={`flex aspect-square w-[17.5%] max-w-[7.75rem] min-w-12 items-center justify-center rounded-[8px] border transition ${
+                                slot.tone === "red"
+                                  ? slot.locked
+                                    ? "border-red-300/45 bg-[linear-gradient(180deg,#050101,#100202_54%,#020101)] shadow-[0_0_24px_rgba(248,113,113,0.26),inset_0_0_22px_rgba(0,0,0,0.92)]"
+                                    : "border-red-400/30 bg-[linear-gradient(180deg,#040101,#0b0101_54%,#020101)] shadow-[inset_0_0_22px_rgba(0,0,0,0.92)]"
+                                  : slot.locked
+                                    ? "border-red-100/55 bg-[linear-gradient(180deg,#dc2626,#991b1b_58%,#5f0909)] shadow-[0_0_28px_rgba(248,113,113,0.38),inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-8px_18px_rgba(0,0,0,0.28)]"
+                                    : "border-red-100/42 bg-[linear-gradient(180deg,#c91f1f,#7f1111_58%,#4f0707)] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-8px_18px_rgba(0,0,0,0.28)]"
+                              }`}
+                            >
+                              <Image
+                                alt=""
+                                className={`h-[82%] w-[82%] object-contain ${
+                                  slot.tone === "red"
+                                    ? "brightness-125 saturate-150 drop-shadow-[0_0_18px_rgba(248,113,113,0.95)]"
+                                    : "contrast-150 brightness-75 drop-shadow-[0_2px_0_rgba(255,255,255,0.12)]"
+                                } ${
+                                  slot.locked ? "opacity-100" : "animate-[glyph_spin_0.42s_linear_infinite] opacity-90"
+                                }`}
+                                height={128}
+                                src={getGlyphPath(slot, "large")}
+                                width={128}
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
                       <button
                         type="button"
                         className="rounded-[14px] border border-red-200/55 bg-red-500/24 px-6 py-4 font-mono text-sm font-semibold uppercase tracking-[0.22em] text-red-50 shadow-[0_0_24px_rgba(248,113,113,0.28)] transition hover:bg-red-500/34"
                         onClick={() => {
-                          persistState(resetStateWithLog("System reset."));
+                          resetCountdownFromOverride();
                           setSequenceFields(SEQUENCE.map(() => ""));
                         }}
                       >
@@ -549,12 +264,11 @@ export function LostCountdownClient() {
                 <button
                   type="button"
                   className="mb-5 inline-flex w-full items-center justify-center gap-2 rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-lime-100/60 transition hover:bg-white/[0.06]"
-                  onClick={() => setSoundMuted((current) => !current)}
+                  onClick={() => setSoundMuted(!soundMuted)}
                 >
                   <span aria-hidden="true">{soundMuted ? "🔇" : "🔊"}</span>
                   {soundMuted ? "Audio muted" : "Audio armed"}
                 </button>
-                {/* TODO: Wire local warning/alarm audio files when assets are available. */}
 
                 <form className="space-y-3.5" onSubmit={submitSequence}>
                   <label className="block font-mono text-xs uppercase tracking-[0.22em] text-amber-100/70">
@@ -687,21 +401,31 @@ export function LostCountdownClient() {
               <button
                 type="button"
                 className="rounded-[12px] border border-amber-300/30 bg-amber-200/10 px-4 py-3 text-left text-sm uppercase tracking-[0.12em] transition hover:bg-amber-200/18"
-                onClick={() => jumpTo(240, "Test override: final four minutes activated.", FINAL_FOUR_STATUS)}
+                onClick={() => {
+                  jumpTo(240, "Test override: final four minutes activated.", FINAL_FOUR_STATUS);
+                  setSequenceFields(SEQUENCE.map(() => ""));
+                  window.setTimeout(() => inputRefs.current[0]?.focus(), 0);
+                }}
               >
                 Activate Final Four Minute Protocol
               </button>
               <button
                 type="button"
                 className="rounded-[12px] border border-red-300/30 bg-red-500/12 px-4 py-3 text-left text-sm uppercase tracking-[0.12em] transition hover:bg-red-500/20"
-                onClick={() => triggerFailure("Failure triggered.")}
+                onClick={() => {
+                  triggerFailure("Failure triggered.");
+                  setSequenceFields(SEQUENCE.map(() => ""));
+                }}
               >
                 Trigger System Failure
               </button>
               <button
                 type="button"
                 className="rounded-[12px] border border-lime-200/25 bg-lime-300/10 px-4 py-3 text-left text-sm uppercase tracking-[0.12em] transition hover:bg-lime-300/16"
-                onClick={resetCountdownFromOverride}
+                onClick={() => {
+                  resetCountdownFromOverride();
+                  setSequenceFields(SEQUENCE.map(() => ""));
+                }}
               >
                 Reset Countdown
               </button>
@@ -717,12 +441,12 @@ export function LostCountdownClient() {
         </div>
       ) : null}
       <style jsx>{`
-        @keyframes marquee {
+        @keyframes glyph_spin {
           from {
-            transform: translateX(0);
+            transform: rotate(0deg) scale(0.94);
           }
           to {
-            transform: translateX(-33.333%);
+            transform: rotate(360deg) scale(1.04);
           }
         }
         @keyframes heartbeat {

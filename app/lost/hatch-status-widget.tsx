@@ -1,46 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import {
+  formatCountdown,
+  type LostGlyphSlot,
+  useLostTimer,
+} from "@/app/lost/lost-timer-provider";
 
-const INITIAL_SECONDS = 108 * 60;
-const STORAGE_KEY = "tm-lost-countdown-state-v3";
-const SESSION_KEY = "tm-lost-countdown-browser-session-v3";
-
-type StoredLostState = {
-  endAt: number;
-  failure: boolean;
-};
-
-function formatCountdown(totalSeconds: number) {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function readStoredState(): StoredLostState | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<StoredLostState>;
-    if (typeof parsed.endAt !== "number" || typeof parsed.failure !== "boolean") {
-      return null;
-    }
-
-    return {
-      endAt: parsed.endAt,
-      failure: parsed.failure,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getSecondsUntil(endAt: number) {
-  return Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+function getGlyphPath(slot: LostGlyphSlot) {
+  return `/images/lost/glyphs/h${slot.glyph}-${slot.tone}-small.png`;
 }
 
 function TimerPanel({ value }: { value: string }) {
@@ -54,33 +24,7 @@ function TimerPanel({ value }: { value: string }) {
 
 export function HatchStatusWidget() {
   const pathname = usePathname();
-  const [secondsRemaining, setSecondsRemaining] = useState(INITIAL_SECONDS);
-  const [failure, setFailure] = useState(false);
-
-  useEffect(() => {
-    function readState() {
-      const hasActiveBrowserSession = window.sessionStorage.getItem(SESSION_KEY) === "active";
-      const storedState = readStoredState();
-
-      if (!hasActiveBrowserSession || !storedState) {
-        setSecondsRemaining(INITIAL_SECONDS);
-        setFailure(false);
-        return;
-      }
-
-      setSecondsRemaining(getSecondsUntil(storedState.endAt));
-      setFailure(storedState.failure);
-    }
-
-    readState();
-    const interval = window.setInterval(readState, 1000);
-    window.addEventListener("storage", readState);
-
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("storage", readState);
-    };
-  }, []);
+  const { failure, glyphSlots, secondsRemaining } = useLostTimer();
 
   const finalMinute = secondsRemaining <= 60 && secondsRemaining > 0 && !failure;
   const danger = secondsRemaining <= 120 && secondsRemaining > 0 && !failure;
@@ -106,18 +50,45 @@ export function HatchStatusWidget() {
       }`}
       aria-label="Open LOST hatch countdown"
     >
-      {(failure ? "FAILURE" : formatCountdown(secondsRemaining)).split("").map((value, index) =>
-        value === ":" ? (
-          <span
-            key={`${value}-${index}`}
-            className="px-0.5 text-base font-semibold leading-none text-zinc-300"
-          >
-            :
-          </span>
-        ) : (
-          <TimerPanel key={`${value}-${index}`} value={value} />
-        )
-      )}
+      {failure
+        ? glyphSlots.map((slot, index) => (
+            <span
+              key={`${slot.tone}-${index}`}
+              className={`relative inline-flex h-7 w-6 items-center justify-center overflow-hidden rounded-[3px] border ${
+                slot.tone === "red"
+                  ? "border-red-300/35 bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.1),inset_0_-1px_0_rgba(0,0,0,0.86)]"
+                  : "border-red-100/45 bg-red-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-4px_8px_rgba(0,0,0,0.24)]"
+              }`}
+            >
+              <Image
+                alt=""
+                className={`h-5 w-5 object-contain ${
+                  slot.tone === "red"
+                    ? "brightness-125 saturate-150 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)]"
+                    : "contrast-150 brightness-75"
+                } ${
+                  slot.locked ? "opacity-95" : "animate-spin opacity-80"
+                }`}
+                height={32}
+                src={getGlyphPath(slot)}
+                width={32}
+              />
+            </span>
+          ))
+        : formatCountdown(secondsRemaining)
+            .split("")
+            .map((value, index) =>
+              value === ":" ? (
+                <span
+                  key={`${value}-${index}`}
+                  className="px-0.5 text-base font-semibold leading-none text-zinc-300"
+                >
+                  :
+                </span>
+              ) : (
+                <TimerPanel key={`${value}-${index}`} value={value} />
+              )
+            )}
     </Link>
   );
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AppSidebar } from "@/app/components/app-sidebar";
 import { HatchStatusWidget } from "@/app/lost/hatch-status-widget";
+import { LostTimerProvider } from "@/app/lost/lost-timer-provider";
 
 type ShellProfile = {
   id: string;
@@ -33,7 +34,7 @@ export function AppShell({
   delegatedCounts,
   showLostAccess,
 }: AppShellProps) {
-  return (
+  const shell = (
     <div className="min-h-screen overflow-x-clip bg-[color:var(--tm-bg)] text-[color:var(--tm-text)] md:flex">
       <AppSidebar
         profiles={profiles}
@@ -44,4 +45,6 @@ export function AppShell({
       {showLostAccess ? <HatchStatusWidget /> : null}
     </div>
   );
+
+  return showLostAccess ? <LostTimerProvider>{shell}</LostTimerProvider> : shell;
 }
