@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
+  AddTaskModal,
   ProjectEditorModal,
   TaskEditorModal,
   createProjectForm,
@@ -193,12 +194,6 @@ const PREFERENCE_SAVE_DEBOUNCE_MS = 400;
 const DATE_ONLY_INPUT_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAY_TOGGLE_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
-const REPEAT_PATTERN_OPTIONS: Array<{ value: RepeatPattern; label: string }> = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
 const ALL_REPEAT_DAYS_MASK = 0b1111111;
 const SNOOZE_PRESET_OPTIONS: Array<{ value: SnoozePreset; label: string }> = [
   { value: "tomorrow", label: "Tomorrow" },
@@ -215,6 +210,8 @@ const primaryButtonClass =
   "tm-button-primary inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm";
 const compactButtonClass =
   "tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2.5 text-sm";
+const taskTitleButtonClass =
+  "min-w-0 cursor-pointer rounded border border-transparent px-1 py-0.5 text-left transition-colors hover:border-amber-700/20 hover:bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]";
 const chipClass = "tm-chip rounded-full border px-2 py-0.5";
 const smallChipClass = "tm-chip rounded-full border px-2 py-0.5 text-xs";
 const priorityChipClass =
@@ -1194,169 +1191,6 @@ function isEditTaskFormDirty(form: EditTaskFormState, baseline: EditTaskFormStat
   return JSON.stringify(formValues) !== JSON.stringify(baselineValues);
 }
 
-function RepeatFields<T extends RepeatFormState>({
-  form,
-  onChange,
-  defaultDateValue,
-}: {
-  form: T;
-  onChange: (updater: (prev: T) => T) => void;
-  defaultDateValue: string;
-}) {
-  return (
-    <div className={`${cardClass} space-y-3 p-3`}>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={form.repeatEnabled}
-          onChange={(e) =>
-            onChange((prev) => {
-              const repeatWeeklyDay = getWeekdayNumber(defaultDateValue);
-
-              return {
-                ...prev,
-                repeatEnabled: e.target.checked,
-                repeatDays:
-                  prev.repeatPattern === "weekly"
-                    ? getRepeatDayBit(repeatWeeklyDay)
-                    : ALL_REPEAT_DAYS_MASK,
-                repeatWeeklyDay,
-                repeatMonthlyDay: getDayOfMonth(defaultDateValue),
-              };
-            })
-          }
-        />
-        <span>Repeat</span>
-      </label>
-
-      {form.repeatEnabled && (
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <div className="tm-muted">Pattern</div>
-            <select
-              className={`w-full ${inputClass}`}
-              value={form.repeatPattern}
-              onChange={(e) => {
-                const repeatPattern = e.target.value as RepeatPattern;
-                const repeatWeeklyDay = getWeekdayNumber(defaultDateValue);
-
-                onChange((prev) => ({
-                  ...prev,
-                  repeatPattern,
-                  repeatDays:
-                    repeatPattern === "daily"
-                      ? ALL_REPEAT_DAYS_MASK
-                      : repeatPattern === "weekly"
-                        ? getRepeatDayBit(repeatWeeklyDay)
-                        : prev.repeatDays,
-                  repeatWeeklyDay,
-                  repeatMonthlyDay: getDayOfMonth(defaultDateValue),
-                }));
-              }}
-            >
-              {REPEAT_PATTERN_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value} className="text-black">
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {(form.repeatPattern === "daily" || form.repeatPattern === "weekly") && (
-            <div className="space-y-1 text-sm md:col-span-2">
-              <div className="tm-muted">
-                {form.repeatPattern === "daily" ? "Repeat days" : "Weekday"}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DAY_TOGGLE_LABELS.map((label, index) => {
-                  const weekday = index + 1;
-                  const bit = getRepeatDayBit(weekday);
-                  const selected = (form.repeatDays & bit) !== 0;
-
-                  return (
-                    <button
-                      key={`${label}-${weekday}`}
-                      className={`tm-repeat-day h-9 w-9 rounded-full border text-sm ${
-                        selected ? "tm-repeat-day-selected" : "tm-repeat-day-unselected"
-                      }`}
-                      aria-pressed={selected}
-                      type="button"
-                      onClick={() =>
-                        onChange((prev) => {
-                          if (prev.repeatPattern === "weekly") {
-                            return {
-                              ...prev,
-                              repeatDays: bit,
-                              repeatWeeklyDay: weekday,
-                            };
-                          }
-
-                          const nextRepeatDays = selected
-                            ? prev.repeatDays & ~bit
-                            : prev.repeatDays | bit;
-
-                          if (nextRepeatDays === 0) {
-                            return prev;
-                          }
-
-                          return {
-                            ...prev,
-                            repeatDays: nextRepeatDays,
-                          };
-                        })
-                      }
-                    >
-                      {selected && (
-                        <svg
-                          className="tm-repeat-day-check"
-                          aria-hidden="true"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                        >
-                          <path
-                            d="M2.25 6.25 4.75 8.75 9.75 3.25"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {form.repeatPattern === "monthly" && (
-            <label className="space-y-1 text-sm">
-              <div className="tm-muted">Day of month</div>
-              <select
-                className={`w-full ${inputClass}`}
-                value={form.repeatMonthlyDay}
-                onChange={(e) =>
-                  onChange((prev) => ({
-                    ...prev,
-                    repeatMonthlyDay: Number(e.target.value),
-                  }))
-                }
-              >
-                {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
-                  <option key={day} value={day} className="text-black">
-                    {day}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Modal({
   open,
   title,
@@ -1739,15 +1573,9 @@ function TaskRow({
   showSnoozeAction = false,
   selectMode = false,
   selected = false,
-  editingTitleTaskId,
-  editingTitleValue,
   editingCategoryTaskId,
   editingCategoryValue,
   categorySuggestions,
-  onStartTitleEdit,
-  onChangeTitleEdit,
-  onCancelTitleEdit,
-  onSaveTitleEdit,
   onToggleSelected,
   onStartCategoryEdit,
   onChangeCategoryEdit,
@@ -1776,15 +1604,9 @@ function TaskRow({
   showSnoozeAction?: boolean;
   selectMode?: boolean;
   selected?: boolean;
-  editingTitleTaskId: string | null;
-  editingTitleValue: string;
   editingCategoryTaskId: string | null;
   editingCategoryValue: string;
   categorySuggestions: string[];
-  onStartTitleEdit: (task: Task) => void;
-  onChangeTitleEdit: (value: string) => void;
-  onCancelTitleEdit: () => void;
-  onSaveTitleEdit: () => void;
   onToggleSelected: (taskId: string, checked: boolean) => void;
   onStartCategoryEdit: (task: Task) => void;
   onChangeCategoryEdit: (value: string) => void;
@@ -1805,7 +1627,6 @@ function TaskRow({
   onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
 }) {
-  const isEditing = editingTitleTaskId === task.id;
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
 
@@ -1844,41 +1665,20 @@ function TaskRow({
           </label>
         )}
         <div className="min-w-0">
-          {isEditing ? (
-            <input
-              autoFocus
-              className={`w-full ${inputClass} py-1.5`}
-              value={editingTitleValue}
-              onBlur={onCancelTitleEdit}
-              onChange={(e) => onChangeTitleEdit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  onSaveTitleEdit();
-                }
-
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  onCancelTitleEdit();
-                }
-              }}
-            />
-          ) : (
-            <button
-              className="min-w-0 text-left text-sm font-medium leading-5 hover:opacity-80"
-              type="button"
-              onClick={() => onStartTitleEdit(task)}
-            >
-              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                {task.delegatedTask ? (
-                  <DelegatedSenderBadge sender={task.delegatedTask.assignedByUser} />
-                ) : null}
-                <span className={`line-clamp-1 ${isTaskCompleted(task) ? "line-through opacity-70" : ""}`}>
-                  {task.title}
-                </span>
+          <button
+            className={`${taskTitleButtonClass} text-sm font-medium leading-5`}
+            type="button"
+            onClick={() => onOpenEditModal(task)}
+          >
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {task.delegatedTask ? (
+                <DelegatedSenderBadge sender={task.delegatedTask.assignedByUser} />
+              ) : null}
+              <span className={`line-clamp-1 ${isTaskCompleted(task) ? "line-through opacity-70" : ""}`}>
+                {task.title}
               </span>
-            </button>
-          )}
+            </span>
+          </button>
         </div>
 
         <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
@@ -2180,8 +1980,6 @@ export function TrackerClient({
   const [delegateTask, setDelegateTask] = useState<Task | null>(null);
   const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
   const [completionPendingTaskIds, setCompletionPendingTaskIds] = useState<string[]>([]);
-  const [editingTitleTaskId, setEditingTitleTaskId] = useState<string | null>(null);
-  const [editingTitleValue, setEditingTitleValue] = useState("");
   const [editingCategoryTaskId, setEditingCategoryTaskId] = useState<string | null>(null);
   const [editingCategoryValue, setEditingCategoryValue] = useState("");
   const [deleteTaskModalTask, setDeleteTaskModalTask] = useState<Task | null>(null);
@@ -2286,8 +2084,6 @@ export function TrackerClient({
     setNewProjectForm(createEmptyProjectForm());
     setEditTaskForm(null);
     setEditTaskId(null);
-    setEditingTitleTaskId(null);
-    setEditingTitleValue("");
     setEditingCategoryTaskId(null);
     setEditingCategoryValue("");
     setSelectedDay(todayInputValue());
@@ -3327,16 +3123,6 @@ export function TrackerClient({
     setDeleteTaskMode("this");
   }
 
-  function startTitleEdit(task: Task) {
-    setEditingTitleTaskId(task.id);
-    setEditingTitleValue(task.title);
-  }
-
-  function cancelTitleEdit() {
-    setEditingTitleTaskId(null);
-    setEditingTitleValue("");
-  }
-
   function startCategoryEdit(task: Task) {
     setEditingCategoryTaskId(task.id);
     setEditingCategoryValue(task.category ?? "");
@@ -3345,30 +3131,6 @@ export function TrackerClient({
   function cancelCategoryEdit() {
     setEditingCategoryTaskId(null);
     setEditingCategoryValue("");
-  }
-
-  async function saveTitleEdit() {
-    if (!editingTitleTaskId) return;
-
-    const nextTitle = editingTitleValue.trim();
-    const currentTask = tasks.find((task) => task.id === editingTitleTaskId);
-
-    if (!currentTask) {
-      cancelTitleEdit();
-      return;
-    }
-
-    if (!nextTitle || nextTitle === currentTask.title) {
-      cancelTitleEdit();
-      return;
-    }
-
-    try {
-      await updateTask(editingTitleTaskId, { title: nextTitle });
-      cancelTitleEdit();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update task");
-    }
   }
 
   async function saveCategoryEdit() {
@@ -4557,15 +4319,9 @@ export function TrackerClient({
                           completionPending={completionPendingTaskIds.includes(task.id)}
                           selectMode={selectMode}
                           selected={selectedTaskIds.includes(task.id)}
-                          editingTitleTaskId={editingTitleTaskId}
-                          editingTitleValue={editingTitleValue}
                           editingCategoryTaskId={editingCategoryTaskId}
                           editingCategoryValue={editingCategoryValue}
                           categorySuggestions={categorySuggestions}
-                          onStartTitleEdit={startTitleEdit}
-                          onChangeTitleEdit={setEditingTitleValue}
-                          onCancelTitleEdit={cancelTitleEdit}
-                          onSaveTitleEdit={() => void saveTitleEdit()}
                           onToggleSelected={toggleTaskSelected}
                           onStartCategoryEdit={startCategoryEdit}
                           onChangeCategoryEdit={setEditingCategoryValue}
@@ -4795,15 +4551,9 @@ export function TrackerClient({
                                   )}
                                   selectMode={selectMode}
                                   selected={selectedTaskIds.includes(task.id)}
-                                  editingTitleTaskId={editingTitleTaskId}
-                                  editingTitleValue={editingTitleValue}
                                   editingCategoryTaskId={editingCategoryTaskId}
                                   editingCategoryValue={editingCategoryValue}
                                   categorySuggestions={categorySuggestions}
-                                  onStartTitleEdit={startTitleEdit}
-                                  onChangeTitleEdit={setEditingTitleValue}
-                                  onCancelTitleEdit={cancelTitleEdit}
-                                  onSaveTitleEdit={() => void saveTitleEdit()}
                                   onToggleSelected={toggleTaskSelected}
                                   onStartCategoryEdit={startCategoryEdit}
                                   onChangeCategoryEdit={setEditingCategoryValue}
@@ -5017,7 +4767,13 @@ export function TrackerClient({
                                   sender={task.delegatedTask.assignedByUser}
                                 />
                               ) : null}
-                              <span className="truncate font-semibold">{task.title}</span>
+                              <button
+                                className={`${taskTitleButtonClass} font-semibold`}
+                                type="button"
+                                onClick={() => openTaskEditor(task)}
+                              >
+                                <span className="block truncate">{task.title}</span>
+                              </button>
                               {hasTaskNotes(task) && (
                                 <TaskNotesButton notes={formatTaskNotesPreview(task)} />
                               )}
@@ -5085,117 +4841,19 @@ export function TrackerClient({
         </div>
       )}
 
-      <Modal
+      <AddTaskModal
         open={newTaskOpen}
-        title="Add Task"
+        form={form}
+        saving={saving}
+        categorySuggestions={categorySuggestions}
+        waitingOnSuggestions={waitingOnSuggestions}
+        projectOptions={newTaskProjectOptions}
+        topActionLabel="+ Project"
+        onTopAction={() => setNewProjectOpen(true)}
         onClose={closeNewTaskDialog}
-      >
-        <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="tm-muted text-sm">Expanded task fields and repeat settings.</div>
-          <button
-            className={buttonClass}
-            type="button"
-            onClick={() => setNewProjectOpen(true)}
-          >
-            + Project
-          </button>
-        </div>
-
-        <form onSubmit={createTask} className="space-y-3">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
-            <input
-              className={`${inputClass} min-w-0 w-full`}
-              placeholder="+ Task"
-              value={form.title}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, title: e.target.value }))
-              }
-            />
-            <DateInput
-              className={`${inputClass} min-w-0 w-full`}
-              value={form.startDate}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, startDate: e.target.value }))
-              }
-            />
-            <DateInput
-              className={`${inputClass} min-w-0 w-full`}
-              value={form.dueAt}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, dueAt: e.target.value }))
-              }
-            />
-            <CategoryCombobox
-              className={`${inputClass} min-w-0 w-full`}
-              placeholder="Category"
-              suggestions={categorySuggestions}
-              value={form.category}
-              onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
-            />
-            <textarea
-              className={`${inputClass} min-h-24 min-w-0 w-full py-2 sm:col-span-2`}
-              placeholder="Add a note..."
-              value={form.notes}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, notes: e.target.value }))
-              }
-            />
-            <label className="min-w-0 space-y-1 text-sm sm:col-span-2">
-              <div className="tm-muted italic">Waiting on</div>
-              <CategoryCombobox
-                className={`${inputClass} min-w-0 w-full`}
-                optionsLabel="waiting on options"
-                placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
-                suggestions={waitingOnSuggestions}
-                value={form.waitingOn}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, waitingOn: value }))
-                }
-              />
-            </label>
-            <select
-              className={`${inputClass} min-w-0 w-full`}
-              value={form.projectId}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, projectId: e.target.value }))
-              }
-            >
-              <option value="" className="text-black">
-                Unassigned
-              </option>
-              {newTaskProjectOptions.map((project) => (
-                <option key={project.id} value={project.id} className="text-black">
-                  {project.name}
-                  {project.archived ? " (Archived)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <RepeatFields
-            form={form}
-            defaultDateValue={form.startDate}
-            onChange={(updater) => setForm((prev) => updater(prev))}
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              className={`${buttonClass} px-4 disabled:opacity-50`}
-              disabled={saving}
-              type="button"
-              onClick={closeNewTaskDialog}
-            >
-              Cancel
-            </button>
-            <button
-              className={`${primaryButtonClass} min-w-24 px-4 disabled:opacity-50`}
-              disabled={saving}
-              type="submit"
-            >
-              Save & Close
-            </button>
-          </div>
-        </form>
-      </Modal>
+        onSubmit={createTask}
+        onFormChange={(updater) => setForm((prev) => updater(prev))}
+      />
 
       <Modal
         open={Boolean(bulkScopeAction)}

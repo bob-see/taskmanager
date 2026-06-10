@@ -101,6 +101,22 @@ type TaskEditorModalProps = {
   onFormChange: (updater: (prev: EditTaskFormState) => EditTaskFormState) => void;
 };
 
+type TaskCreatorModalProps<T extends TaskCreateFormState> = {
+  open: boolean;
+  form: T;
+  saving: boolean;
+  categorySuggestions: string[];
+  waitingOnSuggestions: string[];
+  projectOptions: ProjectOption[];
+  submitLabel?: string;
+  submitDisabled?: boolean;
+  topActionLabel?: string;
+  onTopAction?: () => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onFormChange: (updater: (prev: T) => T) => void;
+};
+
 type ProjectEditorModalProps = {
   open: boolean;
   form: ProjectFormState | null;
@@ -526,6 +542,175 @@ export function createEditTaskForm(task: EditableTask): EditTaskFormState {
   };
 }
 
+function TaskFormFields<T extends TaskCreateFormState>({
+  form,
+  categorySuggestions,
+  waitingOnSuggestions,
+  projectOptions,
+  noteHistory,
+  onFormChange,
+}: {
+  form: T;
+  categorySuggestions: string[];
+  waitingOnSuggestions: string[];
+  projectOptions: ProjectOption[];
+  noteHistory?: TaskNoteHistoryEntry[];
+  onFormChange: (updater: (prev: T) => T) => void;
+}) {
+  return (
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <input
+        className={`w-full ${inputClass}`}
+        placeholder="Task title"
+        value={form.title}
+        onChange={(event) =>
+          onFormChange((prev) => ({ ...prev, title: event.target.value }))
+        }
+      />
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="space-y-1 text-sm">
+          <div className="tm-muted">Start date</div>
+          <DateInput
+            className={`w-full ${inputClass}`}
+            required
+            value={form.startDate}
+            onChange={(event) =>
+              onFormChange((prev) => ({ ...prev, startDate: event.target.value }))
+            }
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <div className="tm-muted">Due date</div>
+          <DateInput
+            className={`w-full ${inputClass}`}
+            value={form.dueAt}
+            onChange={(event) =>
+              onFormChange((prev) => ({ ...prev, dueAt: event.target.value }))
+            }
+          />
+        </label>
+      </div>
+      <CategoryCombobox
+        className={`w-full ${inputClass}`}
+        placeholder="Category"
+        suggestions={categorySuggestions}
+        value={form.category}
+        onChange={(value) => onFormChange((prev) => ({ ...prev, category: value }))}
+      />
+      <textarea
+        className={`min-h-28 w-full ${inputClass}`}
+        placeholder="Add a note..."
+        value={form.notes}
+        onChange={(event) =>
+          onFormChange((prev) => ({ ...prev, notes: event.target.value }))
+        }
+      />
+      <label className="space-y-1 text-sm">
+        <div className="tm-muted italic">Waiting on</div>
+        <CategoryCombobox
+          className={`w-full ${inputClass}`}
+          optionsLabel="waiting on options"
+          placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
+          suggestions={waitingOnSuggestions}
+          value={form.waitingOn}
+          onChange={(value) =>
+            onFormChange((prev) => ({ ...prev, waitingOn: value }))
+          }
+        />
+      </label>
+      {noteHistory && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">Note History</h3>
+          {noteHistory.length > 0 ? (
+            <div className="max-h-64 space-y-2 overflow-y-auto rounded-[12px] border border-[color:var(--tm-border)] bg-white/20 p-2">
+              {noteHistory.map((note) => (
+                <article
+                  key={note.id}
+                  className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/30 p-3 text-sm"
+                >
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-[color:var(--tm-muted)]">
+                    <span>{note.user?.name || "Unknown"}</span>
+                    <span>{formatNoteDate(note.createdAt)}</span>
+                    {note.isPending ? <span>saving...</span> : null}
+                    {note.isFailed ? <span>could not save</span> : null}
+                  </div>
+                  {note.content ? (
+                    <div className="whitespace-pre-wrap leading-5">{note.content}</div>
+                  ) : null}
+                  {note.waitingOn ? (
+                    <div className="mt-1 text-[color:var(--tm-muted)] italic">
+                      Waiting on: {note.waitingOn}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[color:var(--tm-muted)]">No notes yet.</p>
+          )}
+        </section>
+      )}
+      <label className="space-y-1 text-sm">
+        <div className="tm-muted">Project</div>
+        <select
+          className={`w-full ${inputClass}`}
+          value={form.projectId}
+          onChange={(event) =>
+            onFormChange((prev) => ({ ...prev, projectId: event.target.value }))
+          }
+        >
+          <option value="" className="text-black">
+            Unassigned
+          </option>
+          {projectOptions.map((project) => (
+            <option key={project.id} value={project.id} className="text-black">
+              {project.name}
+              {project.archived ? " (Archived)" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <RepeatFields
+        form={form}
+        defaultDateValue={form.startDate}
+        onChange={(updater) => onFormChange((prev) => updater(prev))}
+      />
+    </div>
+  );
+}
+
+function TaskFormActions({
+  saving,
+  submitLabel,
+  submitDisabled,
+  onClose,
+}: {
+  saving: boolean;
+  submitLabel: string;
+  submitDisabled?: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="-mx-5 mt-4 flex shrink-0 justify-end gap-2 border-t border-[color:var(--tm-border)] px-5 pt-4">
+      <button
+        className={`${buttonClass} px-4 disabled:opacity-50`}
+        disabled={saving}
+        type="button"
+        onClick={onClose}
+      >
+        Cancel
+      </button>
+      <button
+        className={`${primaryButtonClass} px-4 disabled:opacity-50`}
+        disabled={saving || submitDisabled}
+        type="submit"
+      >
+        {submitLabel}
+      </button>
+    </div>
+  );
+}
+
 export function createProjectForm(project?: EditableProject): ProjectFormState {
   return {
     name: project?.name ?? "",
@@ -553,141 +738,67 @@ export function TaskEditorModal({
           className="flex max-h-[calc(100vh-144px)] min-h-0 flex-col overflow-hidden"
           onSubmit={onSubmit}
         >
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-            <input
-              className={`w-full ${inputClass}`}
-              placeholder="Task title"
-              value={form.title}
-              onChange={(event) =>
-                onFormChange((prev) => ({ ...prev, title: event.target.value }))
-              }
-            />
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <div className="tm-muted">Start date</div>
-                <DateInput
-                  className={`w-full ${inputClass}`}
-                  required
-                  value={form.startDate}
-                  onChange={(event) =>
-                    onFormChange((prev) => ({ ...prev, startDate: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <div className="tm-muted">Due date</div>
-                <DateInput
-                  className={`w-full ${inputClass}`}
-                  value={form.dueAt}
-                  onChange={(event) =>
-                    onFormChange((prev) => ({ ...prev, dueAt: event.target.value }))
-                  }
-                />
-              </label>
-            </div>
-            <CategoryCombobox
-              className={`w-full ${inputClass}`}
-              placeholder="Category"
-              suggestions={categorySuggestions}
-              value={form.category}
-              onChange={(value) => onFormChange((prev) => ({ ...prev, category: value }))}
-            />
-            <textarea
-              className={`min-h-28 w-full ${inputClass}`}
-              placeholder="Add a note..."
-              value={form.notes}
-              onChange={(event) =>
-                onFormChange((prev) => ({ ...prev, notes: event.target.value }))
-              }
-            />
-            <label className="space-y-1 text-sm">
-              <div className="tm-muted italic">Waiting on</div>
-              <CategoryCombobox
-                className={`w-full ${inputClass}`}
-                optionsLabel="waiting on options"
-                placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
-                suggestions={waitingOnSuggestions}
-                value={form.waitingOn}
-                onChange={(value) =>
-                  onFormChange((prev) => ({ ...prev, waitingOn: value }))
-                }
-              />
-            </label>
-            <section className="space-y-2">
-              <h3 className="text-sm font-medium">Note History</h3>
-              {form.noteHistory.length > 0 ? (
-                <div className="max-h-64 space-y-2 overflow-y-auto rounded-[12px] border border-[color:var(--tm-border)] bg-white/20 p-2">
-                  {form.noteHistory.map((note) => (
-                    <article
-                      key={note.id}
-                      className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/30 p-3 text-sm"
-                    >
-                      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-[color:var(--tm-muted)]">
-                        <span>{note.user?.name || "Unknown"}</span>
-                        <span>{formatNoteDate(note.createdAt)}</span>
-                        {note.isPending ? <span>saving...</span> : null}
-                        {note.isFailed ? <span>could not save</span> : null}
-                      </div>
-                      {note.content ? (
-                        <div className="whitespace-pre-wrap leading-5">{note.content}</div>
-                      ) : null}
-                      {note.waitingOn ? (
-                        <div className="mt-1 text-[color:var(--tm-muted)] italic">
-                          Waiting on: {note.waitingOn}
-                        </div>
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-[color:var(--tm-muted)]">No notes yet.</p>
-              )}
-            </section>
-            <label className="space-y-1 text-sm">
-              <div className="tm-muted">Project</div>
-              <select
-                className={`w-full ${inputClass}`}
-                value={form.projectId}
-                onChange={(event) =>
-                  onFormChange((prev) => ({ ...prev, projectId: event.target.value }))
-                }
-              >
-                <option value="" className="text-black">
-                  Unassigned
-                </option>
-                {projectOptions.map((project) => (
-                  <option key={project.id} value={project.id} className="text-black">
-                    {project.name}
-                    {project.archived ? " (Archived)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <RepeatFields
-              form={form}
-              defaultDateValue={form.startDate}
-              onChange={(updater) => onFormChange((prev) => updater(prev))}
-            />
-          </div>
-          <div className="-mx-5 mt-4 flex shrink-0 justify-end gap-2 border-t border-[color:var(--tm-border)] px-5 pt-4">
-            <button
-              className={`${buttonClass} px-4 disabled:opacity-50`}
-              disabled={saving}
-              type="button"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              className={`${primaryButtonClass} px-4 disabled:opacity-50`}
-              disabled={saving}
-              type="submit"
-            >
-              Save & Close
-            </button>
-          </div>
+          <TaskFormFields
+            form={form}
+            categorySuggestions={categorySuggestions}
+            waitingOnSuggestions={waitingOnSuggestions}
+            projectOptions={projectOptions}
+            noteHistory={form.noteHistory}
+            onFormChange={onFormChange}
+          />
+          <TaskFormActions
+            saving={saving}
+            submitLabel="Save & Close"
+            onClose={onClose}
+          />
         </form>
       )}
+    </Modal>
+  );
+}
+
+export function AddTaskModal<T extends TaskCreateFormState>({
+  open,
+  form,
+  saving,
+  categorySuggestions,
+  waitingOnSuggestions,
+  projectOptions,
+  submitLabel = "Save & Close",
+  submitDisabled = false,
+  topActionLabel,
+  onTopAction,
+  onClose,
+  onSubmit,
+  onFormChange,
+}: TaskCreatorModalProps<T>) {
+  return (
+    <Modal open={open} title="Add Task" onClose={onClose}>
+      <form
+        className="flex max-h-[calc(100vh-144px)] min-h-0 flex-col overflow-hidden"
+        onSubmit={onSubmit}
+      >
+        {topActionLabel && onTopAction ? (
+          <div className="mb-3 flex shrink-0 justify-end">
+            <button className={buttonClass} type="button" onClick={onTopAction}>
+              {topActionLabel}
+            </button>
+          </div>
+        ) : null}
+        <TaskFormFields
+          form={form}
+          categorySuggestions={categorySuggestions}
+          waitingOnSuggestions={waitingOnSuggestions}
+          projectOptions={projectOptions}
+          onFormChange={onFormChange}
+        />
+        <TaskFormActions
+          saving={saving}
+          submitLabel={submitLabel}
+          submitDisabled={submitDisabled}
+          onClose={onClose}
+        />
+      </form>
     </Modal>
   );
 }

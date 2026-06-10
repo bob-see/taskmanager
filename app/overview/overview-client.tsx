@@ -8,8 +8,8 @@ import {
 } from "@/app/delegated/delegated-task-indicators";
 import type { DelegatedTaskStatus } from "@/app/delegated/delegated-status-badge";
 import {
+  AddTaskModal,
   ProjectEditorModal,
-  RepeatFields,
   TaskEditorModal,
   createRepeatDefaults,
   createEditTaskForm,
@@ -2138,192 +2138,19 @@ function ProfileCard({
         </>
       )}
 
-      {dialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6"
-          onClick={closeDialog}
-        >
-          <div
-            className="tm-card w-full max-w-lg rounded-[16px] border p-5 shadow-xl md:p-6"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold tracking-tight">Add Task</h3>
-                <p className="mt-1 text-sm text-[color:var(--tm-muted)]">{profile.name}</p>
-              </div>
-              <button
-                aria-label="Close Add Task"
-                type="button"
-                className="tm-button inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-lg leading-none"
-                onClick={closeDialog}
-                disabled={saving}
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={onSubmit} className="mt-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor={`overview-task-title-${profile.id}`}>
-                  Title
-                </label>
-                <input
-                  id={`overview-task-title-${profile.id}`}
-                  className={`${inputClass} w-full`}
-                  placeholder="Task title"
-                  value={taskDraft.title}
-                  onChange={(event) =>
-                    setTaskDraft((prev) => ({ ...prev, title: event.target.value }))
-                  }
-                  autoFocus
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor={`overview-task-category-${profile.id}`}>
-                  Category
-                </label>
-                <input
-                  id={`overview-task-category-${profile.id}`}
-                  className={`${inputClass} w-full`}
-                  placeholder="Optional category"
-                  list={`overview-categories-${profile.id}`}
-                  value={taskDraft.category}
-                  onChange={(event) =>
-                    setTaskDraft((prev) => ({ ...prev, category: event.target.value }))
-                  }
-                />
-                <datalist id={`overview-categories-${profile.id}`}>
-                  {categorySuggestions.map((suggestion) => (
-                    <option key={suggestion} value={suggestion} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor={`overview-task-notes-${profile.id}`}>
-                  Notes
-                </label>
-                <textarea
-                  id={`overview-task-notes-${profile.id}`}
-                  className={`min-h-24 w-full py-2 ${inputClass}`}
-                  placeholder="Add a note..."
-                  value={taskDraft.notes}
-                  onChange={(event) =>
-                    setTaskDraft((prev) => ({ ...prev, notes: event.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label
-                  className="text-sm font-medium text-[color:var(--tm-muted)] italic"
-                  htmlFor={`overview-task-waiting-on-${profile.id}`}
-                >
-                  Waiting on
-                </label>
-                <input
-                  id={`overview-task-waiting-on-${profile.id}`}
-                  className={`${inputClass} w-full`}
-                  placeholder="Buyer, Seller, Tenant, Solicitor, Owner..."
-                  list={`overview-waiting-on-${profile.id}`}
-                  value={taskDraft.waitingOn}
-                  onChange={(event) =>
-                    setTaskDraft((prev) => ({
-                      ...prev,
-                      waitingOn: event.target.value,
-                    }))
-                  }
-                />
-                <datalist id={`overview-waiting-on-${profile.id}`}>
-                  {waitingOnSuggestions.map((suggestion) => (
-                    <option key={suggestion} value={suggestion} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor={`overview-task-project-${profile.id}`}>
-                  Project
-                </label>
-                <select
-                  id={`overview-task-project-${profile.id}`}
-                  className={`${inputClass} w-full`}
-                  value={taskDraft.projectId}
-                  onChange={(event) =>
-                    setTaskDraft((prev) => ({ ...prev, projectId: event.target.value }))
-                  }
-                >
-                  <option value="">No project</option>
-                  {orderedProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                      {project.archived ? " (Archived)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" htmlFor={`overview-task-start-${profile.id}`}>
-                    Start date
-                  </label>
-                  <input
-                    id={`overview-task-start-${profile.id}`}
-                    type="date"
-                    className={`${inputClass} w-full`}
-                    value={taskDraft.startDate}
-                    onChange={(event) =>
-                      setTaskDraft((prev) => ({ ...prev, startDate: event.target.value }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" htmlFor={`overview-task-due-${profile.id}`}>
-                    Due date
-                  </label>
-                  <input
-                    id={`overview-task-due-${profile.id}`}
-                    type="date"
-                    className={`${inputClass} w-full`}
-                    value={taskDraft.dueAt}
-                    onChange={(event) =>
-                      setTaskDraft((prev) => ({ ...prev, dueAt: event.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <RepeatFields
-                form={taskDraft}
-                defaultDateValue={taskDraft.startDate || todayInputValue()}
-                onChange={(updater) => setTaskDraft((prev) => updater(prev))}
-              />
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-                  onClick={closeDialog}
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={buttonClass}
-                  disabled={saving || !taskDraft.title.trim()}
-                >
-                  {saving ? "Saving…" : "Save & Close"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AddTaskModal
+        open={dialogOpen}
+        form={taskDraft}
+        saving={saving}
+        categorySuggestions={categorySuggestions}
+        waitingOnSuggestions={waitingOnSuggestions}
+        projectOptions={orderedProjects}
+        submitLabel={saving ? "Saving..." : "Save & Close"}
+        submitDisabled={!taskDraft.title.trim()}
+        onClose={closeDialog}
+        onSubmit={onSubmit}
+        onFormChange={(updater) => setTaskDraft((prev) => updater(prev))}
+      />
 
       <ProjectEditorModal
         open={projectDialogOpen}
