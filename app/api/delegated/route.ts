@@ -1,7 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
-import { getNextTaskOrderIndex } from "@/app/api/p/tasks-shared";
 import {
   formatUserName,
   isUniqueConstraintError,
@@ -79,23 +78,6 @@ export async function POST(req: Request) {
   const dueAt = parseDueDate(body?.dueAt);
   if (dueAt.error) return dueAt.error;
 
-  const profile = await prisma.profile.findFirst({
-    where: {
-      userId: currentUser.id,
-    },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-    },
-  });
-
-  if (!profile) {
-    return Response.json(
-      { error: "Create a profile before creating delegated tasks" },
-      { status: 400 }
-    );
-  }
-
   const systemNote = `${formatUserName(
     currentUser
   )} created and delegated this task to ${formatUserName(receiverResult.receiver)}.`;
@@ -123,16 +105,11 @@ export async function POST(req: Request) {
   ];
 
   try {
-    const orderIndex = await getNextTaskOrderIndex(prisma, profile.id);
-
     const result = await prisma.$transaction(async (tx: PrismaTransaction) => {
       const task = await tx.task.create({
         data: {
           title,
-          // Sender-side holding profile only. The receiver will choose their
-          // own profile/project later when delegated acceptance is built.
-          profileId: profile.id,
-          orderIndex,
+          profileId: null,
           ...(dueAt.value !== undefined ? { dueAt: dueAt.value } : {}),
         },
       });
@@ -177,7 +154,6 @@ export async function POST(req: Request) {
     console.error("Delegated task creation failed", {
       assignedByUserId: currentUser.id,
       assignedToUserId: receiverResult.receiver.id,
-      profileId: profile.id,
       error,
     });
 

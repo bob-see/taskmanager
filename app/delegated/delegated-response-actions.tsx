@@ -5,19 +5,27 @@ import { useRouter } from "next/navigation";
 
 type DelegatedResponseActionsProps = {
   delegatedTaskId: string;
+  profiles: Array<{
+    id: string;
+    name: string;
+  }>;
 };
 
 type ResponseMode = "accept" | "decline";
 
 const textareaClass =
   "tm-input min-h-24 rounded-[10px] border px-3 py-2 text-sm outline-none transition-colors";
+const inputClass =
+  "tm-input h-10 rounded-[10px] border px-3 text-sm outline-none transition-colors";
 
 export function DelegatedResponseActions({
   delegatedTaskId,
+  profiles,
 }: DelegatedResponseActionsProps) {
   const router = useRouter();
   const [mode, setMode] = useState<ResponseMode | null>(null);
   const [note, setNote] = useState("");
+  const [profileId, setProfileId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,6 +35,7 @@ export function DelegatedResponseActions({
     setMode(null);
     setError("");
     setNote("");
+    setProfileId("");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -48,6 +57,7 @@ export function DelegatedResponseActions({
           mode === "accept"
             ? {
                 note: note.trim() || null,
+                profileId: profileId || null,
               }
             : {
                 reason: note.trim() || null,
@@ -62,6 +72,7 @@ export function DelegatedResponseActions({
 
       setMode(null);
       setNote("");
+      setProfileId("");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update delegated task");
@@ -116,6 +127,24 @@ export function DelegatedResponseActions({
                   onChange={(event) => setNote(event.target.value)}
                 />
               </label>
+
+              {mode === "accept" ? (
+                <label className="block space-y-1 text-sm">
+                  <span className="font-medium">Add to profile</span>
+                  <select
+                    className={`w-full ${inputClass}`}
+                    value={profileId}
+                    onChange={(event) => setProfileId(event.target.value)}
+                  >
+                    <option value="">Do not add to a profile</option>
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
               {error ? <p className="text-sm text-red-700">{error}</p> : null}
 

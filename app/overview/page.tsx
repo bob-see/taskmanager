@@ -185,6 +185,8 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
 
   const categoryMap = new Map<string, Map<string, string>>();
   for (const row of categories) {
+    if (!row.profileId) continue;
+
     const category = row.category?.trim();
     if (!category) continue;
 

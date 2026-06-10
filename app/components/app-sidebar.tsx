@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { canAccessLost } from "@/app/lost/access";
 
 type SidebarProfile = {
@@ -58,11 +58,52 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [liveDelegatedCounts, setLiveDelegatedCounts] =
+    useState<DelegatedCounts>(delegatedCounts);
   const showLostLink = canAccessLost(currentUser.email);
   const activeProfile = profiles.find((profile) => {
     const href = `/p/${profile.id}`;
     return pathname === href || pathname.startsWith(`${href}/`);
   });
+
+  useEffect(() => {
+    setLiveDelegatedCounts(delegatedCounts);
+  }, [delegatedCounts]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshDelegatedCounts() {
+      try {
+        const res = await fetch("/api/delegated/counts", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+
+        if (
+          !cancelled &&
+          res.ok &&
+          data &&
+          typeof data.assignedToMe === "number" &&
+          typeof data.assignedByMe === "number"
+        ) {
+          setLiveDelegatedCounts({
+            assignedToMe: data.assignedToMe,
+            assignedByMe: data.assignedByMe,
+          });
+        }
+      } catch {
+        // Badge refresh is opportunistic; navigation still gets fresh server counts.
+      }
+    }
+
+    const intervalId = window.setInterval(refreshDelegatedCounts, 60_000);
+    void refreshDelegatedCounts();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const currentSection =
     activeProfile?.name ??
     (pathname === "/overview"
@@ -147,7 +188,7 @@ export function AppSidebar({
                 onClick={onNavigate}
               >
                 <span className="truncate">Assigned To Me</span>
-                <CountBadge count={delegatedCounts.assignedToMe} />
+                <CountBadge count={liveDelegatedCounts.assignedToMe} />
               </Link>
               <Link
                 href="/delegated/assigned-by-me"
@@ -155,7 +196,7 @@ export function AppSidebar({
                 onClick={onNavigate}
               >
                 <span className="truncate">Assigned By Me</span>
-                <CountBadge count={delegatedCounts.assignedByMe} />
+                <CountBadge count={liveDelegatedCounts.assignedByMe} />
               </Link>
             </nav>
           </section>

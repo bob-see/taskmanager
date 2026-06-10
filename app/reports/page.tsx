@@ -128,22 +128,28 @@ export default async function ReportsPage({
     }),
   ]);
 
-  const reportTasks: ReportTask[] = tasks.map((task) => ({
-    id: task.id,
-    title: task.title,
-    notes: task.notes,
-    profileId: task.profileId,
-    profileName: task.profile.name,
-    projectName: task.project?.name ?? null,
-    startDate: toDateOnly(task.startDate),
-    dueAt: task.dueAt ? toDateOnly(task.dueAt) : null,
-    completedAt: task.completedAt ? task.completedAt.toISOString() : null,
-    completedOn: task.completedOn ? toDateOnly(task.completedOn) : null,
-    updatedAt: toDateOnly(task.updatedAt),
-    createdAt: toDateOnly(task.createdAt),
-    category: task.category,
-    projectId: task.projectId,
-  }));
+  const reportTasks: ReportTask[] = tasks.flatMap((task) =>
+    task.profileId && task.profile
+      ? [
+          {
+            id: task.id,
+            title: task.title,
+            notes: task.notes,
+            profileId: task.profileId,
+            profileName: task.profile.name,
+            projectName: task.project?.name ?? null,
+            startDate: toDateOnly(task.startDate),
+            dueAt: task.dueAt ? toDateOnly(task.dueAt) : null,
+            completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+            completedOn: task.completedOn ? toDateOnly(task.completedOn) : null,
+            updatedAt: toDateOnly(task.updatedAt),
+            createdAt: toDateOnly(task.createdAt),
+            category: task.category,
+            projectId: task.projectId,
+          },
+        ]
+      : []
+  );
 
   const reportTimeEntries: ReportTimeEntry[] = timeEntries.map((entry) => ({
     profileId: entry.profileId,

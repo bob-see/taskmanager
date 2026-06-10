@@ -1,7 +1,12 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getNextTaskOrderIndex } from "@/app/api/p/tasks-shared";
 import { prisma } from "@/app/lib/prisma";
-import { formatUserName, readOptionalText } from "@/app/api/delegated/shared";
+import {
+  formatUserName,
+  readOptionalText,
+  type PrismaTransaction,
+} from "@/app/api/delegated/shared";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -29,6 +34,24 @@ export async function POST(req: Request, ctx: Ctx) {
   const body = await req.json().catch(() => ({}));
   const note = readOptionalText(body?.note, "Note");
   if (note.error) return note.error;
+  const profileId =
+    typeof body?.profileId === "string" && body.profileId.trim()
+      ? body.profileId.trim()
+      : null;
+
+  if (profileId) {
+    const profile = await prisma.profile.findFirst({
+      where: {
+        id: profileId,
+        userId: currentUser.id,
+      },
+      select: { id: true },
+    });
+
+    if (!profile) {
+      return Response.json({ error: "Profile not found" }, { status: 404 });
+    }
+  }
 
   const delegatedTask = await prisma.delegatedTask.findUnique({
     where: { id },
@@ -37,6 +60,36 @@ export async function POST(req: Request, ctx: Ctx) {
       status: true,
       assignedToUserId: true,
       taskId: true,
+      task: {
+        select: {
+          id: true,
+          title: true,
+          notes: true,
+          dueAt: true,
+          startDate: true,
+          category: true,
+          profileId: true,
+          repeatEnabled: true,
+          repeatPattern: true,
+          repeatDays: true,
+          repeatWeeklyDay: true,
+          repeatMonthlyDay: true,
+          noteHistory: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              userId: true,
+              content: true,
+              waitingOn: true,
+              createdAt: true,
+            },
+          },
+          profile: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -60,38 +113,86 @@ export async function POST(req: Request, ctx: Ctx) {
 
   try {
     const now = new Date();
-    const updateResult = await prisma.delegatedTask.updateMany({
-      where: {
-        id: delegatedTask.id,
-        assignedToUserId: currentUser.id,
-        status: "PENDING",
-      },
-      data: {
-        status: "ACCEPTED",
-        respondedAt: now,
-        acceptedAt: now,
-      },
-    });
+    let acceptedTaskId = delegatedTask.taskId;
 
-    if (updateResult.count !== 1) {
-      return Response.json(
-        { error: "Only pending delegated tasks can be accepted" },
-        { status: 409 }
-      );
-    }
+    await prisma.$transaction(async (tx: PrismaTransaction) => {
+      if (profileId) {
+        const orderIndex = await getNextTaskOrderIndex(tx, profileId);
 
-    try {
-      await prisma.taskNote.createMany({
+        if (!delegatedTask.task.profileId) {
+          await tx.task.update({
+            where: { id: delegatedTask.taskId },
+            data: {
+              profileId,
+              orderIndex,
+            },
+          });
+        } else if (delegatedTask.task.profile?.userId !== currentUser.id) {
+          const receiverTask = await tx.task.create({
+            data: {
+              title: delegatedTask.task.title,
+              notes: delegatedTask.task.notes,
+              dueAt: delegatedTask.task.dueAt,
+              startDate: delegatedTask.task.startDate,
+              category: delegatedTask.task.category,
+              profileId,
+              orderIndex,
+              repeatEnabled: delegatedTask.task.repeatEnabled,
+              repeatPattern: delegatedTask.task.repeatPattern,
+              repeatDays: delegatedTask.task.repeatDays,
+              repeatWeeklyDay: delegatedTask.task.repeatWeeklyDay,
+              repeatMonthlyDay: delegatedTask.task.repeatMonthlyDay,
+            },
+          });
+
+          if (delegatedTask.task.noteHistory.length > 0) {
+            await tx.taskNote.createMany({
+              data: delegatedTask.task.noteHistory.map((historyNote) => ({
+                taskId: receiverTask.id,
+                userId: historyNote.userId,
+                content: historyNote.content,
+                waitingOn: historyNote.waitingOn,
+                createdAt: historyNote.createdAt,
+              })),
+            });
+          }
+
+          await tx.delegatedTask.update({
+            where: { id: delegatedTask.id },
+            data: { taskId: receiverTask.id },
+          });
+          acceptedTaskId = receiverTask.id;
+        }
+      }
+
+      const updateResult = await tx.delegatedTask.updateMany({
+        where: {
+          id: delegatedTask.id,
+          assignedToUserId: currentUser.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "ACCEPTED",
+          respondedAt: now,
+          acceptedAt: now,
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new Error("STALE_DELEGATED_TASK");
+      }
+
+      await tx.taskNote.createMany({
         data: [
           {
-            taskId: delegatedTask.taskId,
+            taskId: acceptedTaskId,
             userId: currentUser.id,
             content: `${formatUserName(currentUser)} accepted this delegated task.`,
           },
           ...(note.value
             ? [
                 {
-                  taskId: delegatedTask.taskId,
+                  taskId: acceptedTaskId,
                   userId: currentUser.id,
                   content: note.value,
                 },
@@ -99,13 +200,7 @@ export async function POST(req: Request, ctx: Ctx) {
             : []),
         ],
       });
-    } catch (error) {
-      console.error("Delegated task accept note creation failed", {
-        delegatedTaskId: delegatedTask.id,
-        taskId: delegatedTask.taskId,
-        error,
-      });
-    }
+    });
 
     const result = await prisma.delegatedTask.findUniqueOrThrow({
       where: { id: delegatedTask.id },
@@ -113,6 +208,13 @@ export async function POST(req: Request, ctx: Ctx) {
 
     return Response.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "STALE_DELEGATED_TASK") {
+      return Response.json(
+        { error: "Only pending delegated tasks can be accepted" },
+        { status: 409 }
+      );
+    }
+
     console.error("Delegated task accept failed", {
       delegatedTaskId: delegatedTask.id,
       taskId: delegatedTask.taskId,

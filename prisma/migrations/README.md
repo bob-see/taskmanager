@@ -18,6 +18,16 @@ npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/202
 npx prisma migrate resolve --applied 20260608090000_archive_matrix_columns
 ```
 
+If delegated task creation fails with `P2011` / `Null constraint violation on
+Task.profileId`, the existing MySQL database has not applied the nullable
+delegated-task profile migration. Run the forward-only MySQL migration directly,
+then mark it as applied:
+
+```sh
+npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260610120000_nullable_delegated_task_profile/migration.sql
+npx prisma migrate resolve --applied 20260610120000_nullable_delegated_task_profile
+```
+
 After that, normal deployments can use:
 
 ```sh

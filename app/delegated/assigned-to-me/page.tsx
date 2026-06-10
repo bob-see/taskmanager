@@ -6,14 +6,49 @@ import { DelegatedLifecycleActions } from "../delegated-lifecycle-actions";
 import { DelegatedTaskList, type DelegatedTaskListItem } from "../delegated-task-list";
 import { DelegatedResponseActions } from "../delegated-response-actions";
 
-export default async function AssignedToMePage() {
+const CLOSED_PAGE_SIZE = 10;
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function getParam(
+  searchParams: Record<string, string | string[] | undefined>,
+  key: string
+) {
+  const value = searchParams[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function makeHref(view: "open" | "closed", query = "", offset = 0) {
+  const params = new URLSearchParams();
+  if (view === "closed") params.set("view", "closed");
+  if (query.trim()) params.set("q", query.trim());
+  if (offset > 0) params.set("offset", String(offset));
+  const qs = params.toString();
+  return qs ? `/delegated/assigned-to-me?${qs}` : "/delegated/assigned-to-me";
+}
+
+export default async function AssignedToMePage({ searchParams }: PageProps) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) return notFound();
 
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const view = getParam(resolvedSearchParams, "view") === "closed" ? "closed" : "open";
+  const closedQuery = getParam(resolvedSearchParams, "q")?.trim() ?? "";
+  const offset = Math.max(0, Number(getParam(resolvedSearchParams, "offset") ?? 0) || 0);
+  const isClosedView = view === "closed";
+
   const currentUser = await prisma.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true },
+    select: {
+      id: true,
+      profiles: {
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: { id: true, name: true },
+      },
+    },
   });
 
   if (!currentUser) return notFound();
@@ -21,8 +56,21 @@ export default async function AssignedToMePage() {
   const delegatedTasks = await prisma.delegatedTask.findMany({
     where: {
       assignedToUserId: currentUser.id,
+      status: isClosedView ? "CLOSED" : { not: "CLOSED" },
+      ...(isClosedView && closedQuery
+        ? {
+            task: {
+              OR: [
+                { title: { contains: closedQuery } },
+                { noteHistory: { some: { content: { contains: closedQuery } } } },
+              ],
+            },
+          }
+        : {}),
     },
     orderBy: [{ createdAt: "desc" }],
+    skip: isClosedView ? offset : undefined,
+    take: isClosedView ? CLOSED_PAGE_SIZE + 1 : undefined,
     select: {
       id: true,
       status: true,
@@ -54,8 +102,12 @@ export default async function AssignedToMePage() {
       },
     },
   });
+  const hasMoreClosed = isClosedView && delegatedTasks.length > CLOSED_PAGE_SIZE;
+  const visibleDelegatedTasks = isClosedView
+    ? delegatedTasks.slice(0, CLOSED_PAGE_SIZE)
+    : delegatedTasks;
 
-  const items: DelegatedTaskListItem[] = delegatedTasks.map((item) => ({
+  const items: DelegatedTaskListItem[] = visibleDelegatedTasks.map((item) => ({
     id: item.id,
     status: item.status,
     createdAt: item.createdAt,
@@ -74,17 +126,49 @@ export default async function AssignedToMePage() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Assigned To Me</h1>
         </div>
         <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
-          {items.length} total
+          {isClosedView ? offset + items.length : items.length} {isClosedView ? "closed" : "open"}
         </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="tm-tabset inline-flex w-fit rounded-full border p-1 text-sm">
+          <a className={`tm-tab rounded-full px-3 py-1.5 ${!isClosedView ? "tm-tab-active" : ""}`} href={makeHref("open")}>
+            Open
+          </a>
+          <a className={`tm-tab rounded-full px-3 py-1.5 ${isClosedView ? "tm-tab-active" : ""}`} href={makeHref("closed", closedQuery)}>
+            Closed
+          </a>
+        </div>
+        {isClosedView ? (
+          <form className="flex w-full gap-2 sm:w-auto" action="/delegated/assigned-to-me">
+            <input type="hidden" name="view" value="closed" />
+            <input
+              className="tm-input h-10 min-w-0 flex-1 rounded-[10px] border px-3 text-sm outline-none sm:w-72"
+              name="q"
+              placeholder="Search closed tasks"
+              defaultValue={closedQuery}
+            />
+            <button className="tm-button inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm" type="submit">
+              Search
+            </button>
+          </form>
+        ) : null}
       </div>
 
       <DelegatedTaskList
         items={items}
-        emptyMessage="Nothing has been delegated to you."
+        emptyMessage={
+          isClosedView
+            ? "No closed delegated tasks match this view."
+            : "Nothing has been delegated to you."
+        }
         userColumnLabel="Assigned By"
         renderActions={(item) =>
           item.status === "PENDING" ? (
-            <DelegatedResponseActions delegatedTaskId={item.id} />
+            <DelegatedResponseActions
+              delegatedTaskId={item.id}
+              profiles={currentUser.profiles}
+            />
           ) : item.status === "ACCEPTED" ? (
             <DelegatedLifecycleActions delegatedTaskId={item.id} action="start" />
           ) : item.status === "IN_PROGRESS" ? (
@@ -92,6 +176,16 @@ export default async function AssignedToMePage() {
           ) : null
         }
       />
+      {hasMoreClosed ? (
+        <div className="mt-4 flex justify-center">
+          <a
+            className="tm-button inline-flex h-10 items-center justify-center rounded-[10px] border px-4 text-sm"
+            href={makeHref("closed", closedQuery, offset + CLOSED_PAGE_SIZE)}
+          >
+            Load more
+          </a>
+        </div>
+      ) : null}
     </main>
   );
 }
