@@ -295,6 +295,11 @@ function getRepeatDayBit(weekday: number) {
   return 1 << (weekday - 1);
 }
 
+function matchesRepeatDays(dateValue: string, repeatDays: number | null | undefined) {
+  const mask = repeatDays ?? ALL_REPEAT_DAYS_MASK;
+  return (mask & getRepeatDayBit(getWeekdayNumber(dateValue))) !== 0;
+}
+
 function formatRepeatDays(repeatDays: number) {
   if (repeatDays === ALL_REPEAT_DAYS_MASK) {
     return "every day";
@@ -454,7 +459,10 @@ function getRepeatSummary(task: Task) {
   }
 
   if (task.repeatPattern === "weekly") {
-    return `Repeats weekly on ${WEEKDAY_LABELS[(task.repeatWeeklyDay ?? 1) - 1]}`;
+    const repeatDays =
+      task.repeatDays ??
+      (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : getRepeatDayBit(1));
+    return `Repeats weekly on ${formatRepeatDays(repeatDays)}`;
   }
 
   return `Repeats monthly on day ${task.repeatMonthlyDay ?? 1}`;
@@ -500,6 +508,34 @@ function getEndOfMonthGrid(date: Date) {
 
 function isTaskActiveOnDate(task: Task, dateValue: string) {
   return toDateOnly(task.startDate) <= dateValue;
+}
+
+function isRecurringTaskDueOnDate(task: Task, dateValue: string) {
+  if (!isRecurringTask(task)) return true;
+  if (!isTaskActiveOnDate(task, dateValue)) return false;
+
+  if (task.repeatPattern === "daily") {
+    return matchesRepeatDays(dateValue, task.repeatDays);
+  }
+
+  if (task.repeatPattern === "weekly") {
+    const repeatDays =
+      task.repeatDays ??
+      (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : null);
+    return matchesRepeatDays(dateValue, repeatDays);
+  }
+
+  if (task.repeatPattern === "monthly") {
+    return getDayOfMonth(dateValue) === (task.repeatMonthlyDay ?? getDayOfMonth(toDateOnly(task.startDate)));
+  }
+
+  return true;
+}
+
+function isTaskVisibleOnDate(task: Task, dateValue: string) {
+  return isRecurringTask(task)
+    ? isRecurringTaskDueOnDate(task, dateValue)
+    : isTaskActiveOnDate(task, dateValue);
 }
 
 function isTaskUpcomingAfterDate(task: Task, dateValue: string) {
@@ -746,7 +782,11 @@ function projectOpenTasksForView(
       ? openTasks
       : openTasks.filter((task) => isTaskRelevantToRange(task, rangeStart, rangeEnd));
   const rangeProjectedTasks = projectTasksBySeries(
-    viewScopedTasks.filter((task) => toDateOnly(task.startDate) <= rangeEnd),
+    viewScopedTasks.filter((task) =>
+      viewMode === "day"
+        ? isTaskVisibleOnDate(task, selectedDay)
+        : toDateOnly(task.startDate) <= rangeEnd
+    ),
     "latest"
   );
   const upcomingTasks = projectTasksBySeries(
@@ -907,7 +947,7 @@ function isTaskCompletedOnDate(task: Task, dateValue: string) {
 
 function countsTowardDayProgress(task: Task, dateValue: string) {
   return (
-    isTaskActiveOnDate(task, dateValue) &&
+    isTaskVisibleOnDate(task, dateValue) &&
     (!isTaskCompleted(task) || isTaskCompletedOnDate(task, dateValue))
   );
 }
@@ -2261,7 +2301,10 @@ export function TrackerClient({
   const visibleTasks = archivedView
     ? tasks.filter((task) => isTaskInArchivedProject(task, projectById))
     : filterTasksByArchivedVisibility(tasks, projectById, false);
-  const dayInsights = getDayInsightMetrics(visibleTasks, selectedDay);
+  const selectedDayVisibleTasks = visibleTasks.filter((task) =>
+    isRecurringTask(task) ? isRecurringTaskDueOnDate(task, selectedDay) : true
+  );
+  const dayInsights = getDayInsightMetrics(selectedDayVisibleTasks, selectedDay);
   const weekInsights = getWeekInsightMetrics(visibleTasks, selectedDay, true, averageBasis);
   const monthInsights = getMonthInsightMetrics(visibleTasks, selectedDay, true, averageBasis);
   const weekBreakdowns = getCompletedBreakdowns(
@@ -2400,7 +2443,7 @@ export function TrackerClient({
     () => sortTasksByColumn(baseMatrixTasks, sortColumn, sortDirection),
     [baseMatrixTasks, sortColumn, sortDirection]
   );
-  const searchResults = visibleTasks.filter((task) =>
+  const searchResults = selectedDayVisibleTasks.filter((task) =>
     matchesTaskSearch(task, searchQuery, projectById)
   );
   const searchSections: SearchSection[] = [
@@ -2409,7 +2452,7 @@ export function TrackerClient({
       label: "Active",
       tasks: sortTasks(
         searchResults.filter(
-          (task) => !isTaskCompleted(task) && toDateOnly(task.startDate) <= selectedDay
+          (task) => !isTaskCompleted(task) && isTaskVisibleOnDate(task, selectedDay)
         ),
         sortMode
       ),

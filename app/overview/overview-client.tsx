@@ -142,6 +142,7 @@ const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
 const priorityChipClass =
   "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800";
 const OVERVIEW_GROUPING_STORAGE_KEY = "tm-overview-grouping-mode";
+const ALL_REPEAT_DAYS_MASK = 0b1111111;
 
 function DiscardChangesModal({
   open,
@@ -184,6 +185,29 @@ function todayInputValue() {
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function parseDateOnly(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getWeekdayNumber(value: string) {
+  const weekday = parseDateOnly(value).getDay();
+  return weekday === 0 ? 7 : weekday;
+}
+
+function getDayOfMonth(value: string) {
+  return parseDateOnly(value).getDate();
+}
+
+function getRepeatDayBit(weekday: number) {
+  return 1 << (weekday - 1);
+}
+
+function matchesRepeatDays(dateValue: string, repeatDays: number | null | undefined) {
+  const mask = repeatDays ?? ALL_REPEAT_DAYS_MASK;
+  return (mask & getRepeatDayBit(getWeekdayNumber(dateValue))) !== 0;
 }
 
 function createTempId(prefix: string) {
@@ -470,6 +494,10 @@ function matchesOverviewTaskFilter(
   filter: OverviewTaskFilter,
   today: string
 ) {
+  if (!isOverviewTaskVisibleOnDate(task, today)) {
+    return filter === "upcoming" && task.startDate > today;
+  }
+
   const startsToday = task.startDate === today;
   const dueToday = task.dueAt === today;
   const overdue = Boolean(task.dueAt) && task.dueAt < today;
@@ -494,7 +522,35 @@ function matchesOverviewTaskFilter(
 }
 
 function isRecurringOverviewTask(task: OverviewTask) {
-  return Boolean(task.recurrenceSeriesId);
+  return Boolean(task.recurrenceSeriesId || task.repeatEnabled || task.repeatPattern);
+}
+
+function isRecurringOverviewTaskDueOnDate(task: OverviewTask, dateValue: string) {
+  if (!isRecurringOverviewTask(task)) return true;
+  if (task.startDate > dateValue) return false;
+
+  if (task.repeatPattern === "daily") {
+    return matchesRepeatDays(dateValue, task.repeatDays);
+  }
+
+  if (task.repeatPattern === "weekly") {
+    const repeatDays =
+      task.repeatDays ??
+      (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : null);
+    return matchesRepeatDays(dateValue, repeatDays);
+  }
+
+  if (task.repeatPattern === "monthly") {
+    return getDayOfMonth(dateValue) === (task.repeatMonthlyDay ?? getDayOfMonth(task.startDate));
+  }
+
+  return true;
+}
+
+function isOverviewTaskVisibleOnDate(task: OverviewTask, dateValue: string) {
+  return isRecurringOverviewTask(task)
+    ? isRecurringOverviewTaskDueOnDate(task, dateValue)
+    : task.startDate <= dateValue;
 }
 
 function getTaskCategoryLabel(task: OverviewTask) {

@@ -1329,6 +1329,8 @@ Filters apply across all profiles:
 
 Profiles remain visible even if no tasks match the selected filter.
 
+Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date.
+
 ---
 
 ## Task Grouping Rules
@@ -1597,6 +1599,8 @@ Private project – not licensed for distribution.
 - Upcoming — future tasks
 
 Profiles remain visible even if no tasks match the selected filter.
+
+Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date.
 
 ---
 
