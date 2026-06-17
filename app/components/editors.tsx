@@ -183,8 +183,37 @@ function getRepeatDayBit(weekday: number) {
   return 1 << (weekday - 1);
 }
 
-function DateInput(props: ComponentPropsWithoutRef<"input">) {
-  return <input {...props} type="date" />;
+function DateInput({
+  onBlur,
+  onChange,
+  onInput,
+  onValueChange,
+  ...props
+}: ComponentPropsWithoutRef<"input"> & {
+  onValueChange?: (value: string) => void;
+}) {
+  function syncValue(event: { currentTarget: HTMLInputElement }) {
+    onValueChange?.(event.currentTarget.value);
+  }
+
+  return (
+    <input
+      {...props}
+      type="date"
+      onBlur={(event) => {
+        syncValue(event);
+        onBlur?.(event);
+      }}
+      onChange={(event) => {
+        syncValue(event);
+        onChange?.(event);
+      }}
+      onInput={(event) => {
+        syncValue(event);
+        onInput?.(event);
+      }}
+    />
+  );
 }
 
 function CategoryCombobox({
@@ -548,6 +577,7 @@ function TaskFormFields<T extends TaskCreateFormState>({
   waitingOnSuggestions,
   projectOptions,
   noteHistory,
+  showDueDateClear = false,
   onFormChange,
 }: {
   form: T;
@@ -555,6 +585,7 @@ function TaskFormFields<T extends TaskCreateFormState>({
   waitingOnSuggestions: string[];
   projectOptions: ProjectOption[];
   noteHistory?: TaskNoteHistoryEntry[];
+  showDueDateClear?: boolean;
   onFormChange: (updater: (prev: T) => T) => void;
 }) {
   return (
@@ -574,21 +605,32 @@ function TaskFormFields<T extends TaskCreateFormState>({
             className={`w-full ${inputClass}`}
             required
             value={form.startDate}
-            onChange={(event) =>
-              onFormChange((prev) => ({ ...prev, startDate: event.target.value }))
+            onValueChange={(value) =>
+              onFormChange((prev) => ({ ...prev, startDate: value }))
             }
           />
         </label>
-        <label className="space-y-1 text-sm">
+        <div className="space-y-1 text-sm">
           <div className="tm-muted">Due date</div>
-          <DateInput
-            className={`w-full ${inputClass}`}
-            value={form.dueAt}
-            onChange={(event) =>
-              onFormChange((prev) => ({ ...prev, dueAt: event.target.value }))
-            }
-          />
-        </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <DateInput
+              className={`w-full ${inputClass}`}
+              value={form.dueAt}
+              onValueChange={(value) =>
+                onFormChange((prev) => ({ ...prev, dueAt: value }))
+              }
+            />
+            {showDueDateClear ? (
+              <button
+                className={`${buttonClass} shrink-0`}
+                type="button"
+                onClick={() => onFormChange((prev) => ({ ...prev, dueAt: "" }))}
+              >
+                No date
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
       <CategoryCombobox
         className={`w-full ${inputClass}`}
@@ -744,6 +786,7 @@ export function TaskEditorModal({
             waitingOnSuggestions={waitingOnSuggestions}
             projectOptions={projectOptions}
             noteHistory={form.noteHistory}
+            showDueDateClear
             onFormChange={onFormChange}
           />
           <TaskFormActions
@@ -832,8 +875,8 @@ export function ProjectEditorModal({
                 className={`w-full ${inputClass}`}
                 required
                 value={form.startDate}
-                onChange={(event) =>
-                  onFormChange((prev) => ({ ...prev, startDate: event.target.value }))
+                onValueChange={(value) =>
+                  onFormChange((prev) => ({ ...prev, startDate: value }))
                 }
               />
             </label>
@@ -842,8 +885,8 @@ export function ProjectEditorModal({
               <DateInput
                 className={`w-full ${inputClass}`}
                 value={form.dueAt}
-                onChange={(event) =>
-                  onFormChange((prev) => ({ ...prev, dueAt: event.target.value }))
+                onValueChange={(value) =>
+                  onFormChange((prev) => ({ ...prev, dueAt: value }))
                 }
               />
             </label>
