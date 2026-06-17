@@ -1,6 +1,10 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/app/lib/prisma";
+import {
+  AUTHENTICATED_HOME_PATH,
+  getSafeAuthCallbackUrl,
+} from "@/app/lib/auth-routes";
 import bcrypt from "bcryptjs";
 
 export const authOptions = {
@@ -51,9 +55,13 @@ export const authOptions = {
   ],
   callbacks: {
     async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      if (url.startsWith(baseUrl)) return url;
-      return `${baseUrl}/`;
+      const callbackUrl = getSafeAuthCallbackUrl(url, baseUrl);
+
+      if (callbackUrl === AUTHENTICATED_HOME_PATH) {
+        return `${baseUrl}${AUTHENTICATED_HOME_PATH}`;
+      }
+
+      return `${baseUrl}${callbackUrl}`;
     },
   },
   secret: process.env.NEXTAUTH_SECRET,

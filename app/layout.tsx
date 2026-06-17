@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import { prisma } from "@/app/lib/prisma";
 import { AppShell } from "@/app/components/app-shell";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -38,6 +39,21 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestHeaders = await headers();
+  const pathname = requestHeaders.get("x-taskmanager-pathname");
+
+  if (pathname === "/login") {
+    return (
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          {children}
+        </body>
+      </html>
+    );
+  }
+
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
