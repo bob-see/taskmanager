@@ -561,18 +561,21 @@ function getOverviewTaskGroupKey(
   task: OverviewTask,
   groupingMode: OverviewGroupingMode
 ) {
-  if (isRecurringOverviewTask(task)) {
-    return "recurring";
-  }
-
   if (groupingMode === "category") {
     const normalizedCategory = getTaskCategoryLabel(task).toLocaleLowerCase();
-    return normalizedCategory === "unassigned"
-      ? "category:unassigned"
-      : `category:${normalizedCategory}`;
+
+    if (normalizedCategory !== "unassigned") {
+      return `category:${normalizedCategory}`;
+    }
+
+    return isRecurringOverviewTask(task) ? "recurring" : "category:unassigned";
   }
 
-  return task.projectId ? `project:${task.projectId}` : "unassigned";
+  if (task.projectId) {
+    return `project:${task.projectId}`;
+  }
+
+  return isRecurringOverviewTask(task) ? "recurring" : "unassigned";
 }
 
 function moveProfileToIndex<T extends { id: string }>(

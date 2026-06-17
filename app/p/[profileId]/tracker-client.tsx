@@ -893,7 +893,7 @@ function getTaskProjectLabel(
   task: { projectId: string | null; recurrenceSeriesId?: string | null; repeatEnabled?: boolean; repeatPattern?: string | null },
   projectById: Map<string, Project>
 ) {
-  if (isRecurringTask(task as Task)) {
+  if (isRecurringTask(task as Task) && !task.projectId) {
     return "Recurring";
   }
 
@@ -2573,8 +2573,12 @@ export function TrackerClient({
       label: "Recurring",
       project: null,
       collapsed: false,
-      openTasks: displayedDayViewTasks.filter((task) => isRecurringTask(task)),
-      doneTasks: dayDoneTasks.filter((task) => isRecurringTask(task)),
+      openTasks: displayedDayViewTasks.filter(
+        (task) => isRecurringTask(task) && !task.projectId
+      ),
+      doneTasks: dayDoneTasks.filter(
+        (task) => isRecurringTask(task) && !task.projectId
+      ),
       progressTotal: 0,
       progressCompleted: 0,
     },
@@ -2583,8 +2587,12 @@ export function TrackerClient({
       label: "Unassigned",
       project: null,
       collapsed: false,
-      openTasks: displayedDayViewTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
-      doneTasks: dayDoneTasks.filter((task) => !isRecurringTask(task) && !task.projectId),
+      openTasks: displayedDayViewTasks.filter(
+        (task) => !isRecurringTask(task) && !task.projectId
+      ),
+      doneTasks: dayDoneTasks.filter(
+        (task) => !isRecurringTask(task) && !task.projectId
+      ),
       progressTotal: 0,
       progressCompleted: 0,
     },
