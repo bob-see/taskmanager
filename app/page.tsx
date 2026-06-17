@@ -11,6 +11,25 @@ type Profile = {
   createdAt: string;
 };
 
+type HomeTask = {
+  startDate: string;
+  dueAt: string | null;
+  completedAt: string | null;
+  completedOn: string | null;
+};
+
+type TodaySnapshot = {
+  startingToday: number;
+  dueSoon: number;
+  overdue: number;
+};
+
+const EMPTY_TODAY_SNAPSHOT: TodaySnapshot = {
+  startingToday: 0,
+  dueSoon: 0,
+  overdue: 0,
+};
+
 function moveProfileToIndex(
   list: Profile[],
   draggedId: string,
@@ -29,9 +48,66 @@ function moveProfileToIndex(
   return next.map((profile, index) => ({ ...profile, order: index }));
 }
 
+function dateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function toDateOnly(value: string | null) {
+  return value ? dateInputValue(new Date(value)) : "";
+}
+
+function isTaskOpen(task: HomeTask) {
+  return !task.completedAt && !task.completedOn;
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function getTodaySnapshot(tasks: HomeTask[]): TodaySnapshot {
+  const todayDate = new Date();
+  const today = dateInputValue(todayDate);
+  const dueSoonEnd = dateInputValue(addDays(todayDate, 7));
+  const snapshot = { ...EMPTY_TODAY_SNAPSHOT };
+
+  for (const task of tasks) {
+    if (!isTaskOpen(task)) continue;
+
+    const startDate = toDateOnly(task.startDate);
+    const dueAt = toDateOnly(task.dueAt);
+
+    if (startDate === today) {
+      snapshot.startingToday += 1;
+    }
+
+    if (dueAt && dueAt < today) {
+      snapshot.overdue += 1;
+    } else if (dueAt && dueAt <= dueSoonEnd) {
+      snapshot.dueSoon += 1;
+    }
+  }
+
+  return snapshot;
+}
+
 export default function Home() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<TodaySnapshot>(EMPTY_TODAY_SNAPSHOT);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -59,6 +135,51 @@ export default function Home() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSnapshot() {
+      if (profiles.length === 0) {
+        setSnapshot(EMPTY_TODAY_SNAPSHOT);
+        setSnapshotLoading(false);
+        return;
+      }
+
+      setSnapshotLoading(true);
+
+      try {
+        const taskGroups = await Promise.all(
+          profiles.map(async (profile) => {
+            const res = await fetch(`/api/p/${profile.id}/tasks`, {
+              cache: "no-store",
+            });
+
+            if (!res.ok) return [];
+            return (await res.json()) as HomeTask[];
+          })
+        );
+
+        if (!cancelled) {
+          setSnapshot(getTodaySnapshot(taskGroups.flat()));
+        }
+      } catch {
+        if (!cancelled) {
+          setSnapshot(EMPTY_TODAY_SNAPSHOT);
+        }
+      } finally {
+        if (!cancelled) {
+          setSnapshotLoading(false);
+        }
+      }
+    }
+
+    void loadSnapshot();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profiles]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -249,6 +370,12 @@ export default function Home() {
     await persistOrder(nextProfiles, previousProfiles);
   }
 
+  const snapshotItems = [
+    { label: "Starting today", value: snapshot.startingToday },
+    { label: "Due soon", value: snapshot.dueSoon },
+    { label: "Overdue", value: snapshot.overdue },
+  ];
+
   return (
     <main className="min-h-screen bg-white text-gray-900">
       <div className="mx-auto flex max-w-5xl flex-col items-center px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-10 md:pt-16">
@@ -272,6 +399,37 @@ export default function Home() {
             </p>
           </div>
         </div>
+
+        <section className="mt-6 w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-[#f8f5ef] shadow-sm sm:mt-8">
+          <div className="bg-[linear-gradient(90deg,rgba(17,24,39,0.045)_1px,transparent_1px),linear-gradient(180deg,rgba(17,24,39,0.045)_1px,transparent_1px)] bg-[size:18px_18px] px-4 py-4 sm:px-6 sm:py-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">
+                  Today
+                </p>
+                <h2 className="mt-1 text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
+                  {getGreeting()}
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 md:min-w-[28rem]">
+                {snapshotItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-xl border border-gray-200 bg-white/75 px-2 py-3 text-center shadow-sm sm:px-3"
+                  >
+                    <div className="font-mono text-2xl font-semibold tabular-nums text-gray-900 sm:text-3xl">
+                      {snapshotLoading ? "..." : item.value}
+                    </div>
+                    <div className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 sm:text-xs">
+                      {item.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Profiles */}
         <section className="mt-6 w-full sm:mt-10 md:mt-12">
