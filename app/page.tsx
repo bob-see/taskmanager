@@ -287,12 +287,9 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mx-auto grid w-full max-w-4xl grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto flex w-full max-w-4xl flex-wrap justify-center gap-2 sm:gap-4">
             {profiles.map((profile, index) => {
               const isDragged = draggedId === profile.id;
-              const showLeftIndicator = dragOverIndex === index;
-              const showRightIndicator =
-                dragOverIndex === index + 1 && index === profiles.length - 1;
 
               return (
                 <div
@@ -306,7 +303,7 @@ export default function Home() {
                     desktopDragEnabled ? (event) => handleDragOver(event, index) : undefined
                   }
                   onDrop={desktopDragEnabled ? handleDrop : undefined}
-                  className={`relative w-full transition ${
+                  className={`relative w-[calc((100%-0.5rem)/2)] transition sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)] ${
                     isDragged ? "opacity-60" : ""
                   }`}
                 >
