@@ -622,7 +622,7 @@ function TaskFormFields<T extends TaskCreateFormState>({
             />
             {showDueDateClear ? (
               <button
-                className={`${buttonClass} shrink-0`}
+                className={`${buttonClass} shrink-0 lg:hidden`}
                 type="button"
                 onClick={() => onFormChange((prev) => ({ ...prev, dueAt: "" }))}
               >
