@@ -6,7 +6,7 @@ import {
   addDays,
   ensureProject,
   getNextTaskOrderIndex,
-  nextOccurrenceDate,
+  nextOccurrenceAfterPause,
   normalizeRepeatSettings,
   parseOptionalBooleanInput,
   parseOptionalIntInput,
@@ -53,15 +53,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
       notes: true,
       projectId: true,
       recurrenceSeriesId: true,
-    completedAt: true,
-    completedOn: true,
-    orderIndex: true,
-    isPriority: true,
-    repeatEnabled: true,
-    repeatPattern: true,
-    repeatDays: true,
+      completedAt: true,
+      completedOn: true,
+      orderIndex: true,
+      isPriority: true,
+      repeatEnabled: true,
+      repeatPattern: true,
+      repeatDays: true,
       repeatWeeklyDay: true,
       repeatMonthlyDay: true,
+      repeatPaused: true,
+      repeatPauseUntil: true,
+      repeatPauseNote: true,
     },
   });
   if (!existingTask) {
@@ -85,6 +88,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
     repeatDays?: number | null;
     repeatWeeklyDay?: number | null;
     repeatMonthlyDay?: number | null;
+    repeatPaused?: boolean;
+    repeatPauseUntil?: Date | null;
+    repeatPauseNote?: string | null;
   } = {};
   let completionBaseDate: Date | null = null;
 
@@ -180,6 +186,27 @@ export async function PATCH(req: Request, ctx: Ctx) {
   );
   if (repeatMonthlyDay.error) return repeatMonthlyDay.error;
 
+  if (body?.repeatPaused !== undefined) {
+    const repeatPaused = parseOptionalBooleanInput(body.repeatPaused, "repeatPaused");
+    if (repeatPaused.error) return repeatPaused.error;
+    data.repeatPaused = repeatPaused.value ?? false;
+  }
+
+  if (body?.repeatPauseUntil !== undefined) {
+    const repeatPauseUntil = parseDateInput(body.repeatPauseUntil, "repeatPauseUntil");
+    if (repeatPauseUntil.error) return repeatPauseUntil.error;
+    data.repeatPauseUntil = repeatPauseUntil.value ?? null;
+  }
+
+  if (body?.repeatPauseNote !== undefined) {
+    const repeatPauseNote = parseOptionalTextInput(
+      body.repeatPauseNote,
+      "repeatPauseNote"
+    );
+    if (repeatPauseNote.error) return repeatPauseNote.error;
+    data.repeatPauseNote = repeatPauseNote.value ?? null;
+  }
+
   const repeatFieldsTouched =
     body?.repeatEnabled !== undefined ||
     body?.repeatPattern !== undefined ||
@@ -203,6 +230,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
     data.repeatDays = normalizedRepeat.value?.repeatDays ?? null;
     data.repeatWeeklyDay = normalizedRepeat.value?.repeatWeeklyDay ?? null;
     data.repeatMonthlyDay = normalizedRepeat.value?.repeatMonthlyDay ?? null;
+
+    if (!normalizedRepeat.value?.repeatEnabled) {
+      data.repeatPaused = false;
+      data.repeatPauseUntil = null;
+      data.repeatPauseNote = null;
+    }
   }
 
   if (body?.completed !== undefined) {
@@ -255,6 +288,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   if (finalRepeat.value?.repeatEnabled) {
     data.recurrenceSeriesId = recurrenceSeriesId;
+  } else {
+    data.repeatPaused = false;
+    data.repeatPauseUntil = null;
+    data.repeatPauseNote = null;
   }
 
   const result = await prisma.$transaction(async (tx: any) => {
@@ -311,13 +348,23 @@ export async function PATCH(req: Request, ctx: Ctx) {
       recurrenceSeriesId
     ) {
       const completedOn = completionBaseDate ?? data.completedOn ?? new Date();
-      const nextStartDate = nextOccurrenceDate({
+      const nextStartDate = nextOccurrenceAfterPause({
         baseDate: completedOn,
         recurrenceType: finalRepeat.value.repeatPattern,
         repeatDays: finalRepeat.value.repeatDays,
         weeklyDay: finalRepeat.value.repeatWeeklyDay,
         monthlyDay: finalRepeat.value.repeatMonthlyDay,
+        repeatPaused: data.repeatPaused ?? existingTask.repeatPaused,
+        repeatPauseUntil:
+          data.repeatPauseUntil !== undefined
+            ? data.repeatPauseUntil
+            : existingTask.repeatPauseUntil,
       });
+
+      if (!nextStartDate) {
+        return { createdTask };
+      }
+
       const dayStart = toLocalDayStart(nextStartDate);
       const dayEnd = addDays(dayStart, 1);
 
@@ -338,6 +385,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
         repeatDays: finalRepeat.value.repeatDays,
         repeatWeeklyDay: finalRepeat.value.repeatWeeklyDay,
         repeatMonthlyDay: finalRepeat.value.repeatMonthlyDay,
+        repeatPaused: data.repeatPaused ?? existingTask.repeatPaused,
+        repeatPauseUntil:
+          data.repeatPauseUntil !== undefined
+            ? data.repeatPauseUntil
+            : existingTask.repeatPauseUntil,
+        repeatPauseNote:
+          data.repeatPauseNote !== undefined
+            ? data.repeatPauseNote
+            : existingTask.repeatPauseNote,
       };
 
       const nextOccurrenceWhere = {
@@ -519,6 +575,9 @@ export async function DELETE(_req: Request, ctx: Ctx) {
       repeatDays: true,
       repeatWeeklyDay: true,
       repeatMonthlyDay: true,
+      repeatPaused: true,
+      repeatPauseUntil: true,
+      repeatPauseNote: true,
     },
   });
 
@@ -557,13 +616,19 @@ export async function DELETE(_req: Request, ctx: Ctx) {
           return deletedTask;
         }
 
-        const nextStartDate = nextOccurrenceDate({
+        const nextStartDate = nextOccurrenceAfterPause({
           baseDate: task.startDate,
           recurrenceType: task.repeatPattern as "daily" | "weekly" | "monthly",
           repeatDays: task.repeatDays,
           weeklyDay: task.repeatWeeklyDay,
           monthlyDay: task.repeatMonthlyDay,
+          repeatPaused: task.repeatPaused,
+          repeatPauseUntil: task.repeatPauseUntil,
         });
+
+        if (!nextStartDate) {
+          return deletedTask;
+        }
 
         const existingNextOccurrence = await tx.task.findFirst({
           where: {
@@ -592,6 +657,9 @@ export async function DELETE(_req: Request, ctx: Ctx) {
                 repeatDays: task.repeatDays,
                 repeatWeeklyDay: task.repeatWeeklyDay,
                 repeatMonthlyDay: task.repeatMonthlyDay,
+                repeatPaused: task.repeatPaused,
+                repeatPauseUntil: task.repeatPauseUntil,
+                repeatPauseNote: task.repeatPauseNote,
               },
             });
           } catch (error) {

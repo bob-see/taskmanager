@@ -81,6 +81,7 @@ Scheduling & Planning
 Recurring Tasks
 	•	Daily and weekly repeat rules
 	•	Series-aware logic (only one active instance shown)
+	•	Temporary repeat pauses with optional pause-until dates
 	•	Delete options: this task / future / entire series
 	•	Accurate historical tracking
 
@@ -714,6 +715,7 @@ Filters apply across all profiles:
 - All open — active tasks (not future upcoming)
 - Today — tasks due or starting today
 - Overdue — tasks past due
+- Upcoming — future tasks
 
 The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
 
@@ -760,6 +762,7 @@ Scheduling & Planning
 Recurring Tasks
 	•	Daily and weekly repeat rules
 	•	Series-aware logic (only one active instance shown)
+	•	Temporary repeat pauses with optional pause-until dates
 	•	Delete options: this task / future / entire series
 	•	Accurate historical tracking
 
@@ -1329,7 +1332,7 @@ Filters apply across all profiles:
 
 Profiles remain visible even if no tasks match the selected filter.
 
-Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date.
+Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date. A recurring task can also be paused temporarily; paused repeats are excluded from Active, Today, Upcoming, and Overdue, appear in the Paused view, and pause-until dates suppress repeats through that date before resuming automatically.
 
 ---
 
@@ -1600,7 +1603,7 @@ Private project – not licensed for distribution.
 
 Profiles remain visible even if no tasks match the selected filter.
 
-Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date.
+Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date. A recurring task can also be paused temporarily; paused repeats are excluded from Active, Today, Upcoming, and Overdue, appear in the Paused view, and pause-until dates suppress repeats through that date before resuming automatically.
 
 ---
 

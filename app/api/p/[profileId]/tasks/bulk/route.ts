@@ -6,7 +6,7 @@ import {
   addDays,
   ensureProject,
   getNextTaskOrderIndex,
-  nextOccurrenceDate,
+  nextOccurrenceAfterPause,
   parseDateInput,
   parseOptionalTextInput,
   toLocalDayStart,
@@ -35,6 +35,9 @@ type TaskRecord = {
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
+  repeatPaused: boolean;
+  repeatPauseUntil: Date | null;
+  repeatPauseNote: string | null;
 };
 
 const TASK_SELECT = {
@@ -54,6 +57,9 @@ const TASK_SELECT = {
   repeatDays: true,
   repeatWeeklyDay: true,
   repeatMonthlyDay: true,
+  repeatPaused: true,
+  repeatPauseUntil: true,
+  repeatPauseNote: true,
 };
 
 function uniqueIds(value: unknown) {
@@ -171,13 +177,20 @@ async function markTaskDone(
     return;
   }
 
-  const nextStartDate = nextOccurrenceDate({
+  const nextStartDate = nextOccurrenceAfterPause({
     baseDate: completedOn,
     recurrenceType: task.repeatPattern,
     repeatDays: task.repeatDays,
     weeklyDay: task.repeatWeeklyDay,
     monthlyDay: task.repeatMonthlyDay,
+    repeatPaused: task.repeatPaused,
+    repeatPauseUntil: task.repeatPauseUntil,
   });
+
+  if (!nextStartDate) {
+    return;
+  }
+
   const dayStart = toLocalDayStart(nextStartDate);
   const dayEnd = addDays(dayStart, 1);
 
@@ -196,6 +209,9 @@ async function markTaskDone(
     repeatDays: task.repeatDays,
     repeatWeeklyDay: task.repeatWeeklyDay,
     repeatMonthlyDay: task.repeatMonthlyDay,
+    repeatPaused: task.repeatPaused,
+    repeatPauseUntil: task.repeatPauseUntil,
+    repeatPauseNote: task.repeatPauseNote,
   };
 
   const legacyOccurrence = await tx.task.findFirst({
@@ -297,13 +313,19 @@ async function deleteSingleTask(tx: any, task: TaskRecord) {
     return;
   }
 
-  const nextStartDate = nextOccurrenceDate({
+  const nextStartDate = nextOccurrenceAfterPause({
     baseDate: task.startDate,
     recurrenceType: task.repeatPattern,
     repeatDays: task.repeatDays,
     weeklyDay: task.repeatWeeklyDay,
     monthlyDay: task.repeatMonthlyDay,
+    repeatPaused: task.repeatPaused,
+    repeatPauseUntil: task.repeatPauseUntil,
   });
+
+  if (!nextStartDate) {
+    return;
+  }
 
   const existingNextOccurrence = await tx.task.findFirst({
     where: {
@@ -335,6 +357,9 @@ async function deleteSingleTask(tx: any, task: TaskRecord) {
         repeatDays: task.repeatDays,
         repeatWeeklyDay: task.repeatWeeklyDay,
         repeatMonthlyDay: task.repeatMonthlyDay,
+        repeatPaused: task.repeatPaused,
+        repeatPauseUntil: task.repeatPauseUntil,
+        repeatPauseNote: task.repeatPauseNote,
       },
     });
   } catch (error) {

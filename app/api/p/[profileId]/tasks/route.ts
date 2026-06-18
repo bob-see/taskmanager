@@ -158,6 +158,21 @@ export async function POST(req: Request, ctx: Ctx) {
   );
   if (repeatMonthlyDay.error) return repeatMonthlyDay.error;
 
+  const repeatPaused = parseOptionalBooleanInput(
+    body?.repeatPaused,
+    "repeatPaused"
+  );
+  if (repeatPaused.error) return repeatPaused.error;
+
+  const repeatPauseUntil = parseDateInput(body?.repeatPauseUntil, "repeatPauseUntil");
+  if (repeatPauseUntil.error) return repeatPauseUntil.error;
+
+  const repeatPauseNote = parseOptionalTextInput(
+    body?.repeatPauseNote,
+    "repeatPauseNote"
+  );
+  if (repeatPauseNote.error) return repeatPauseNote.error;
+
   const normalizedRepeat = normalizeRepeatSettings({
     repeatEnabled: repeatEnabled.value ?? false,
     repeatPattern: repeatPattern.value ?? null,
@@ -184,6 +199,18 @@ export async function POST(req: Request, ctx: Ctx) {
         ...(category.value !== undefined ? { category: category.value } : {}),
         ...(projectId.value !== undefined ? { projectId: projectId.value } : {}),
         ...normalizedRepeat.value,
+        repeatPaused:
+          normalizedRepeat.value?.repeatEnabled && repeatPaused.value
+            ? repeatPaused.value
+            : false,
+        repeatPauseUntil:
+          normalizedRepeat.value?.repeatEnabled && repeatPaused.value
+            ? repeatPauseUntil.value ?? null
+            : null,
+        repeatPauseNote:
+          normalizedRepeat.value?.repeatEnabled && repeatPaused.value
+            ? repeatPauseNote.value ?? null
+            : null,
       },
     });
 

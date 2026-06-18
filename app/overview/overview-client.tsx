@@ -64,6 +64,9 @@ type OverviewTask = {
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
+  repeatPaused: boolean;
+  repeatPauseUntil: string | null;
+  repeatPauseNote: string | null;
 };
 
 type ProfileCounts = {
@@ -281,6 +284,9 @@ function normalizeOverviewTask(task: OverviewTask): OverviewTask {
     ...task,
     delegatedTask: task.delegatedTask ?? null,
     noteHistory: task.noteHistory ?? [],
+    repeatPaused: task.repeatPaused ?? false,
+    repeatPauseUntil: task.repeatPauseUntil ?? null,
+    repeatPauseNote: task.repeatPauseNote ?? null,
   };
 }
 
@@ -525,8 +531,14 @@ function isRecurringOverviewTask(task: OverviewTask) {
   return Boolean(task.recurrenceSeriesId || task.repeatEnabled || task.repeatPattern);
 }
 
+function isOverviewRepeatPausedOnDate(task: OverviewTask, dateValue: string) {
+  if (!isRecurringOverviewTask(task) || !task.repeatPaused) return false;
+  return !task.repeatPauseUntil || dateValue <= task.repeatPauseUntil;
+}
+
 function isRecurringOverviewTaskDueOnDate(task: OverviewTask, dateValue: string) {
   if (!isRecurringOverviewTask(task)) return true;
+  if (isOverviewRepeatPausedOnDate(task, dateValue)) return false;
   if (task.startDate > dateValue) return false;
 
   if (task.repeatPattern === "daily") {
@@ -1090,6 +1102,9 @@ function ProfileCard({
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
+        repeatPaused?: boolean;
+        repeatPauseUntil?: string | null;
+        repeatPauseNote?: string | null;
         delegatedTask?: OverviewTask["delegatedTask"];
         noteSaveError?: boolean;
         noteSaveErrorMessage?: string;
@@ -1123,6 +1138,9 @@ function ProfileCard({
         repeatDays: createdTask.repeatDays,
         repeatWeeklyDay: createdTask.repeatWeeklyDay,
         repeatMonthlyDay: createdTask.repeatMonthlyDay,
+        repeatPaused: createdTask.repeatPaused ?? false,
+        repeatPauseUntil: createdTask.repeatPauseUntil ?? null,
+        repeatPauseNote: createdTask.repeatPauseNote ?? null,
       };
 
       setOpenTasks((prev) => [...prev, nextTask].sort(compareTasksForManualSort));
@@ -1509,6 +1527,9 @@ function ProfileCard({
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
+        repeatPaused: boolean;
+        repeatPauseUntil: string | null;
+        repeatPauseNote: string | null;
         isPriority: boolean;
       };
     };
@@ -1622,6 +1643,15 @@ function ProfileCard({
           editTaskForm.repeatEnabled && editTaskForm.repeatPattern === "monthly"
             ? editTaskForm.repeatMonthlyDay
             : null,
+        repeatPaused: editTaskForm.repeatEnabled ? editTaskForm.repeatPaused : false,
+        repeatPauseUntil:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPaused
+            ? editTaskForm.repeatPauseUntil || null
+            : null,
+        repeatPauseNote:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPaused
+            ? editTaskForm.repeatPauseNote.trim() || null
+            : null,
       });
       const savedTask = response.task;
 
@@ -1651,6 +1681,9 @@ function ProfileCard({
                   repeatDays: savedTask.repeatDays,
                   repeatWeeklyDay: savedTask.repeatWeeklyDay,
                   repeatMonthlyDay: savedTask.repeatMonthlyDay,
+                  repeatPaused: savedTask.repeatPaused,
+                  repeatPauseUntil: toDateOnly(savedTask.repeatPauseUntil),
+                  repeatPauseNote: savedTask.repeatPauseNote,
                   isPriority: savedTask.isPriority,
                   completedOn: toDateOnly(savedTask.completedOn),
                 }

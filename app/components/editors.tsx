@@ -19,6 +19,12 @@ export type RepeatFormState = {
   repeatMonthlyDay: number;
 };
 
+export type RepeatPauseFormState = {
+  repeatPaused: boolean;
+  repeatPauseUntil: string;
+  repeatPauseNote: string;
+};
+
 export type TaskNoteHistoryEntry = {
   id: string;
   content: string;
@@ -33,7 +39,7 @@ export type TaskNoteHistoryEntry = {
   isFailed?: boolean;
 };
 
-export type EditTaskFormState = RepeatFormState & {
+export type EditTaskFormState = RepeatFormState & RepeatPauseFormState & {
   title: string;
   startDate: string;
   dueAt: string;
@@ -74,6 +80,9 @@ type EditableTask = {
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
+  repeatPaused: boolean;
+  repeatPauseUntil: string | null;
+  repeatPauseNote: string | null;
 };
 
 type EditableProject = {
@@ -161,6 +170,16 @@ function parseDateOnly(value: string) {
 
 function toDateOnly(value: string | null) {
   return value ? dateInputValue(new Date(value)) : "";
+}
+
+function hasRepeatPauseFields<T extends RepeatFormState>(
+  form: T
+): form is T & RepeatPauseFormState {
+  return (
+    "repeatPaused" in form &&
+    "repeatPauseUntil" in form &&
+    "repeatPauseNote" in form
+  );
 }
 
 function formatNoteDate(value: string | Date) {
@@ -545,10 +564,114 @@ export function RepeatFields<T extends RepeatFormState>({
   );
 }
 
+export function RepeatPauseFields<T extends RepeatFormState & RepeatPauseFormState>({
+  form,
+  onChange,
+}: {
+  form: T;
+  onChange: (updater: (prev: T) => T) => void;
+}) {
+  if (!form.repeatEnabled) return null;
+
+  const paused = form.repeatPaused;
+
+  return (
+    <div className={`${cardClass} space-y-3 p-3`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">Repeat status</div>
+          <div className="tm-muted text-xs">
+            {paused
+              ? form.repeatPauseUntil
+                ? `Paused until ${form.repeatPauseUntil}`
+                : "Paused until resumed"
+              : "Active"}
+          </div>
+        </div>
+        {paused ? (
+          <button
+            className={buttonClass}
+            type="button"
+            onClick={() =>
+              onChange((prev) => ({
+                ...prev,
+                repeatPaused: false,
+                repeatPauseUntil: "",
+                repeatPauseNote: "",
+              }))
+            }
+          >
+            Resume Repeat
+          </button>
+        ) : (
+          <button
+            className={buttonClass}
+            type="button"
+            onClick={() =>
+              onChange((prev) => ({
+                ...prev,
+                repeatPaused: true,
+                repeatPauseUntil: "",
+              }))
+            }
+          >
+            Pause Repeat
+          </button>
+        )}
+      </div>
+
+      {paused && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            <div className="tm-muted">Pause until</div>
+            <DateInput
+              className={`w-full ${inputClass}`}
+              value={form.repeatPauseUntil}
+              onValueChange={(value) =>
+                onChange((prev) => ({ ...prev, repeatPauseUntil: value }))
+              }
+            />
+          </label>
+          <label className="space-y-1 text-sm md:col-span-2">
+            <div className="tm-muted">Pause note</div>
+            <input
+              className={`w-full ${inputClass}`}
+              placeholder="Optional reason"
+              value={form.repeatPauseNote}
+              onChange={(event) =>
+                onChange((prev) => ({
+                  ...prev,
+                  repeatPauseNote: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <button
+            className={`${buttonClass} md:col-span-2`}
+            type="button"
+            onClick={() =>
+              onChange((prev) => ({
+                ...prev,
+                repeatPaused: true,
+                repeatPauseUntil: "",
+              }))
+            }
+          >
+            Pause indefinitely
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function createEditTaskForm(task: EditableTask): EditTaskFormState {
   const startDate = toDateOnly(task.startDate) || todayInputValue();
   const repeatDefaults = createRepeatDefaults(startDate);
   const repeatWeeklyDay = task.repeatWeeklyDay ?? repeatDefaults.repeatWeeklyDay;
+  const repeatPauseUntil = toDateOnly(task.repeatPauseUntil);
+  const repeatPaused =
+    task.repeatPaused && (repeatPauseUntil === "" || repeatPauseUntil >= todayInputValue());
 
   return {
     title: task.title,
@@ -568,6 +691,9 @@ export function createEditTaskForm(task: EditableTask): EditTaskFormState {
         : repeatDefaults.repeatDays),
     repeatWeeklyDay,
     repeatMonthlyDay: task.repeatMonthlyDay ?? repeatDefaults.repeatMonthlyDay,
+    repeatPaused,
+    repeatPauseUntil: repeatPaused ? repeatPauseUntil : "",
+    repeatPauseNote: repeatPaused ? task.repeatPauseNote ?? "" : "",
   };
 }
 
@@ -717,6 +843,14 @@ function TaskFormFields<T extends TaskCreateFormState>({
         defaultDateValue={form.startDate}
         onChange={(updater) => onFormChange((prev) => updater(prev))}
       />
+      {hasRepeatPauseFields(form) && (
+        <RepeatPauseFields
+          form={form}
+          onChange={(updater) =>
+            onFormChange((prev) => updater(prev as T & RepeatPauseFormState) as T)
+          }
+        />
+      )}
     </div>
   );
 }

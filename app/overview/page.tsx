@@ -113,6 +113,9 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
           repeatDays: true,
           repeatWeeklyDay: true,
           repeatMonthlyDay: true,
+          repeatPaused: true,
+          repeatPauseUntil: true,
+          repeatPauseNote: true,
           projectId: true,
           project: {
             select: {
@@ -249,6 +252,9 @@ async function getOverviewData(userEmail: string): Promise<OverviewProfileData[]
         repeatDays: task.repeatDays,
         repeatWeeklyDay: task.repeatWeeklyDay,
         repeatMonthlyDay: task.repeatMonthlyDay,
+        repeatPaused: task.repeatPaused,
+        repeatPauseUntil: toDateOnly(task.repeatPauseUntil),
+        repeatPauseNote: task.repeatPauseNote,
       })),
       initialTaskLimit: DEFAULT_TASKS_TO_SHOW,
     };

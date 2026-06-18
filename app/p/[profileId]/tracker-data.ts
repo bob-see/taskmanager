@@ -77,6 +77,9 @@ export async function getTrackerPageData(profileId: string, email: string) {
         repeatDays: true,
         repeatWeeklyDay: true,
         repeatMonthlyDay: true,
+        repeatPaused: true,
+        repeatPauseUntil: true,
+        repeatPauseNote: true,
         createdAt: true,
         orderIndex: true,
         isPriority: true,
@@ -109,6 +112,7 @@ export async function getTrackerPageData(profileId: string, email: string) {
       completedAt: serializeDate(task.completedAt),
       completedOn: serializeDate(task.completedOn),
       repeatPattern: task.repeatPattern as TrackerInitialData["tasks"][number]["repeatPattern"],
+      repeatPauseUntil: serializeDate(task.repeatPauseUntil),
       createdAt: task.createdAt.toISOString(),
       delegatedTask: task.delegatedTask,
       noteHistory: task.noteHistory.map((note) => ({

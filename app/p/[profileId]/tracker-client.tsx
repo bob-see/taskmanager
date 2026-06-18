@@ -65,6 +65,9 @@ type Task = {
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
+  repeatPaused: boolean;
+  repeatPauseUntil: string | null;
+  repeatPauseNote: string | null;
   createdAt: string;
   orderIndex: number | null;
   isPriority: boolean;
@@ -116,7 +119,14 @@ type TaskFormState = RepeatFormState & {
 
 type ViewMode = "day" | "week" | "month";
 type OpenFilter = "all-active" | "today" | "upcoming" | "overdue";
-type TaskView = "active" | "today" | "upcoming" | "overdue" | "done" | "archived";
+type TaskView =
+  | "active"
+  | "today"
+  | "upcoming"
+  | "overdue"
+  | "paused"
+  | "done"
+  | "archived";
 type DoneRange = "today" | "week" | "month" | "all";
 type SortMode = "start-date" | "due-date" | "manual";
 type TaskSortColumn = "title" | "category" | "due" | "notes";
@@ -157,6 +167,7 @@ type QuickAddParseResult = {
 };
 
 type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
+type RepeatPausePreset = "tomorrow" | "next-week" | "custom" | "indefinite";
 
 const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
   { value: "day", label: "Day" },
@@ -170,6 +181,7 @@ const TASK_VIEW_OPTIONS: Array<{ value: TaskView; label: string }> = [
   { value: "today", label: "Today" },
   { value: "upcoming", label: "Upcoming" },
   { value: "overdue", label: "Overdue" },
+  { value: "paused", label: "Paused" },
   { value: "done", label: "Done" },
   { value: "archived", label: "Archived" },
 ];
@@ -199,6 +211,15 @@ const SNOOZE_PRESET_OPTIONS: Array<{ value: SnoozePreset; label: string }> = [
   { value: "tomorrow", label: "Tomorrow" },
   { value: "next-business-day", label: "Next business day" },
   { value: "next-week", label: "Next week (+7 days)" },
+];
+const REPEAT_PAUSE_PRESET_OPTIONS: Array<{
+  value: RepeatPausePreset;
+  label: string;
+}> = [
+  { value: "tomorrow", label: "Pause until tomorrow" },
+  { value: "next-week", label: "Pause until next week" },
+  { value: "custom", label: "Custom date" },
+  { value: "indefinite", label: "Pause indefinitely" },
 ];
 const cardClass = "tm-card min-w-0 rounded-[12px] border shadow-sm";
 const sectionCardClass = `${cardClass} p-4`;
@@ -468,6 +489,30 @@ function getRepeatSummary(task: Task) {
   return `Repeats monthly on day ${task.repeatMonthlyDay ?? 1}`;
 }
 
+function isRepeatPausedOnDate(task: Task, dateValue: string) {
+  if (!isRecurringTask(task) || !task.repeatPaused) return false;
+  const pauseUntil = toDateOnly(task.repeatPauseUntil);
+  return pauseUntil === "" || dateValue <= pauseUntil;
+}
+
+function getRepeatPauseBadge(task: Task, dateValue: string) {
+  if (!isRepeatPausedOnDate(task, dateValue)) return null;
+
+  const pauseUntil = toDateOnly(task.repeatPauseUntil);
+  return pauseUntil ? `Paused until ${formatShortDate(pauseUntil)}` : "Paused";
+}
+
+function getRepeatPauseUntilForPreset(
+  baseDateValue: string,
+  preset: Exclude<RepeatPausePreset, "custom" | "indefinite">
+) {
+  if (preset === "tomorrow") {
+    return dateInputValue(addDays(parseDateOnly(baseDateValue), 1));
+  }
+
+  return dateInputValue(addDays(parseDateOnly(baseDateValue), 7));
+}
+
 function formatLongDate(value: string) {
   return parseDateOnly(value).toLocaleDateString(undefined, {
     weekday: "short",
@@ -512,6 +557,7 @@ function isTaskActiveOnDate(task: Task, dateValue: string) {
 
 function isRecurringTaskDueOnDate(task: Task, dateValue: string) {
   if (!isRecurringTask(task)) return true;
+  if (isRepeatPausedOnDate(task, dateValue)) return false;
   if (!isTaskActiveOnDate(task, dateValue)) return false;
 
   if (task.repeatPattern === "daily") {
@@ -776,7 +822,9 @@ function projectOpenTasksForView(
     viewMode === "week" ? weekStart : viewMode === "month" ? monthStart : selectedDay;
   const rangeEnd =
     viewMode === "week" ? weekEnd : viewMode === "month" ? monthEnd : selectedDay;
-  const openTasks = tasks.filter((task) => !isTaskCompleted(task));
+  const openTasks = tasks.filter(
+    (task) => !isTaskCompleted(task) && !isRepeatPausedOnDate(task, selectedDay)
+  );
   const viewScopedTasks =
     viewMode === "day"
       ? openTasks
@@ -1218,6 +1266,9 @@ function normalizeTask(task: Task): Task {
     ...task,
     delegatedTask: task.delegatedTask ?? null,
     noteHistory: task.noteHistory ?? [],
+    repeatPaused: task.repeatPaused ?? false,
+    repeatPauseUntil: task.repeatPauseUntil ?? null,
+    repeatPauseNote: task.repeatPauseNote ?? null,
   };
 }
 
@@ -1419,8 +1470,10 @@ function TaskActionMenu({
   onTogglePriority,
   onOpenEditModal,
   onToggleCompleted,
+  onToggleRepeatPause,
   onDelegate,
   onDelete,
+  pauseReferenceDate = todayInputValue(),
 }: {
   task: Task;
   completionPending?: boolean;
@@ -1431,8 +1484,10 @@ function TaskActionMenu({
   onTogglePriority: (task: Task) => void;
   onOpenEditModal: (task: Task) => void;
   onToggleCompleted: (task: Task) => void;
+  onToggleRepeatPause: (task: Task) => void;
   onDelegate: (task: Task) => void;
   onDelete: (task: Task) => void;
+  pauseReferenceDate?: string;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -1580,6 +1635,18 @@ function TaskActionMenu({
             >
               {completedActionLabel ?? (isTaskCompleted(task) ? "Open" : "Done")}
             </button>
+            {isRecurringTask(task) && (
+              <button
+                className={taskActionMenuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => runAction(onToggleRepeatPause)}
+              >
+                {isRepeatPausedOnDate(task, pauseReferenceDate)
+                  ? "Resume Repeat"
+                  : "Pause Repeat"}
+              </button>
+            )}
             <button
               className={taskActionMenuItemClass}
               disabled={Boolean(task.delegatedTask)}
@@ -1613,6 +1680,7 @@ function TaskRow({
   showSnoozeAction = false,
   selectMode = false,
   selected = false,
+  currentDateValue,
   editingCategoryTaskId,
   editingCategoryValue,
   categorySuggestions,
@@ -1626,6 +1694,7 @@ function TaskRow({
   onSnoozePreset,
   onPickSnoozeDate,
   onTogglePriority,
+  onToggleRepeatPause,
   onDelegate,
   onDelete,
   draggable = false,
@@ -1644,6 +1713,7 @@ function TaskRow({
   showSnoozeAction?: boolean;
   selectMode?: boolean;
   selected?: boolean;
+  currentDateValue?: string;
   editingCategoryTaskId: string | null;
   editingCategoryValue: string;
   categorySuggestions: string[];
@@ -1657,6 +1727,7 @@ function TaskRow({
   onSnoozePreset: (task: Task, preset: SnoozePreset) => void;
   onPickSnoozeDate: (task: Task) => void;
   onTogglePriority: (task: Task) => void;
+  onToggleRepeatPause: (task: Task) => void;
   onDelegate: (task: Task) => void;
   onDelete: (task: Task) => void;
   draggable?: boolean;
@@ -1669,6 +1740,7 @@ function TaskRow({
 }) {
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
+  const repeatPauseBadge = getRepeatPauseBadge(task, currentDateValue ?? todayInputValue());
 
   return (
     <div
@@ -1778,6 +1850,11 @@ function TaskRow({
             <DelegatedTaskStatusPill status={task.delegatedTask.status} />
           ) : null}
           {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
+          {repeatPauseBadge && (
+            <span className="rounded-full border border-slate-300/70 bg-slate-100/80 px-2 py-0.5 text-slate-700">
+              {repeatPauseBadge}
+            </span>
+          )}
           {hasTaskNotes(task) && (
             <TaskNotesButton notes={formatTaskNotesPreview(task)} />
           )}
@@ -1799,12 +1876,14 @@ function TaskRow({
             showSnoozeAction={showSnoozeAction}
             onPickSnoozeDate={onPickSnoozeDate}
             onTogglePriority={onTogglePriority}
+            onToggleRepeatPause={onToggleRepeatPause}
             onOpenEditModal={onOpenEditModal}
             onToggleCompleted={(selectedTask) =>
               onToggleCompleted(selectedTask, !isTaskCompleted(selectedTask))
             }
             onDelegate={onDelegate}
             onDelete={onDelete}
+            pauseReferenceDate={currentDateValue ?? todayInputValue()}
           />
         </div>
       </div>
@@ -2047,6 +2126,11 @@ export function TrackerClient({
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [singleSnoozeTask, setSingleSnoozeTask] = useState<Task | null>(null);
   const [singleSnoozeDateValue, setSingleSnoozeDateValue] = useState("");
+  const [repeatPauseTask, setRepeatPauseTask] = useState<Task | null>(null);
+  const [repeatPausePreset, setRepeatPausePreset] =
+    useState<RepeatPausePreset>("tomorrow");
+  const [repeatPauseUntilValue, setRepeatPauseUntilValue] = useState("");
+  const [repeatPauseNoteValue, setRepeatPauseNoteValue] = useState("");
   const [bulkSnoozeDateValue, setBulkSnoozeDateValue] = useState("");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
@@ -2419,6 +2503,17 @@ export function TrackerClient({
   const activeDayOpenTasks = sortedOpenTasks.filter(
     (task) => isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
+  const pausedDayOpenTasks = sortTasks(
+    visibleTasks.filter(
+      (task) =>
+        isRecurringTask(task) &&
+        !isTaskCompleted(task) &&
+        isRepeatPausedOnDate(task, selectedDay) &&
+        isTaskVisibleInDayView(task) &&
+        matchesTaskSearch(task, searchQuery, projectById)
+    ),
+    sortMode
+  );
   const dayDoneTasks = doneTasks.filter(
     (task) =>
       isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
@@ -2432,13 +2527,34 @@ export function TrackerClient({
     sortMode
   );
   const dayViewTasks =
-    taskView === "done" ? dayDoneTasks : taskView === "archived" ? archivedDayTasks : activeDayOpenTasks;
+    taskView === "done"
+      ? dayDoneTasks
+      : taskView === "archived"
+        ? archivedDayTasks
+        : taskView === "paused"
+          ? pausedDayOpenTasks
+          : activeDayOpenTasks;
   const displayedDayViewTasks = useMemo(
     () => sortTasksByColumn(dayViewTasks, sortColumn, sortDirection),
     [dayViewTasks, sortColumn, sortDirection]
   );
+  const pausedOpenTasks = sortTasks(
+    visibleTasks.filter(
+      (task) =>
+        isRecurringTask(task) &&
+        !isTaskCompleted(task) &&
+        isRepeatPausedOnDate(task, selectedDay)
+    ),
+    sortMode
+  );
   const baseMatrixTasks =
-    taskView === "done" ? doneTasks : taskView === "archived" ? archivedDayTasks : sortedOpenTasks;
+    taskView === "done"
+      ? doneTasks
+      : taskView === "archived"
+        ? archivedDayTasks
+        : taskView === "paused"
+          ? pausedOpenTasks
+          : sortedOpenTasks;
   const matrixTasks = useMemo(
     () => sortTasksByColumn(baseMatrixTasks, sortColumn, sortDirection),
     [baseMatrixTasks, sortColumn, sortDirection]
@@ -2928,6 +3044,47 @@ export function TrackerClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update task");
     }
+  }
+
+  function closeRepeatPauseModal() {
+    setRepeatPauseTask(null);
+    setRepeatPausePreset("tomorrow");
+    setRepeatPauseUntilValue("");
+    setRepeatPauseNoteValue("");
+  }
+
+  function requestToggleRepeatPause(task: Task) {
+    if (!isRecurringTask(task)) return;
+
+    if (isRepeatPausedOnDate(task, selectedDay)) {
+      void updateTask(task.id, {
+        repeatPaused: false,
+        repeatPauseUntil: null,
+        repeatPauseNote: null,
+      }).catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Could not resume repeat")
+      );
+      return;
+    }
+
+    setRepeatPauseTask(task);
+    setRepeatPausePreset("tomorrow");
+    setRepeatPauseUntilValue(getRepeatPauseUntilForPreset(selectedDay, "tomorrow"));
+    setRepeatPauseNoteValue(task.repeatPauseNote ?? "");
+  }
+
+  async function pauseRepeatTask() {
+    if (!repeatPauseTask) return;
+
+    const repeatPauseUntil =
+      repeatPausePreset === "indefinite" ? null : repeatPauseUntilValue || null;
+
+    await updateTask(repeatPauseTask.id, {
+      repeatPaused: true,
+      repeatPauseUntil,
+      repeatPauseNote: repeatPauseNoteValue.trim() || null,
+    });
+    closeRepeatPauseModal();
   }
 
   function applyManualOrder(orderedIds: string[]) {
@@ -3461,6 +3618,15 @@ export function TrackerClient({
         repeatMonthlyDay:
           editTaskForm.repeatEnabled && editTaskForm.repeatPattern === "monthly"
             ? editTaskForm.repeatMonthlyDay
+            : null,
+        repeatPaused: editTaskForm.repeatEnabled ? editTaskForm.repeatPaused : false,
+        repeatPauseUntil:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPaused
+            ? editTaskForm.repeatPauseUntil || null
+            : null,
+        repeatPauseNote:
+          editTaskForm.repeatEnabled && editTaskForm.repeatPaused
+            ? editTaskForm.repeatPauseNote.trim() || null
             : null,
       });
       setEditTaskId(null);
@@ -4370,6 +4536,7 @@ export function TrackerClient({
                           completionPending={completionPendingTaskIds.includes(task.id)}
                           selectMode={selectMode}
                           selected={selectedTaskIds.includes(task.id)}
+                          currentDateValue={selectedDay}
                           editingCategoryTaskId={editingCategoryTaskId}
                           editingCategoryValue={editingCategoryValue}
                           categorySuggestions={categorySuggestions}
@@ -4392,6 +4559,7 @@ export function TrackerClient({
                           onSnoozePreset={snoozeTask}
                           onPickSnoozeDate={openSingleTaskSnoozeDate}
                           onTogglePriority={toggleTaskPriority}
+                          onToggleRepeatPause={requestToggleRepeatPause}
                           onDelegate={openDelegateTask}
                           showSnoozeAction={!isTaskCompleted(task)}
                           snoozeDisabled={bulkSaving}
@@ -4602,6 +4770,7 @@ export function TrackerClient({
                                   )}
                                   selectMode={selectMode}
                                   selected={selectedTaskIds.includes(task.id)}
+                                  currentDateValue={selectedDay}
                                   editingCategoryTaskId={editingCategoryTaskId}
                                   editingCategoryValue={editingCategoryValue}
                                   categorySuggestions={categorySuggestions}
@@ -4624,6 +4793,7 @@ export function TrackerClient({
                                   onSnoozePreset={snoozeTask}
                                   onPickSnoozeDate={openSingleTaskSnoozeDate}
                                   onTogglePriority={toggleTaskPriority}
+                                  onToggleRepeatPause={requestToggleRepeatPause}
                                   onDelegate={openDelegateTask}
                                   showSnoozeAction
                                   snoozeDisabled={bulkSaving}
@@ -4684,9 +4854,11 @@ export function TrackerClient({
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--tm-border)] pb-4">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-lg font-semibold">Open</h2>
+                  <h2 className="text-lg font-semibold">
+                    {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label ?? "Open"}
+                  </h2>
                   <span className="tm-muted text-sm">
-                    {openTasks.length} task{openTasks.length === 1 ? "" : "s"} for{" "}
+                    {matrixTasks.length} task{matrixTasks.length === 1 ? "" : "s"} for{" "}
                     {nonDayOpenListLabel}
                   </span>
                 </div>
@@ -4843,6 +5015,11 @@ export function TrackerClient({
                                   Priority
                                 </span>
                               )}
+                              {getRepeatPauseBadge(task, selectedDay) && (
+                                <span className="rounded-full border border-slate-300/70 bg-slate-100/80 px-2 py-0.5 text-slate-700">
+                                  {getRepeatPauseBadge(task, selectedDay)}
+                                </span>
+                              )}
                               {task.projectId && projectById.get(task.projectId)?.archived && (
                                 <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
                                   Archived
@@ -4866,6 +5043,7 @@ export function TrackerClient({
                             completedActionLabel={taskView === "done" ? "Open" : "Done"}
                             onPickSnoozeDate={openSingleTaskSnoozeDate}
                             onTogglePriority={(selectedTask) => void toggleTaskPriority(selectedTask)}
+                            onToggleRepeatPause={requestToggleRepeatPause}
                             onOpenEditModal={openTaskEditor}
                             onToggleCompleted={(selectedTask) =>
                               void toggleTaskCompleted(selectedTask.id, taskView !== "done").catch(
@@ -4879,6 +5057,7 @@ export function TrackerClient({
                             }
                             onDelegate={openDelegateTask}
                             onDelete={requestDeleteTask}
+                            pauseReferenceDate={selectedDay}
                           />
                         </td>
                       </tr>
@@ -5028,6 +5207,85 @@ export function TrackerClient({
             >
               Apply
             </button>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(repeatPauseTask)}
+        title="Pause Repeat"
+        onClose={() => {
+          if (bulkSaving) return;
+          closeRepeatPauseModal();
+        }}
+      >
+        {repeatPauseTask && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void pauseRepeatTask().catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : "Could not pause repeat")
+              );
+            }}
+          >
+            <div className="space-y-2">
+              {REPEAT_PAUSE_PRESET_OPTIONS.map((option) => (
+                <label key={option.value} className={modalChoiceClass}>
+                  <input
+                    checked={repeatPausePreset === option.value}
+                    name="repeat-pause-preset"
+                    type="radio"
+                    value={option.value}
+                    onChange={() => {
+                      setRepeatPausePreset(option.value);
+                      if (option.value === "tomorrow" || option.value === "next-week") {
+                        setRepeatPauseUntilValue(
+                          getRepeatPauseUntilForPreset(selectedDay, option.value)
+                        );
+                      }
+                      if (option.value === "indefinite") {
+                        setRepeatPauseUntilValue("");
+                      }
+                    }}
+                  />
+                  <div className="font-medium">{option.label}</div>
+                </label>
+              ))}
+            </div>
+            {repeatPausePreset === "custom" && (
+              <label className="space-y-1 text-sm">
+                <div className="tm-muted">Pause until</div>
+                <DateInput
+                  autoFocus
+                  className={`w-full ${inputClass}`}
+                  required
+                  value={repeatPauseUntilValue}
+                  onChange={(e) => setRepeatPauseUntilValue(e.target.value)}
+                />
+              </label>
+            )}
+            <label className="space-y-1 text-sm">
+              <div className="tm-muted">Note</div>
+              <input
+                className={`w-full ${inputClass}`}
+                placeholder="Optional reason"
+                value={repeatPauseNoteValue}
+                onChange={(e) => setRepeatPauseNoteValue(e.target.value)}
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                className={buttonClass}
+                type="button"
+                onClick={closeRepeatPauseModal}
+              >
+                Cancel
+              </button>
+              <button className={`${primaryButtonClass} px-4`} type="submit">
+                Pause Repeat
+              </button>
+            </div>
           </form>
         )}
       </Modal>

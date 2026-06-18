@@ -369,6 +369,53 @@ export function nextOccurrenceDate(input: {
   return nextDate;
 }
 
+export function isRepeatPausedOnDate(input: {
+  repeatPaused: boolean;
+  repeatPauseUntil: Date | null | undefined;
+  date: Date;
+}) {
+  if (!input.repeatPaused) {
+    return false;
+  }
+
+  if (!input.repeatPauseUntil) {
+    return true;
+  }
+
+  return getDateOnly(input.date) <= getDateOnly(input.repeatPauseUntil);
+}
+
+export function nextOccurrenceAfterPause(input: {
+  baseDate: Date;
+  recurrenceType: RepeatPattern;
+  repeatDays: number | null;
+  weeklyDay: number | null;
+  monthlyDay: number | null;
+  repeatPaused: boolean;
+  repeatPauseUntil: Date | null | undefined;
+}) {
+  if (input.repeatPaused && !input.repeatPauseUntil) {
+    return null;
+  }
+
+  let nextDate = nextOccurrenceDate(input);
+
+  while (
+    isRepeatPausedOnDate({
+      repeatPaused: input.repeatPaused,
+      repeatPauseUntil: input.repeatPauseUntil,
+      date: nextDate,
+    })
+  ) {
+    nextDate = nextOccurrenceDate({
+      ...input,
+      baseDate: nextDate,
+    });
+  }
+
+  return nextDate;
+}
+
 export async function getNextTaskOrderIndex(
   tx: any,
   profileId: string

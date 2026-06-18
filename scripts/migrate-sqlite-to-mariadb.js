@@ -12,6 +12,7 @@ const dateColumns = new Set([
   "createdAt",
   "updatedAt",
   "startDate",
+  "repeatPauseUntil",
   "entryDate",
   "startTime",
   "endTime",
