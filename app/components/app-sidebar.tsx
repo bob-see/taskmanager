@@ -122,7 +122,7 @@ export function AppSidebar({
             ? "Users"
             : pathname === "/lost"
               ? "Hatch Countdown"
-              : pathname === "/reports"
+              : pathname === "/reports" || pathname.startsWith("/reports/")
                 ? "Reports"
                 : "Workspace");
 
@@ -248,20 +248,29 @@ export function AppSidebar({
             </nav>
           </section>
 
-          <section className="border-t border-[color:var(--tm-border)] pt-4">
-            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
-              Reports
-            </p>
-            <nav className="mt-2 flex flex-col gap-1">
-              <Link
-                href="/reports"
-                className={itemClassName(pathname === "/reports")}
-                onClick={onNavigate}
-              >
+          {currentUser.role === "admin" ? (
+            <section className="border-t border-[color:var(--tm-border)] pt-4">
+              <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
                 Reports
-              </Link>
-            </nav>
-          </section>
+              </p>
+              <nav className="mt-2 flex flex-col gap-1">
+                <Link
+                  href="/reports"
+                  className={itemClassName(pathname === "/reports")}
+                  onClick={onNavigate}
+                >
+                  Reports
+                </Link>
+                <Link
+                  href="/reports/user-activity"
+                  className={itemClassName(pathname === "/reports/user-activity")}
+                  onClick={onNavigate}
+                >
+                  User Activity
+                </Link>
+              </nav>
+            </section>
+          ) : null}
         </div>
         <div className="mt-auto border-t border-[color:var(--tm-border)] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 md:pb-6">
           <div className="mb-3 px-3">
