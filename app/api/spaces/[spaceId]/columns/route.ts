@@ -4,6 +4,7 @@ import {
   requireSpaceMember,
   validateColumnType,
 } from "@/app/api/spaces/shared";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -35,12 +36,16 @@ export async function POST(req: Request, ctx: Ctx) {
   if (type.error) return type.error;
 
   const column = await prisma.$transaction(async (tx) => {
+    const space = await tx.collaborativeSpace.findUniqueOrThrow({
+      where: { id: spaceId },
+      select: { name: true },
+    });
     const result = await tx.matrixColumn.aggregate({
       where: { spaceId, archivedAt: null },
       _max: { order: true },
     });
 
-    return tx.matrixColumn.create({
+    const createdColumn = await tx.matrixColumn.create({
       data: {
         spaceId,
         name,
@@ -56,6 +61,22 @@ export async function POST(req: Request, ctx: Ctx) {
         },
       },
     });
+
+    await createActivityLog(tx, {
+      userId: currentUser.user.id,
+      spaceId,
+      type: "space.column_create",
+      description: `Created column "${createdColumn.name}" in "${space.name}"`,
+      metadata: {
+        spaceId,
+        spaceName: space.name,
+        columnId: createdColumn.id,
+        columnName: createdColumn.name,
+        newValue: createdColumn.name,
+      },
+    });
+
+    return createdColumn;
   });
 
   return Response.json(column, { status: 201 });

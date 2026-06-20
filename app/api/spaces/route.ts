@@ -1,5 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { getCurrentUserOr401 } from "@/app/api/spaces/shared";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 const spaceSelect = {
   id: true,
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   const space = await prisma.$transaction(async (tx) => {
-    return tx.collaborativeSpace.create({
+    const createdSpace = await tx.collaborativeSpace.create({
       data: {
         name,
         members: {
@@ -51,6 +52,19 @@ export async function POST(req: Request) {
       },
       select: spaceSelect,
     });
+
+    await createActivityLog(tx, {
+      userId: currentUser.user.id,
+      spaceId: createdSpace.id,
+      type: "space.create",
+      description: `Created space "${createdSpace.name}"`,
+      metadata: {
+        spaceId: createdSpace.id,
+        spaceName: createdSpace.name,
+      },
+    });
+
+    return createdSpace;
   });
 
   return Response.json(space, { status: 201 });

@@ -215,8 +215,10 @@ model ActivityLog {
   taskId      String?  @db.VarChar(36)
   projectId   String?  @db.VarChar(36)
   timeEntryId String?  @db.VarChar(36)
+  spaceId     String?  @db.VarChar(36)
   type        String   @db.VarChar(64)
   description String   @db.Text
+  metadata    Json?
   createdAt   DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -225,6 +227,7 @@ model ActivityLog {
   @@index([taskId])
   @@index([projectId])
   @@index([timeEntryId])
+  @@index([spaceId])
   @@map("activitylog")
 }
 

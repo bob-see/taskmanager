@@ -6,6 +6,7 @@ import {
   requireSpaceOwner,
 } from "@/app/api/spaces/shared";
 import { canSeeUser, scopedVisibleUserWhere } from "@/app/api/users/visibility";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -67,7 +68,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const user = await prisma.user.findFirst({
     where: userId ? { id: userId } : { email },
-    select: { id: true },
+    select: { id: true, name: true, email: true },
   });
 
   if (!user) {
@@ -101,13 +102,36 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const member = await prisma.spaceMember.create({
-    data: {
+  const member = await prisma.$transaction(async (tx) => {
+    const space = await tx.collaborativeSpace.findUniqueOrThrow({
+      where: { id: spaceId },
+      select: { name: true },
+    });
+    const createdMember = await tx.spaceMember.create({
+      data: {
+        spaceId,
+        userId: user.id,
+        role,
+      },
+      select: memberSelect,
+    });
+
+    await createActivityLog(tx, {
+      userId: currentUser.user.id,
       spaceId,
-      userId: user.id,
-      role,
-    },
-    select: memberSelect,
+      type: "space.member_add",
+      description: `Added member "${user.name || user.email}" to "${space.name}"`,
+      metadata: {
+        spaceId,
+        spaceName: space.name,
+        memberId: createdMember.id,
+        memberUserId: user.id,
+        memberName: user.name || user.email,
+        newValue: role,
+      },
+    });
+
+    return createdMember;
   });
 
   return Response.json(member, { status: 201 });

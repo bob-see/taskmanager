@@ -4,6 +4,7 @@ import {
   requireSpaceMember,
   validateRowCellTypeOverride,
 } from "@/app/api/spaces/shared";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string; rowId: string }>;
@@ -77,30 +78,61 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   const existingRow = await prisma.matrixRow.findFirst({
     where: { id: rowId, spaceId },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      isDone: true,
+      space: { select: { name: true } },
+    },
   });
 
   if (!existingRow) {
     return Response.json({ error: "Row not found" }, { status: 404 });
   }
 
-  const row = await prisma.matrixRow.update({
-    where: { id: rowId },
-    data: {
-      ...(hasName ? { name } : {}),
-      ...(hasOrder ? { order } : {}),
-      ...(hasIsDone
-        ? {
-            isDone: body.isDone,
-            doneAt: body.isDone ? (doneAt ?? new Date()) : null,
-          }
-        : hasDoneAt
-          ? { doneAt }
+  const completionChanged =
+    hasIsDone && body.isDone !== existingRow.isDone;
+
+  const row = await prisma.$transaction(async (tx) => {
+    const updatedRow = await tx.matrixRow.update({
+      where: { id: rowId },
+      data: {
+        ...(hasName ? { name } : {}),
+        ...(hasOrder ? { order } : {}),
+        ...(hasIsDone
+          ? {
+              isDone: body.isDone,
+              doneAt: body.isDone ? (doneAt ?? new Date()) : null,
+            }
+          : hasDoneAt
+            ? { doneAt }
+            : {}),
+        ...(hasCellTypeOverride
+          ? { cellTypeOverride: cellTypeOverride?.value ?? null }
           : {}),
-      ...(hasCellTypeOverride
-        ? { cellTypeOverride: cellTypeOverride?.value ?? null }
-        : {}),
-    },
+      },
+    });
+
+    if (completionChanged) {
+      await createActivityLog(tx, {
+        userId: currentUser.user.id,
+        spaceId,
+        type: body.isDone ? "space.item_complete" : "space.item_reopen",
+        description: `${body.isDone ? "Completed" : "Reopened"} item "${updatedRow.name}" in "${existingRow.space.name}"`,
+        metadata: {
+          spaceId,
+          spaceName: existingRow.space.name,
+          rowId,
+          itemId: rowId,
+          rowTitle: updatedRow.name,
+          itemTitle: updatedRow.name,
+          previousValue: existingRow.isDone,
+          newValue: body.isDone,
+        },
+      });
+    }
+
+    return updatedRow;
   });
 
   return Response.json(row);

@@ -3,6 +3,7 @@ import {
   getCurrentUserOr401,
   requireSpaceOwner,
 } from "@/app/api/spaces/shared";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string; memberId: string }>;
@@ -19,7 +20,13 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   const member = await prisma.spaceMember.findFirst({
     where: { id: memberId, spaceId },
-    select: { id: true, role: true, userId: true },
+    select: {
+      id: true,
+      role: true,
+      userId: true,
+      user: { select: { name: true, email: true } },
+      space: { select: { name: true } },
+    },
   });
 
   if (!member) {
@@ -39,8 +46,26 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     }
   }
 
-  await prisma.spaceMember.delete({
-    where: { id: member.id },
+  await prisma.$transaction(async (tx) => {
+    await tx.spaceMember.delete({
+      where: { id: member.id },
+    });
+
+    const memberName = member.user.name || member.user.email;
+    await createActivityLog(tx, {
+      userId: currentUser.user.id,
+      spaceId,
+      type: "space.member_remove",
+      description: `Removed member "${memberName}" from "${member.space.name}"`,
+      metadata: {
+        spaceId,
+        spaceName: member.space.name,
+        memberId: member.id,
+        memberUserId: member.userId,
+        memberName,
+        previousValue: member.role,
+      },
+    });
   });
 
   return Response.json({ ok: true });

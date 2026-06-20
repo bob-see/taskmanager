@@ -4,6 +4,7 @@ import {
   requireSpaceMember,
 } from "@/app/api/spaces/shared";
 import { visibleUserIds } from "@/app/api/users/visibility";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -118,6 +119,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     where: { id: spaceId },
     select: {
       id: true,
+      name: true,
       members: {
         where: { userId: currentUser.user.id },
         select: { role: true },
@@ -136,8 +138,21 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     );
   }
 
-  await prisma.collaborativeSpace.delete({
-    where: { id: spaceId },
+  await prisma.$transaction(async (tx) => {
+    await tx.collaborativeSpace.delete({
+      where: { id: spaceId },
+    });
+
+    await createActivityLog(tx, {
+      userId: currentUser.user.id,
+      spaceId: space.id,
+      type: "space.delete",
+      description: `Deleted space "${space.name}"`,
+      metadata: {
+        spaceId: space.id,
+        spaceName: space.name,
+      },
+    });
   });
 
   return Response.json({ ok: true });

@@ -6,7 +6,14 @@ type ActivityLogCreateData = {
   taskId: string | null;
   projectId: string | null;
   timeEntryId: string | null;
+  spaceId: string | null;
+  metadata?: ActivityLogMetadata;
 };
+
+export type ActivityLogMetadata = Record<
+  string,
+  string | number | boolean | null
+>;
 
 type ActivityLogClient = {
   activityLog: {
@@ -30,7 +37,21 @@ export type ActivityLogType =
   | "time_entry.delete"
   | "profile.create"
   | "profile.update"
-  | "profile.delete";
+  | "profile.delete"
+  | "space.create"
+  | "space.delete"
+  | "space.member_add"
+  | "space.member_remove"
+  | "space.column_create"
+  | "space.column_rename"
+  | "space.column_archive"
+  | "space.column_restore"
+  | "space.column_delete"
+  | "space.item_create"
+  | "space.item_complete"
+  | "space.item_reopen"
+  | "space.item_status_change"
+  | "space.note_add";
 
 export function createActivityLog(
   db: ActivityLogClient,
@@ -42,6 +63,8 @@ export function createActivityLog(
     taskId?: string | null;
     projectId?: string | null;
     timeEntryId?: string | null;
+    spaceId?: string | null;
+    metadata?: ActivityLogMetadata;
   }
 ) {
   return db.activityLog.create({
@@ -53,6 +76,8 @@ export function createActivityLog(
       taskId: data.taskId ?? null,
       projectId: data.projectId ?? null,
       timeEntryId: data.timeEntryId ?? null,
+      spaceId: data.spaceId ?? null,
+      ...(data.metadata ? { metadata: data.metadata } : {}),
     },
   });
 }

@@ -3,6 +3,7 @@ import {
   getCurrentUserOr401,
   requireSpaceMember,
 } from "@/app/api/spaces/shared";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -25,18 +26,39 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const row = await prisma.$transaction(async (tx) => {
+    const space = await tx.collaborativeSpace.findUniqueOrThrow({
+      where: { id: spaceId },
+      select: { name: true },
+    });
     const result = await tx.matrixRow.aggregate({
       where: { spaceId },
       _max: { order: true },
     });
 
-    return tx.matrixRow.create({
+    const createdRow = await tx.matrixRow.create({
       data: {
         spaceId,
         name,
         order: (result._max.order ?? -1) + 1,
       },
     });
+
+    await createActivityLog(tx, {
+      userId: currentUser.user.id,
+      spaceId,
+      type: "space.item_create",
+      description: `Created item "${createdRow.name}" in "${space.name}"`,
+      metadata: {
+        spaceId,
+        spaceName: space.name,
+        rowId: createdRow.id,
+        itemId: createdRow.id,
+        rowTitle: createdRow.name,
+        itemTitle: createdRow.name,
+      },
+    });
+
+    return createdRow;
   });
 
   return Response.json(row, { status: 201 });

@@ -8,6 +8,7 @@ import {
   validateColumnType,
 } from "@/app/api/spaces/shared";
 import { canSeeUser, visibleUserIds } from "@/app/api/users/visibility";
+import { createActivityLog } from "@/app/lib/activity-log";
 
 type Ctx = {
   params: Promise<{ spaceId: string }>;
@@ -55,11 +56,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const [row, column] = await Promise.all([
     prisma.matrixRow.findFirst({
       where: { id: rowId, spaceId },
-      select: { id: true, cellTypeOverride: true },
+      select: {
+        id: true,
+        name: true,
+        cellTypeOverride: true,
+        space: { select: { name: true } },
+      },
     }),
     prisma.matrixColumn.findFirst({
       where: { id: columnId, spaceId, archivedAt: null },
-      select: { id: true, type: true },
+      select: { id: true, name: true, type: true },
     }),
   ]);
 
@@ -76,6 +82,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const data: Record<string, string | number | boolean | Date | null> = {};
   const hasValue = Object.prototype.hasOwnProperty.call(body, "value");
   let parsedValue: ReturnType<typeof parseCellValue> | null = null;
+  let newStatusOption: { id: string; label: string } | null = null;
 
   if (hasValue) {
     parsedValue = parseCellValue(type.value, body?.value);
@@ -118,7 +125,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         id: parsedValue.data.statusOptionId,
         columnId: statusColumnId,
       },
-      select: { id: true },
+      select: { id: true, label: true },
     });
 
     if (!option) {
@@ -127,6 +134,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
         { status: 404 }
       );
     }
+
+    newStatusOption = option;
   }
 
   if (type.value === "user" && parsedValue?.data.userIdValue) {
@@ -172,30 +181,88 @@ export async function PATCH(req: Request, ctx: Ctx) {
     data.userIdValue = assignedUserId;
   }
 
-  const cell = await prisma.matrixCell.upsert({
-    where: {
-      rowId_columnId: {
+  const existingCell = await prisma.matrixCell.findUnique({
+    where: { rowId_columnId: { rowId, columnId } },
+    select: {
+      statusOptionId: true,
+      statusOption: { select: { label: true } },
+    },
+  });
+  const previousStatusOptionId = existingCell?.statusOptionId ?? null;
+  const newStatusOptionId = parsedValue?.data.statusOptionId ?? null;
+  const statusChanged =
+    type.value === "status" &&
+    hasValue &&
+    previousStatusOptionId !== newStatusOptionId;
+
+  const cell = await prisma.$transaction(async (tx) => {
+    const savedCell = await tx.matrixCell.upsert({
+      where: {
+        rowId_columnId: {
+          rowId,
+          columnId,
+        },
+      },
+      create: {
         rowId,
         columnId,
+        ...data,
       },
-    },
-    create: {
-      rowId,
-      columnId,
-      ...data,
-    },
-    update: data,
-  });
-
-  if (newNote) {
-    await prisma.matrixCellNote.create({
-      data: {
-        cellId: cell.id,
-        userId: currentUser.user.id,
-        content: newNote,
-      },
+      update: data,
     });
-  }
+
+    if (newNote) {
+      await tx.matrixCellNote.create({
+        data: {
+          cellId: savedCell.id,
+          userId: currentUser.user.id,
+          content: newNote,
+        },
+      });
+
+      await createActivityLog(tx, {
+        userId: currentUser.user.id,
+        spaceId,
+        type: "space.note_add",
+        description: `Added note to "${row.name}" in "${row.space.name}"`,
+        metadata: {
+          spaceId,
+          spaceName: row.space.name,
+          rowId,
+          itemId: rowId,
+          rowTitle: row.name,
+          itemTitle: row.name,
+          columnId,
+          columnName: column.name,
+        },
+      });
+    }
+
+    if (statusChanged) {
+      const previousValue = existingCell?.statusOption?.label ?? "No status";
+      const newValue = newStatusOption?.label ?? "No status";
+      await createActivityLog(tx, {
+        userId: currentUser.user.id,
+        spaceId,
+        type: "space.item_status_change",
+        description: `Changed status for "${row.name}" in "${row.space.name}"`,
+        metadata: {
+          spaceId,
+          spaceName: row.space.name,
+          rowId,
+          itemId: rowId,
+          rowTitle: row.name,
+          itemTitle: row.name,
+          columnId,
+          columnName: column.name,
+          previousValue,
+          newValue,
+        },
+      });
+    }
+
+    return savedCell;
+  });
 
   const updatedCell = await prisma.matrixCell.findUniqueOrThrow({
     where: { id: cell.id },
