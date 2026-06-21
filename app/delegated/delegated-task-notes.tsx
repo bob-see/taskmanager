@@ -19,11 +19,15 @@ type DelegatedTaskNotesProps = {
   notes: DelegatedTaskNote[];
 };
 
+const noteDateFormatter = new Intl.DateTimeFormat("en-AU", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Australia/Brisbane",
+  hour12: true,
+});
+
 function formatNoteDate(value: Date | string) {
-  return new Date(value).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return noteDateFormatter.format(new Date(value));
 }
 
 function formatUser(user: DelegatedTaskNote["user"]) {

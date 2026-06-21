@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { canAccessLost } from "@/app/lost/access";
+import { NotificationCenter } from "@/app/components/notification-center";
 
 type SidebarProfile = {
   id: string;
@@ -300,6 +301,7 @@ export function AppSidebar({
 
   return (
     <>
+      <NotificationCenter />
       <header className="sticky top-0 z-40 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/95 px-4 py-3 backdrop-blur md:hidden">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
