@@ -7,6 +7,11 @@ export type PrismaTransaction = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
+export const DELEGATED_TRANSACTION_OPTIONS = {
+  maxWait: 5_000,
+  timeout: 20_000,
+} as const;
+
 type CurrentUser = {
   id: string;
   name: string | null;

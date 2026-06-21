@@ -1,6 +1,11 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { readOptionalText } from "@/app/api/delegated/shared";
+import {
+  DELEGATED_TRANSACTION_OPTIONS,
+  readOptionalText,
+  type PrismaTransaction,
+} from "@/app/api/delegated/shared";
+import { createDelegatedTaskNotification } from "@/app/lib/delegated-task-notifications";
 import { prisma } from "@/app/lib/prisma";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -33,6 +38,7 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!note.value) {
     return Response.json({ error: "Note is required" }, { status: 400 });
   }
+  const noteContent = note.value;
 
   const delegatedTask = await prisma.delegatedTask.findUnique({
     where: { id },
@@ -41,6 +47,11 @@ export async function POST(req: Request, ctx: Ctx) {
       taskId: true,
       assignedByUserId: true,
       assignedToUserId: true,
+      task: {
+        select: {
+          title: true,
+        },
+      },
     },
   });
 
@@ -58,22 +69,53 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const createdNote = await prisma.taskNote.create({
-    data: {
-      taskId: delegatedTask.taskId,
-      userId: currentUser.id,
-      content: note.value,
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+  const recipientUserId =
+    delegatedTask.assignedByUserId === currentUser.id
+      ? delegatedTask.assignedToUserId
+      : delegatedTask.assignedByUserId;
+  const targetUrl =
+    delegatedTask.assignedByUserId === currentUser.id
+      ? "/delegated/assigned-to-me"
+      : "/delegated/assigned-by-me";
+
+  const taskNoteId = crypto.randomUUID();
+  const createdNote = await prisma.$transaction(
+    async (tx: PrismaTransaction) => {
+      const taskNote = await tx.taskNote.create({
+        data: {
+          id: taskNoteId,
+          taskId: delegatedTask.taskId,
+          userId: currentUser.id,
+          content: noteContent,
         },
-      },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      await createDelegatedTaskNotification(
+        {
+          event: "note-added",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: delegatedTask.task.title,
+          recipientUserId,
+          actor: currentUser,
+          taskNoteId,
+          targetUrl,
+        },
+        tx
+      );
+
+      return taskNote;
     },
-  });
+    DELEGATED_TRANSACTION_OPTIONS
+  );
 
   return Response.json(createdNote, { status: 201 });
 }

@@ -1,7 +1,13 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
-import { formatUserName, readOptionalText } from "@/app/api/delegated/shared";
+import {
+  DELEGATED_TRANSACTION_OPTIONS,
+  formatUserName,
+  readOptionalText,
+  type PrismaTransaction,
+} from "@/app/api/delegated/shared";
+import { createDelegatedTaskNotification } from "@/app/lib/delegated-task-notifications";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -35,8 +41,14 @@ export async function POST(req: Request, ctx: Ctx) {
     select: {
       id: true,
       status: true,
+      assignedByUserId: true,
       assignedToUserId: true,
       taskId: true,
+      task: {
+        select: {
+          title: true,
+        },
+      },
     },
   });
 
@@ -59,24 +71,35 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   try {
-    const updateResult = await prisma.delegatedTask.updateMany({
-      where: {
-        id: delegatedTask.id,
-        assignedToUserId: currentUser.id,
-        status: "PENDING",
-      },
-      data: {
-        status: "DECLINED",
-        respondedAt: new Date(),
-      },
-    });
+    await prisma.$transaction(async (tx: PrismaTransaction) => {
+      const updateResult = await tx.delegatedTask.updateMany({
+        where: {
+          id: delegatedTask.id,
+          assignedToUserId: currentUser.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "DECLINED",
+          respondedAt: new Date(),
+        },
+      });
 
-    if (updateResult.count !== 1) {
-      return Response.json(
-        { error: "Only pending delegated tasks can be declined" },
-        { status: 409 }
+      if (updateResult.count !== 1) {
+        throw new Error("STALE_DELEGATED_TASK");
+      }
+
+      await createDelegatedTaskNotification(
+        {
+          event: "declined",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: delegatedTask.task.title,
+          recipientUserId: delegatedTask.assignedByUserId,
+          actor: currentUser,
+          reason: reason.value,
+        },
+        tx
       );
-    }
+    }, DELEGATED_TRANSACTION_OPTIONS);
 
     try {
       await prisma.taskNote.createMany({
@@ -111,6 +134,13 @@ export async function POST(req: Request, ctx: Ctx) {
 
     return Response.json(updatedDelegatedTask);
   } catch (error) {
+    if (error instanceof Error && error.message === "STALE_DELEGATED_TASK") {
+      return Response.json(
+        { error: "Only pending delegated tasks can be declined" },
+        { status: 409 }
+      );
+    }
+
     console.error("Delegated task decline failed", {
       delegatedTaskId: delegatedTask.id,
       taskId: delegatedTask.taskId,

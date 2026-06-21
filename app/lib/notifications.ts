@@ -19,7 +19,7 @@ const notificationSelect = {
   },
 } as const;
 
-type NotificationDatabase = Pick<PrismaClient, "notification">;
+export type NotificationDatabase = Pick<PrismaClient, "notification">;
 
 export type CreateNotificationInput = {
   recipientUserId: string;

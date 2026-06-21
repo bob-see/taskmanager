@@ -3,10 +3,12 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getNextTaskOrderIndex } from "@/app/api/p/tasks-shared";
 import { prisma } from "@/app/lib/prisma";
 import {
+  DELEGATED_TRANSACTION_OPTIONS,
   formatUserName,
   readOptionalText,
   type PrismaTransaction,
 } from "@/app/api/delegated/shared";
+import { createDelegatedTaskNotification } from "@/app/lib/delegated-task-notifications";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -58,6 +60,7 @@ export async function POST(req: Request, ctx: Ctx) {
     select: {
       id: true,
       status: true,
+      assignedByUserId: true,
       assignedToUserId: true,
       taskId: true,
       task: {
@@ -200,7 +203,18 @@ export async function POST(req: Request, ctx: Ctx) {
             : []),
         ],
       });
-    });
+
+      await createDelegatedTaskNotification(
+        {
+          event: "accepted",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: delegatedTask.task.title,
+          recipientUserId: delegatedTask.assignedByUserId,
+          actor: currentUser,
+        },
+        tx
+      );
+    }, DELEGATED_TRANSACTION_OPTIONS);
 
     const result = await prisma.delegatedTask.findUniqueOrThrow({
       where: { id: delegatedTask.id },

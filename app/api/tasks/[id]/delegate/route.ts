@@ -2,11 +2,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
 import {
+  DELEGATED_TRANSACTION_OPTIONS,
   formatUserName,
   isUniqueConstraintError,
   readOptionalText,
+  type PrismaTransaction,
   validateDelegationReceiver,
 } from "@/app/api/delegated/shared";
+import { createDelegatedTaskNotification } from "@/app/lib/delegated-task-notifications";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -92,14 +95,34 @@ export async function POST(req: Request, ctx: Ctx) {
   ];
 
   try {
-    const delegatedTask = await prisma.delegatedTask.create({
-      data: {
-        taskId: task.id,
-        assignedByUserId: currentUser.id,
-        assignedToUserId: receiverResult.receiver.id,
-        status: "PENDING",
+    const delegatedTaskId = crypto.randomUUID();
+    const delegatedTask = await prisma.$transaction(
+      async (tx: PrismaTransaction) => {
+        const createdDelegatedTask = await tx.delegatedTask.create({
+          data: {
+            id: delegatedTaskId,
+            taskId: task.id,
+            assignedByUserId: currentUser.id,
+            assignedToUserId: receiverResult.receiver.id,
+            status: "PENDING",
+          },
+        });
+
+        await createDelegatedTaskNotification(
+          {
+            event: "received",
+            delegatedTaskId,
+            taskTitle: task.title,
+            recipientUserId: receiverResult.receiver.id,
+            actor: currentUser,
+          },
+          tx
+        );
+
+        return createdDelegatedTask;
       },
-    });
+      DELEGATED_TRANSACTION_OPTIONS
+    );
 
     try {
       await prisma.taskNote.createMany({
