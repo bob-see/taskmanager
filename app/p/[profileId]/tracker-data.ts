@@ -6,16 +6,52 @@ function serializeDate(value: Date | null) {
   return value ? value.toISOString() : null;
 }
 
+function isMissingRoutineSupportColumnError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false;
+
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    meta?: { column?: unknown };
+  };
+  const errorText = [candidate.message, candidate.meta?.column]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+
+  return candidate.code === "P2022" && errorText.includes("routineSupportEnabled");
+}
+
 export async function getTrackerPageData(profileId: string, email: string) {
-  const profile = await prisma.profile.findFirst({
-    where: {
-      id: profileId,
-      user: {
-        email,
+  let profile;
+
+  try {
+    profile = await prisma.profile.findFirst({
+      where: {
+        id: profileId,
+        user: {
+          email,
+        },
       },
-    },
-    select: { id: true, name: true },
-  });
+      select: { id: true, name: true, routineSupportEnabled: true },
+    });
+  } catch (error) {
+    if (!isMissingRoutineSupportColumnError(error)) throw error;
+
+    // TODO: Remove this temporary compatibility safeguard after every database
+    // has the Profile.routineSupportEnabled column.
+    const fallbackProfile = await prisma.profile.findFirst({
+      where: {
+        id: profileId,
+        user: {
+          email,
+        },
+      },
+      select: { id: true, name: true },
+    });
+    profile = fallbackProfile
+      ? { ...fallbackProfile, routineSupportEnabled: false }
+      : null;
+  }
 
   if (!profile) return notFound();
 

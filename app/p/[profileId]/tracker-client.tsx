@@ -104,7 +104,14 @@ type TrackerClientProps = {
   pageMode: "tracker" | "reporting";
   profileId: string;
   profileName: string;
+  routineSupportEnabled?: boolean;
   initialData?: TrackerInitialData;
+};
+
+const ROUTINE_AFFIRMATIONS: Record<string, string> = {
+  morning: "Starting the day feeling your best.",
+  afternoon: "Strong today. Strong tomorrow.",
+  nighttime: "Taking care of tomorrow’s you.",
 };
 
 type TaskFormState = RepeatFormState & {
@@ -609,6 +616,93 @@ function isTaskRelevantToRange(task: Task, startValue: string, endValue: string)
 
 function getTaskSeriesKey(task: Task) {
   return task.recurrenceSeriesId ? `series:${task.recurrenceSeriesId}` : `task:${task.id}`;
+}
+
+function getRoutineAffirmation(projectName: string) {
+  return ROUTINE_AFFIRMATIONS[projectName.trim().toLocaleLowerCase()] ?? null;
+}
+
+function getRoutineStreak(tasks: Task[], projectId: string, today: string) {
+  const routineTasks = tasks.filter(
+    (task) => task.projectId === projectId && isRecurringTask(task)
+  );
+
+  if (routineTasks.length === 0) return 0;
+
+  const tasksBySeries = new Map<string, Task[]>();
+  for (const task of routineTasks) {
+    const key = getTaskSeriesKey(task);
+    const seriesTasks = tasksBySeries.get(key) ?? [];
+    seriesTasks.push(task);
+    tasksBySeries.set(key, seriesTasks);
+  }
+
+  for (const seriesTasks of tasksBySeries.values()) {
+    seriesTasks.sort((left, right) =>
+      toDateOnly(left.startDate).localeCompare(toDateOnly(right.startDate))
+    );
+  }
+
+  const earliestStart = routineTasks.reduce((earliest, task) => {
+    const start = toDateOnly(task.startDate);
+    return start < earliest ? start : earliest;
+  }, toDateOnly(routineTasks[0].startDate));
+
+  const completedSeriesByDate = new Map<string, Set<string>>();
+  for (const task of routineTasks) {
+    if (!isTaskCompleted(task) || !task.completedOn) continue;
+
+    const completionDate = toDateOnly(task.completedOn);
+    const completedSeries = completedSeriesByDate.get(completionDate) ?? new Set();
+    completedSeries.add(getTaskSeriesKey(task));
+    completedSeriesByDate.set(completionDate, completedSeries);
+  }
+
+  function getExpectedSeries(dateValue: string) {
+    const expected = new Set<string>();
+
+    for (const [seriesKey, seriesTasks] of tasksBySeries) {
+      let representative: Task | undefined;
+      for (let index = seriesTasks.length - 1; index >= 0; index -= 1) {
+        if (toDateOnly(seriesTasks[index].startDate) <= dateValue) {
+          representative = seriesTasks[index];
+          break;
+        }
+      }
+
+      if (representative && isRecurringTaskDueOnDate(representative, dateValue)) {
+        expected.add(seriesKey);
+      }
+    }
+
+    return expected;
+  }
+
+  function isRoutineComplete(dateValue: string, expected: Set<string>) {
+    const completed = completedSeriesByDate.get(dateValue) ?? new Set<string>();
+
+    return [...expected].every((seriesKey) => completed.has(seriesKey));
+  }
+
+  let cursor = today;
+  const todayExpected = getExpectedSeries(today);
+  if (todayExpected.size === 0 || !isRoutineComplete(today, todayExpected)) {
+    cursor = dateInputValue(addDays(parseDateOnly(today), -1));
+  }
+
+  let streak = 0;
+  while (cursor >= earliestStart) {
+    const expected = getExpectedSeries(cursor);
+
+    if (expected.size > 0) {
+      if (!isRoutineComplete(cursor, expected)) break;
+      streak += 1;
+    }
+
+    cursor = dateInputValue(addDays(parseDateOnly(cursor), -1));
+  }
+
+  return streak;
 }
 
 function compareTasksByStartDate(
@@ -2057,6 +2151,7 @@ export function TrackerClient({
   pageMode,
   profileId,
   profileName,
+  routineSupportEnabled = false,
   initialData,
 }: TrackerClientProps) {
   const router = useRouter();
@@ -2729,7 +2824,13 @@ export function TrackerClient({
       ).length,
     })),
   ];
-  const visibleGroupedSections = groupedSections.filter((section) => section.openTasks.length > 0);
+  const visibleGroupedSections = groupedSections.filter(
+    (section) =>
+      section.openTasks.length > 0 ||
+      (routineSupportEnabled &&
+        (taskView === "active" || taskView === "today") &&
+        Boolean(section.project && getRoutineAffirmation(section.project.name)))
+  );
   const visibleDayTaskIds = Array.from(
     new Set(
       (searchActive
@@ -4580,6 +4681,14 @@ export function TrackerClient({
                 <div className="text-sm opacity-60">No matching tasks for this view.</div>
               )}
               {visibleGroupedSections.map((section) => {
+                const routineAffirmation =
+                  routineSupportEnabled && section.project
+                    ? getRoutineAffirmation(section.project.name)
+                    : null;
+                const routineStreak =
+                  routineAffirmation && section.project
+                    ? getRoutineStreak(tasks, section.project.id, todayInputValue())
+                    : null;
                 const subtitle = section.project
                   ? [
                       section.project.category ? `Category ${section.project.category}` : null,
@@ -4675,6 +4784,30 @@ export function TrackerClient({
                             {section.openTasks.length}
                           </span>
                         </div>
+                        {routineAffirmation && (
+                          <div className="tm-routine-support mt-2 rounded-[10px] border px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="tm-routine-support-label text-[10px] font-semibold uppercase leading-none">
+                                Routine note
+                              </span>
+                              <span
+                                className="tm-routine-support-streak shrink-0 border-l pl-2 text-[11px] font-medium leading-none"
+                                aria-label={
+                                  routineStreak
+                                    ? `${routineStreak} day routine streak`
+                                    : "Routine streak ready to begin"
+                                }
+                              >
+                                {routineStreak
+                                  ? `🔥 ${routineStreak} day streak`
+                                  : "🌱 A fresh start"}
+                              </span>
+                            </div>
+                            <p className="mt-1.5 text-sm italic leading-5 text-[color:var(--tm-text)]/80">
+                              {routineAffirmation}
+                            </p>
+                          </div>
+                        )}
                         <div className="tm-muted mt-1 text-xs">{subtitle}</div>
                         {section.project && (
                           <div className="mt-2 max-w-md">

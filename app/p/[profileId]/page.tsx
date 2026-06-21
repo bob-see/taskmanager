@@ -26,6 +26,7 @@ export default async function ProfilePage({ params }: Props) {
         pageMode="tracker"
         profileId={profile.id}
         profileName={profile.name}
+        routineSupportEnabled={profile.routineSupportEnabled}
         initialData={initialData}
       />
     </main>
