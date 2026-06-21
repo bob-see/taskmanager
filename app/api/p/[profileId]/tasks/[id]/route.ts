@@ -372,7 +372,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
         title: data.title ?? existingTask.title,
         category:
           data.category !== undefined ? data.category : existingTask.category,
-        notes: existingTask.notes,
+        // Notes belong to an occurrence, not to the recurrence series.
+        notes: null,
         projectId:
           data.projectId !== undefined ? data.projectId : existingTask.projectId,
         profileId,
@@ -414,7 +415,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           completedOn: null,
           title: nextTaskData.title,
           category: nextTaskData.category,
-          notes: nextTaskData.notes,
+          notes: existingTask.notes,
           projectId: nextTaskData.projectId,
           repeatEnabled: true,
           repeatPattern: nextTaskData.repeatPattern,
@@ -644,7 +645,8 @@ export async function DELETE(_req: Request, ctx: Ctx) {
             await tx.task.create({
               data: {
                 title: task.title,
-                notes: task.notes,
+                // Notes belong to the deleted occurrence and must not roll forward.
+                notes: null,
                 dueAt: null,
                 category: task.category,
                 startDate: nextStartDate,

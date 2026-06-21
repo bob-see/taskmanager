@@ -197,7 +197,8 @@ async function markTaskDone(
   const nextTaskData = {
     title: task.title,
     category: task.category,
-    notes: task.notes,
+    // Notes belong to an occurrence, not to the recurrence series.
+    notes: null,
     projectId: task.projectId,
     profileId: task.profileId,
     orderIndex: await getNextTaskOrderIndex(tx, task.profileId),
@@ -226,7 +227,7 @@ async function markTaskDone(
       completedOn: null,
       title: nextTaskData.title,
       category: nextTaskData.category,
-      notes: nextTaskData.notes,
+      notes: task.notes,
       projectId: nextTaskData.projectId,
       repeatEnabled: true,
       repeatPattern: nextTaskData.repeatPattern,
@@ -344,7 +345,8 @@ async function deleteSingleTask(tx: any, task: TaskRecord) {
     await tx.task.create({
       data: {
         title: task.title,
-        notes: task.notes,
+        // Notes belong to the deleted occurrence and must not roll forward.
+        notes: null,
         dueAt: null,
         category: task.category,
         startDate: nextStartDate,

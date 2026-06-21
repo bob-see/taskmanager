@@ -242,29 +242,21 @@ function formatNoteTimestamp(value: string | Date) {
   });
 }
 
-function getTaskNotesText(task: Pick<OverviewTask, "noteHistory" | "notes">) {
-  if (task.noteHistory.length > 0) {
-    return task.noteHistory
-      .map((note) =>
-        [note.content, note.waitingOn ? `Waiting on: ${note.waitingOn}` : ""]
-          .filter(Boolean)
-          .join("\n")
-      )
-      .join("\n\n");
-  }
-
-  return task.notes ?? "";
+function getTaskNotesText(task: Pick<OverviewTask, "noteHistory">) {
+  return task.noteHistory
+    .map((note) =>
+      [note.content, note.waitingOn ? `Waiting on: ${note.waitingOn}` : ""]
+        .filter(Boolean)
+        .join("\n")
+    )
+    .join("\n\n");
 }
 
-function hasTaskNotes(task: Pick<OverviewTask, "noteHistory" | "notes">) {
+function hasTaskNotes(task: Pick<OverviewTask, "noteHistory">) {
   return getTaskNotesText(task).trim().length > 0;
 }
 
-function formatTaskNotesPreview(task: Pick<OverviewTask, "noteHistory" | "notes">) {
-  if (task.noteHistory.length === 0) {
-    return task.notes?.trim() ?? "";
-  }
-
+function formatTaskNotesPreview(task: Pick<OverviewTask, "noteHistory">) {
   return task.noteHistory
     .map((note) => {
       const author = note.user?.name || "Unknown";
