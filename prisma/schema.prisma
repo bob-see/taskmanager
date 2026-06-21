@@ -147,22 +147,40 @@ model TaskNote {
 }
 
 model Profile {
-  id                    String      @id @default(cuid()) @db.VarChar(36)
-  userId                String?     @db.VarChar(36)
+  id                    String          @id @default(cuid()) @db.VarChar(36)
+  userId                String?         @db.VarChar(36)
   name                  String
   order                 Int
   defaultView           String?
   averageBasis          String?
-  routineSupportEnabled Boolean     @default(false)
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
-  user                  User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routineSupportEnabled Boolean         @default(false)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  user                  User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks                 Task[]
   projects              Project[]
   timeEntries           TimeEntry[]
+  sundayCheckIns        SundayCheckIn[]
 
   @@index([userId])
   @@map("profile")
+}
+
+model SundayCheckIn {
+  id              String   @id @default(cuid()) @db.VarChar(36)
+  profileId       String   @db.VarChar(36)
+  weekStart       DateTime
+  selectedOptions Json
+  reflection      String?  @db.Text
+  completedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, weekStart])
+  @@index([profileId, completedAt])
+  @@map("sundaycheckin")
 }
 
 model Project {

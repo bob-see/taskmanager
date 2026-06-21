@@ -23,6 +23,7 @@ import {
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
+import { SundayCheckIn } from "@/app/components/sunday-check-in";
 import {
   DelegatedSenderBadge,
   DelegatedTaskStatusPill,
@@ -4053,6 +4054,13 @@ export function TrackerClient({
         <div className="rounded-md border border-red-300/60 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
+      )}
+
+      {routineSupportEnabled && (
+        <SundayCheckIn
+          profile={{ id: profileId, name: currentProfileName }}
+          variant="compact"
+        />
       )}
 
       {isReportingPage && viewMode === "day" && (

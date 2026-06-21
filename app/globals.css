@@ -184,6 +184,27 @@ body {
   color: #685943;
 }
 
+.tm-sunday-check-in {
+  border-color: rgba(139, 105, 63, 0.2) !important;
+  background-color: rgba(248, 241, 224, 0.9);
+  background-image:
+    linear-gradient(rgba(139, 105, 63, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 105, 63, 0.045) 1px, transparent 1px);
+  background-size: 18px 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 5px 16px rgba(84, 64, 39, 0.055);
+}
+
+.tm-sunday-streak-chip {
+  border-color: rgba(139, 105, 63, 0.2) !important;
+  background: rgba(251, 245, 232, 0.92);
+  color: #685943;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 3px rgba(84, 64, 39, 0.04);
+}
+
 .tm-choice {
   background: rgba(255, 255, 255, 0.42) !important;
   border-color: var(--tm-border) !important;

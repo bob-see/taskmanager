@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { formatActivityType } from "@/app/lib/activity-log";
 import { prisma } from "@/app/lib/prisma";
+import { isMissingDatabaseObjectError } from "@/app/lib/prisma-errors";
+import {
+  buildSundayCheckInSummary,
+  type SundayCheckInSummary,
+} from "@/app/lib/routine-support-summary";
 import { ActivityFilters } from "@/app/reports/user-activity/activity-filters";
 
 type SearchParams = Promise<{
@@ -118,6 +123,41 @@ function formatTimestamp(value: Date) {
     timeStyle: "short",
     timeZone: REPORT_TIME_ZONE,
   }).format(value);
+}
+
+function dateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function reflectionOptions(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((option): option is string => typeof option === "string")
+    : [];
+}
+
+function RoutineStreaks({
+  streaks,
+}: {
+  streaks: SundayCheckInSummary["routineStreaks"];
+}) {
+  if (streaks.length === 0) {
+    return <p className="text-sm text-[color:var(--tm-muted)]">No routine projects available.</p>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {streaks.map((streak) => (
+        <span
+          key={streak.projectName}
+          className="tm-sunday-streak-chip inline-flex min-h-8 items-center gap-1.5 rounded-[8px] border px-2.5 py-1 text-xs"
+        >
+          <span className="font-medium">{streak.projectName}</span>
+          <span aria-hidden="true" className="opacity-45">·</span>
+          <span className="font-mono font-semibold tabular-nums">{streak.days}d</span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
@@ -253,6 +293,133 @@ export default async function UserActivityPage({
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
   const selectedUser = selectedUserId ? userById.get(selectedUserId) : null;
 
+  let routineProfiles: Array<{
+    id: string;
+    name: string;
+    projects: Array<{ id: string; name: string }>;
+    tasks: Array<{
+      id: string;
+      projectId: string | null;
+      startDate: Date;
+      completedAt: Date | null;
+      completedOn: Date | null;
+      recurrenceSeriesId: string | null;
+      repeatEnabled: boolean;
+      repeatPattern: string | null;
+      repeatDays: number | null;
+      repeatWeeklyDay: number | null;
+      repeatMonthlyDay: number | null;
+      repeatPaused: boolean;
+      repeatPauseUntil: Date | null;
+    }>;
+  }> = [];
+
+  if (selectedUserId) {
+    try {
+      routineProfiles = await prisma.profile.findMany({
+        where: { userId: selectedUserId, routineSupportEnabled: true },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          projects: {
+            where: { archived: false },
+            orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+            select: { id: true, name: true },
+          },
+          tasks: {
+            select: {
+              id: true,
+              projectId: true,
+              startDate: true,
+              completedAt: true,
+              completedOn: true,
+              recurrenceSeriesId: true,
+              repeatEnabled: true,
+              repeatPattern: true,
+              repeatDays: true,
+              repeatWeeklyDay: true,
+              repeatMonthlyDay: true,
+              repeatPaused: true,
+              repeatPauseUntil: true,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      if (!isMissingDatabaseObjectError(error, "routineSupportEnabled", ["P2022"])) {
+        throw error;
+      }
+    }
+  }
+
+  const today = dateKeyInBrisbane(new Date());
+  const currentRoutineSummaries = routineProfiles.map((profile) => ({
+    profileId: profile.id,
+    profileName: profile.name,
+    summary: buildSundayCheckInSummary(
+      profile.tasks,
+      profile.projects,
+      startOfWeekKey(today),
+      today
+    ),
+  }));
+
+  let sundayCheckIns: Array<{
+    id: string;
+    profileId: string;
+    weekStart: Date;
+    selectedOptions: unknown;
+    reflection: string | null;
+    completedAt: Date;
+  }> = [];
+
+  if (routineProfiles.length > 0) {
+    try {
+      sundayCheckIns = await prisma.sundayCheckIn.findMany({
+        where: {
+          profileId: { in: routineProfiles.map((profile) => profile.id) },
+          completedAt: { gte: range.start, lt: range.end },
+        },
+        orderBy: { completedAt: "desc" },
+        select: {
+          id: true,
+          profileId: true,
+          weekStart: true,
+          selectedOptions: true,
+          reflection: true,
+          completedAt: true,
+        },
+      });
+    } catch (error) {
+      if (!isMissingDatabaseObjectError(error, "sundaycheckin", ["P2021"])) {
+        throw error;
+      }
+    }
+  }
+
+  const routineProfileById = new Map(routineProfiles.map((profile) => [profile.id, profile]));
+  const checkInRows = sundayCheckIns.flatMap((checkIn) => {
+    const profile = routineProfileById.get(checkIn.profileId);
+    if (!profile) return [];
+
+    const weekStart = dateKey(checkIn.weekStart);
+    const weekEnd = shiftDateKey(weekStart, 6);
+    return [{
+      ...checkIn,
+      profileName: profile.name,
+      weekStart,
+      weekEnd,
+      options: reflectionOptions(checkIn.selectedOptions),
+      summary: buildSundayCheckInSummary(
+        profile.tasks,
+        profile.projects,
+        weekStart,
+        weekEnd
+      ),
+    }];
+  });
+
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
       <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:py-10 xl:px-8 2xl:px-10">
@@ -294,6 +461,101 @@ export default async function UserActivityPage({
           <Breakdown title="Completion by day" items={completionByDay} emptyLabel="No task completions in this period." />
           <Breakdown title="Completion by project" items={completionByProject} emptyLabel="No task completions in this period." />
         </section>
+
+        {routineProfiles.length > 0 && (
+          <section className="mt-6">
+            <div className="mb-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+                Routine Support
+              </p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">Weekly routines and reflections</h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                A neutral view of routine continuity and the reflections shared during this period.
+              </p>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+              <article className="tm-sunday-check-in rounded-[12px] border p-4 shadow-sm md:p-5">
+                <h3 className="text-base font-semibold">Current routine streaks</h3>
+                <div className="mt-4 space-y-4">
+                  {currentRoutineSummaries.map((profile) => (
+                    <div key={profile.profileId}>
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                        {profile.profileName}
+                      </div>
+                      <RoutineStreaks streaks={profile.summary.routineStreaks} />
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <div className="space-y-3">
+                {checkInRows.length === 0 ? (
+                  <article className="tm-card rounded-[12px] border p-4 text-sm text-[color:var(--tm-muted)] shadow-sm md:p-5">
+                    No Sunday Check-Ins were completed in this date range.
+                  </article>
+                ) : (
+                  checkInRows.map((checkIn) => (
+                    <article key={checkIn.id} className="tm-card rounded-[12px] border p-4 shadow-sm md:p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                            {checkIn.profileName}
+                          </div>
+                          <h3 className="mt-1 text-base font-semibold">
+                            Week of {formatRangeDate(checkIn.weekStart)}
+                          </h3>
+                          <p className="mt-1 text-xs text-[color:var(--tm-muted)]">
+                            Checked in {formatTimestamp(checkIn.completedAt)}
+                          </p>
+                        </div>
+                        <div className="text-right text-xs text-[color:var(--tm-muted)]">
+                          Through {formatRangeDate(checkIn.weekEnd)}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 px-3 py-2.5">
+                          <div className="font-mono text-xl font-semibold tabular-nums">{checkIn.summary.completedTasks}</div>
+                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Tasks completed</div>
+                        </div>
+                        <div className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 px-3 py-2.5">
+                          <div className="text-sm font-semibold">{checkIn.summary.bestCompletionDay?.day ?? "A steady week"}</div>
+                          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                            {checkIn.summary.bestCompletionDay ? `${checkIn.summary.bestCompletionDay.count} completed · best day` : "Best day"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Routine streaks at week end</div>
+                        <RoutineStreaks streaks={checkIn.summary.routineStreaks} />
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Reflection</div>
+                        {checkIn.options.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {checkIn.options.map((option) => (
+                              <span key={option} className="tm-chip inline-flex rounded-full border px-2.5 py-1 text-xs">{option}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-[color:var(--tm-muted)]">No structured reflection selected.</p>
+                        )}
+                        {checkIn.reflection && (
+                          <p className="mt-3 whitespace-pre-wrap rounded-[10px] border border-[color:var(--tm-border)] bg-white/45 px-3 py-2.5 text-sm leading-6">
+                            {checkIn.reflection}
+                          </p>
+                        )}
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="mt-6">
           <div className="mb-3">

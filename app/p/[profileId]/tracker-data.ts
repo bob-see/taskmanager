@@ -1,24 +1,10 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
+import { isMissingDatabaseObjectError } from "@/app/lib/prisma-errors";
 import type { TrackerInitialData } from "@/app/p/[profileId]/tracker-client";
 
 function serializeDate(value: Date | null) {
   return value ? value.toISOString() : null;
-}
-
-function isMissingRoutineSupportColumnError(error: unknown) {
-  if (typeof error !== "object" || error === null) return false;
-
-  const candidate = error as {
-    code?: unknown;
-    message?: unknown;
-    meta?: { column?: unknown };
-  };
-  const errorText = [candidate.message, candidate.meta?.column]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ");
-
-  return candidate.code === "P2022" && errorText.includes("routineSupportEnabled");
 }
 
 export async function getTrackerPageData(profileId: string, email: string) {
@@ -35,7 +21,9 @@ export async function getTrackerPageData(profileId: string, email: string) {
       select: { id: true, name: true, routineSupportEnabled: true },
     });
   } catch (error) {
-    if (!isMissingRoutineSupportColumnError(error)) throw error;
+    if (!isMissingDatabaseObjectError(error, "routineSupportEnabled", ["P2022"])) {
+      throw error;
+    }
 
     // TODO: Remove this temporary compatibility safeguard after every database
     // has the Profile.routineSupportEnabled column.

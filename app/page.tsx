@@ -3,12 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SundayCheckIn } from "@/app/components/sunday-check-in";
 
 type Profile = {
   id: string;
   name: string;
   order: number;
   createdAt: string;
+  routineSupportEnabled: boolean;
 };
 
 type HomeTask = {
@@ -375,6 +377,7 @@ export default function Home() {
     { label: "Due soon", value: snapshot.dueSoon },
     { label: "Overdue", value: snapshot.overdue },
   ];
+  const routineProfile = profiles.find((profile) => profile.routineSupportEnabled);
 
   return (
     <main className="min-h-screen bg-white text-gray-900">
@@ -430,6 +433,12 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {routineProfile && (
+          <div className="mt-4 w-full max-w-4xl sm:mt-5">
+            <SundayCheckIn profile={routineProfile} />
+          </div>
+        )}
 
         {/* Profiles */}
         <section className="mt-6 w-full sm:mt-10 md:mt-12">

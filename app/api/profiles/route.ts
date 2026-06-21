@@ -1,7 +1,9 @@
 import { prisma } from "@/app/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { createActivityLog } from "@/app/lib/activity-log";
+import { isMissingDatabaseObjectError } from "@/app/lib/prisma-errors";
 
 const profileSelect = {
   id: true,
@@ -22,15 +24,39 @@ export async function GET() {
 
   const email = session.user.email;
 
-  const profiles = await prisma.profile.findMany({
-    where: {
-      user: {
-        email,
+  let profiles;
+
+  try {
+    profiles = await prisma.profile.findMany({
+      where: {
+        user: {
+          email,
+        },
       },
-    },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: profileSelect,
-  });
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { ...profileSelect, routineSupportEnabled: true },
+    });
+  } catch (error) {
+    if (!isMissingDatabaseObjectError(error, "routineSupportEnabled", ["P2022"])) {
+      throw error;
+    }
+
+    // TODO: Remove this temporary compatibility safeguard after every database
+    // has the Profile.routineSupportEnabled column.
+    const fallbackProfiles = await prisma.profile.findMany({
+      where: {
+        user: {
+          email,
+        },
+      },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: profileSelect,
+    });
+    profiles = fallbackProfiles.map((profile) => ({
+      ...profile,
+      routineSupportEnabled: false,
+    }));
+  }
 
   return Response.json(profiles);
 }
@@ -50,7 +76,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const profile = await prisma.$transaction(async (tx: any) => {
+  const profile = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const user = await tx.user.findUnique({
       where: { email },
       select: { id: true },
@@ -84,7 +110,7 @@ export async function POST(req: Request) {
       },
     });
 
-    await createActivityLog(tx as any, {
+    await createActivityLog(tx, {
       userId: user.id,
       profileId: createdProfile.id,
       type: "profile.create",
