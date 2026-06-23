@@ -98,6 +98,7 @@ export async function getTrackerPageData(profileId: string, email: string) {
         recurrenceSeriesId: true,
         repeatEnabled: true,
         repeatPattern: true,
+        repeatInterval: true,
         repeatDays: true,
         repeatWeeklyDay: true,
         repeatMonthlyDay: true,

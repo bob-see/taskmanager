@@ -113,6 +113,7 @@ export async function GET(req: Request) {
         recurrenceSeriesId: true,
         repeatEnabled: true,
         repeatPattern: true,
+        repeatInterval: true,
         repeatDays: true,
         repeatWeeklyDay: true,
         repeatMonthlyDay: true,

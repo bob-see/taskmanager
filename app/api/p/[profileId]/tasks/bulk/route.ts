@@ -32,6 +32,7 @@ type TaskRecord = {
   recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
   repeatPattern: "daily" | "weekly" | "monthly" | null;
+  repeatInterval: number;
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
@@ -54,6 +55,7 @@ const TASK_SELECT = {
   recurrenceSeriesId: true,
   repeatEnabled: true,
   repeatPattern: true,
+  repeatInterval: true,
   repeatDays: true,
   repeatWeeklyDay: true,
   repeatMonthlyDay: true,
@@ -180,6 +182,7 @@ async function markTaskDone(
   const nextStartDate = nextOccurrenceAfterPause({
     baseDate: completedOn,
     recurrenceType: task.repeatPattern,
+    repeatInterval: task.repeatInterval,
     repeatDays: task.repeatDays,
     weeklyDay: task.repeatWeeklyDay,
     monthlyDay: task.repeatMonthlyDay,
@@ -207,6 +210,7 @@ async function markTaskDone(
     dueAt: null,
     repeatEnabled: task.repeatEnabled,
     repeatPattern: task.repeatPattern,
+    repeatInterval: task.repeatInterval,
     repeatDays: task.repeatDays,
     repeatWeeklyDay: task.repeatWeeklyDay,
     repeatMonthlyDay: task.repeatMonthlyDay,
@@ -231,6 +235,7 @@ async function markTaskDone(
       projectId: nextTaskData.projectId,
       repeatEnabled: true,
       repeatPattern: nextTaskData.repeatPattern,
+      repeatInterval: nextTaskData.repeatInterval,
       repeatDays: nextTaskData.repeatDays,
       repeatWeeklyDay: nextTaskData.repeatWeeklyDay,
       repeatMonthlyDay: nextTaskData.repeatMonthlyDay,
@@ -317,6 +322,7 @@ async function deleteSingleTask(tx: any, task: TaskRecord) {
   const nextStartDate = nextOccurrenceAfterPause({
     baseDate: task.startDate,
     recurrenceType: task.repeatPattern,
+    repeatInterval: task.repeatInterval,
     repeatDays: task.repeatDays,
     weeklyDay: task.repeatWeeklyDay,
     monthlyDay: task.repeatMonthlyDay,
@@ -356,6 +362,7 @@ async function deleteSingleTask(tx: any, task: TaskRecord) {
         recurrenceSeriesId: task.recurrenceSeriesId,
         repeatEnabled: task.repeatEnabled,
         repeatPattern: task.repeatPattern,
+        repeatInterval: task.repeatInterval,
         repeatDays: task.repeatDays,
         repeatWeeklyDay: task.repeatWeeklyDay,
         repeatMonthlyDay: task.repeatMonthlyDay,

@@ -110,6 +110,7 @@ model Task {
   recurrenceSeriesId String?   @db.VarChar(36)
   repeatEnabled      Boolean   @default(false)
   repeatPattern      String?
+  repeatInterval     Int       @default(1)
   repeatDays         Int?
   repeatWeeklyDay    Int?
   repeatMonthlyDay   Int?

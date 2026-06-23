@@ -59,6 +59,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       isPriority: true,
       repeatEnabled: true,
       repeatPattern: true,
+      repeatInterval: true,
       repeatDays: true,
       repeatWeeklyDay: true,
       repeatMonthlyDay: true,
@@ -85,6 +86,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     isPriority?: boolean;
     repeatEnabled?: boolean;
     repeatPattern?: string | null;
+    repeatInterval?: number;
     repeatDays?: number | null;
     repeatWeeklyDay?: number | null;
     repeatMonthlyDay?: number | null;
@@ -170,6 +172,14 @@ export async function PATCH(req: Request, ctx: Ctx) {
   );
   if (repeatDays.error) return repeatDays.error;
 
+  const repeatInterval = parseOptionalIntInput(
+    body?.repeatInterval,
+    "repeatInterval",
+    1,
+    365
+  );
+  if (repeatInterval.error) return repeatInterval.error;
+
   const repeatWeeklyDay = parseOptionalIntInput(
     body?.repeatWeeklyDay,
     "repeatWeeklyDay",
@@ -210,6 +220,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const repeatFieldsTouched =
     body?.repeatEnabled !== undefined ||
     body?.repeatPattern !== undefined ||
+    body?.repeatInterval !== undefined ||
     body?.repeatDays !== undefined ||
     body?.repeatWeeklyDay !== undefined ||
     body?.repeatMonthlyDay !== undefined;
@@ -218,6 +229,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const normalizedRepeat = normalizeRepeatSettings({
       repeatEnabled: repeatEnabled.value ?? existingTask.repeatEnabled,
       repeatPattern: repeatPattern.value ?? existingTask.repeatPattern,
+      repeatInterval: repeatInterval.value ?? existingTask.repeatInterval,
       repeatDays: repeatDays.value ?? existingTask.repeatDays,
       repeatWeeklyDay: repeatWeeklyDay.value ?? existingTask.repeatWeeklyDay,
       repeatMonthlyDay: repeatMonthlyDay.value ?? existingTask.repeatMonthlyDay,
@@ -227,6 +239,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     data.repeatEnabled = normalizedRepeat.value?.repeatEnabled;
     data.repeatPattern = normalizedRepeat.value?.repeatPattern ?? null;
+    data.repeatInterval = normalizedRepeat.value?.repeatInterval;
     data.repeatDays = normalizedRepeat.value?.repeatDays ?? null;
     data.repeatWeeklyDay = normalizedRepeat.value?.repeatWeeklyDay ?? null;
     data.repeatMonthlyDay = normalizedRepeat.value?.repeatMonthlyDay ?? null;
@@ -271,6 +284,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const finalRepeat = normalizeRepeatSettings({
     repeatEnabled: data.repeatEnabled ?? existingTask.repeatEnabled,
     repeatPattern: data.repeatPattern ?? existingTask.repeatPattern,
+    repeatInterval: data.repeatInterval ?? existingTask.repeatInterval,
     repeatDays: data.repeatDays ?? existingTask.repeatDays,
     repeatWeeklyDay: data.repeatWeeklyDay ?? existingTask.repeatWeeklyDay,
     repeatMonthlyDay: data.repeatMonthlyDay ?? existingTask.repeatMonthlyDay,
@@ -351,6 +365,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       const nextStartDate = nextOccurrenceAfterPause({
         baseDate: completedOn,
         recurrenceType: finalRepeat.value.repeatPattern,
+        repeatInterval: finalRepeat.value.repeatInterval,
         repeatDays: finalRepeat.value.repeatDays,
         weeklyDay: finalRepeat.value.repeatWeeklyDay,
         monthlyDay: finalRepeat.value.repeatMonthlyDay,
@@ -383,6 +398,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         dueAt: null,
         repeatEnabled: finalRepeat.value.repeatEnabled,
         repeatPattern: finalRepeat.value.repeatPattern,
+        repeatInterval: finalRepeat.value.repeatInterval,
         repeatDays: finalRepeat.value.repeatDays,
         repeatWeeklyDay: finalRepeat.value.repeatWeeklyDay,
         repeatMonthlyDay: finalRepeat.value.repeatMonthlyDay,
@@ -419,6 +435,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           projectId: nextTaskData.projectId,
           repeatEnabled: true,
           repeatPattern: nextTaskData.repeatPattern,
+          repeatInterval: nextTaskData.repeatInterval,
           repeatDays: nextTaskData.repeatDays,
           repeatWeeklyDay: nextTaskData.repeatWeeklyDay,
           repeatMonthlyDay: nextTaskData.repeatMonthlyDay,
@@ -573,6 +590,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
       recurrenceSeriesId: true,
       repeatEnabled: true,
       repeatPattern: true,
+      repeatInterval: true,
       repeatDays: true,
       repeatWeeklyDay: true,
       repeatMonthlyDay: true,
@@ -620,6 +638,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
         const nextStartDate = nextOccurrenceAfterPause({
           baseDate: task.startDate,
           recurrenceType: task.repeatPattern as "daily" | "weekly" | "monthly",
+          repeatInterval: task.repeatInterval,
           repeatDays: task.repeatDays,
           weeklyDay: task.repeatWeeklyDay,
           monthlyDay: task.repeatMonthlyDay,
@@ -656,6 +675,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
                 recurrenceSeriesId: task.recurrenceSeriesId,
                 repeatEnabled: task.repeatEnabled,
                 repeatPattern: task.repeatPattern,
+                repeatInterval: task.repeatInterval,
                 repeatDays: task.repeatDays,
                 repeatWeeklyDay: task.repeatWeeklyDay,
                 repeatMonthlyDay: task.repeatMonthlyDay,

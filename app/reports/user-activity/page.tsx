@@ -306,6 +306,7 @@ export default async function UserActivityPage({
       recurrenceSeriesId: string | null;
       repeatEnabled: boolean;
       repeatPattern: string | null;
+      repeatInterval: number | null;
       repeatDays: number | null;
       repeatWeeklyDay: number | null;
       repeatMonthlyDay: number | null;
@@ -337,6 +338,7 @@ export default async function UserActivityPage({
               recurrenceSeriesId: true,
               repeatEnabled: true,
               repeatPattern: true,
+              repeatInterval: true,
               repeatDays: true,
               repeatWeeklyDay: true,
               repeatMonthlyDay: true,

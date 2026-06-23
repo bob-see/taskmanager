@@ -3,6 +3,8 @@ import { prisma } from "@/app/lib/prisma";
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const REPEAT_PATTERNS = ["daily", "weekly", "monthly"] as const;
 export const ALL_REPEAT_DAYS_MASK = 0b1111111;
+export const DEFAULT_REPEAT_INTERVAL = 1;
+export const MAX_REPEAT_INTERVAL = 365;
 export const TASK_ORDER_GAP = 10;
 export const PROJECT_ORDER_GAP = 10;
 
@@ -219,6 +221,7 @@ export function addDays(date: Date, amount: number) {
 export function normalizeRepeatSettings(input: {
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | string | null;
+  repeatInterval: number | null;
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
@@ -227,6 +230,7 @@ export function normalizeRepeatSettings(input: {
   value?: {
     repeatEnabled: boolean;
     repeatPattern: RepeatPattern | null;
+    repeatInterval: number;
     repeatDays: number | null;
     repeatWeeklyDay: number | null;
     repeatMonthlyDay: number | null;
@@ -238,6 +242,7 @@ export function normalizeRepeatSettings(input: {
       value: {
         repeatEnabled: false,
         repeatPattern: null,
+        repeatInterval: DEFAULT_REPEAT_INTERVAL,
         repeatDays: null,
         repeatWeeklyDay: null,
         repeatMonthlyDay: null,
@@ -249,6 +254,20 @@ export function normalizeRepeatSettings(input: {
     return {
       error: Response.json(
         { error: `repeatPattern must be one of: ${REPEAT_PATTERNS.join(", ")}` },
+        { status: 400 }
+      ),
+    };
+  }
+
+  const repeatInterval = input.repeatInterval ?? DEFAULT_REPEAT_INTERVAL;
+  if (
+    !Number.isInteger(repeatInterval) ||
+    repeatInterval < 1 ||
+    repeatInterval > MAX_REPEAT_INTERVAL
+  ) {
+    return {
+      error: Response.json(
+        { error: `repeatInterval must be between 1 and ${MAX_REPEAT_INTERVAL}` },
         { status: 400 }
       ),
     };
@@ -269,6 +288,7 @@ export function normalizeRepeatSettings(input: {
       value: {
         repeatEnabled: true,
         repeatPattern: "daily",
+        repeatInterval,
         repeatDays,
         repeatWeeklyDay: null,
         repeatMonthlyDay: null,
@@ -295,6 +315,7 @@ export function normalizeRepeatSettings(input: {
       value: {
         repeatEnabled: true,
         repeatPattern: "weekly",
+        repeatInterval,
         repeatDays: getRepeatDayBit(repeatWeeklyDay),
         repeatWeeklyDay,
         repeatMonthlyDay: null,
@@ -317,6 +338,7 @@ export function normalizeRepeatSettings(input: {
     value: {
       repeatEnabled: true,
       repeatPattern: "monthly",
+      repeatInterval,
       repeatDays: null,
       repeatWeeklyDay: null,
       repeatMonthlyDay,
@@ -327,19 +349,24 @@ export function normalizeRepeatSettings(input: {
 export function nextOccurrenceDate(input: {
   baseDate: Date;
   recurrenceType: RepeatPattern;
+  repeatInterval?: number | null;
   repeatDays: number | null;
   weeklyDay: number | null;
   monthlyDay: number | null;
 }) {
   const currentDate = getDateOnly(input.baseDate);
+  const repeatInterval = Math.max(
+    DEFAULT_REPEAT_INTERVAL,
+    input.repeatInterval ?? DEFAULT_REPEAT_INTERVAL
+  );
   let nextDate: Date;
 
   if (input.recurrenceType === "daily") {
     const repeatDays = input.repeatDays ?? ALL_REPEAT_DAYS_MASK;
-    nextDate = addDays(currentDate, 1);
+    nextDate = addDays(currentDate, repeatInterval);
 
     while (!matchesRepeatDays(nextDate, repeatDays)) {
-      nextDate = addDays(nextDate, 1);
+      nextDate = addDays(nextDate, repeatInterval);
     }
   } else if (input.recurrenceType === "weekly") {
     const targetWeekday =
@@ -348,13 +375,13 @@ export function nextOccurrenceDate(input: {
       getWeekdayNumber(currentDate);
     let diff = targetWeekday - getWeekdayNumber(currentDate);
     if (diff <= 0) {
-      diff += 7;
+      diff += 7 * repeatInterval;
     }
 
     nextDate = addDays(currentDate, diff);
   } else {
     const targetDay = input.monthlyDay ?? currentDate.getDate();
-    const nextMonth = currentDate.getMonth() + 1;
+    const nextMonth = currentDate.getMonth() + repeatInterval;
     const year = currentDate.getFullYear() + Math.floor(nextMonth / 12);
     const month = ((nextMonth % 12) + 12) % 12;
     const maxDay = new Date(year, month + 1, 0).getDate();
@@ -388,6 +415,7 @@ export function isRepeatPausedOnDate(input: {
 export function nextOccurrenceAfterPause(input: {
   baseDate: Date;
   recurrenceType: RepeatPattern;
+  repeatInterval?: number | null;
   repeatDays: number | null;
   weeklyDay: number | null;
   monthlyDay: number | null;

@@ -9,6 +9,7 @@ export type RoutineSummaryTask = {
   recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
   repeatPattern: string | null;
+  repeatInterval: number | null;
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
@@ -57,6 +58,28 @@ function matchesRepeatDays(value: string, repeatDays: number | null) {
   return (mask & repeatDayBit(weekdayNumber(value))) !== 0;
 }
 
+function dayDifference(left: string, right: string) {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor(
+    (parseDateValue(left).getTime() - parseDateValue(right).getTime()) /
+      millisecondsPerDay
+  );
+}
+
+function monthDifference(left: string, right: string) {
+  const leftDate = parseDateValue(left);
+  const rightDate = parseDateValue(right);
+  return (
+    (leftDate.getUTCFullYear() - rightDate.getUTCFullYear()) * 12 +
+    leftDate.getUTCMonth() -
+    rightDate.getUTCMonth()
+  );
+}
+
+function repeatInterval(task: RoutineSummaryTask) {
+  return Math.max(1, task.repeatInterval ?? 1);
+}
+
 function isRecurringTask(task: RoutineSummaryTask) {
   return Boolean(task.recurrenceSeriesId || task.repeatEnabled || task.repeatPattern);
 }
@@ -77,18 +100,26 @@ function isRecurringTaskDueOnDate(task: RoutineSummaryTask, value: string) {
   if (dateValue(task.startDate) > value) return false;
 
   if (task.repeatPattern === "daily") {
-    return matchesRepeatDays(value, task.repeatDays);
+    return (
+      dayDifference(value, dateValue(task.startDate)) % repeatInterval(task) === 0 &&
+      matchesRepeatDays(value, task.repeatDays)
+    );
   }
 
   if (task.repeatPattern === "weekly") {
     const repeatDays =
       task.repeatDays ??
       (task.repeatWeeklyDay ? repeatDayBit(task.repeatWeeklyDay) : null);
-    return matchesRepeatDays(value, repeatDays);
+    return (
+      Math.floor(dayDifference(value, dateValue(task.startDate)) / 7) %
+        repeatInterval(task) ===
+        0 && matchesRepeatDays(value, repeatDays)
+    );
   }
 
   if (task.repeatPattern === "monthly") {
     return (
+      monthDifference(value, dateValue(task.startDate)) % repeatInterval(task) === 0 &&
       parseDateValue(value).getUTCDate() ===
       (task.repeatMonthlyDay ?? task.startDate.getUTCDate())
     );

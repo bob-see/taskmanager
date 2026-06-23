@@ -142,6 +142,14 @@ export async function POST(req: Request, ctx: Ctx) {
   );
   if (repeatDays.error) return repeatDays.error;
 
+  const repeatInterval = parseOptionalIntInput(
+    body?.repeatInterval,
+    "repeatInterval",
+    1,
+    365
+  );
+  if (repeatInterval.error) return repeatInterval.error;
+
   const repeatWeeklyDay = parseOptionalIntInput(
     body?.repeatWeeklyDay,
     "repeatWeeklyDay",
@@ -176,6 +184,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const normalizedRepeat = normalizeRepeatSettings({
     repeatEnabled: repeatEnabled.value ?? false,
     repeatPattern: repeatPattern.value ?? null,
+    repeatInterval: repeatInterval.value ?? null,
     repeatDays: repeatDays.value ?? null,
     repeatWeeklyDay: repeatWeeklyDay.value ?? null,
     repeatMonthlyDay: repeatMonthlyDay.value ?? null,

@@ -63,6 +63,7 @@ type Task = {
   recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | null;
+  repeatInterval: number;
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
@@ -464,6 +465,24 @@ function toDateOnly(value: string | null) {
   return value ? dateInputValue(new Date(value)) : "";
 }
 
+function dayDifference(left: string, right: string) {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor(
+    (parseDateOnly(left).getTime() - parseDateOnly(right).getTime()) /
+      millisecondsPerDay
+  );
+}
+
+function monthDifference(left: string, right: string) {
+  const leftDate = parseDateOnly(left);
+  const rightDate = parseDateOnly(right);
+  return (
+    (leftDate.getFullYear() - rightDate.getFullYear()) * 12 +
+    leftDate.getMonth() -
+    rightDate.getMonth()
+  );
+}
+
 function isSameDateValue(value: string | null, dateValue: string) {
   return toDateOnly(value) === dateValue;
 }
@@ -474,6 +493,7 @@ function createRepeatDefaults(dateValue: string): RepeatFormState {
   return {
     repeatEnabled: false,
     repeatPattern: "daily",
+    repeatInterval: 1,
     repeatDays: ALL_REPEAT_DAYS_MASK,
     repeatWeeklyDay,
     repeatMonthlyDay: getDayOfMonth(dateValue),
@@ -482,8 +502,10 @@ function createRepeatDefaults(dateValue: string): RepeatFormState {
 
 function getRepeatSummary(task: Task) {
   if (!task.repeatEnabled || !task.repeatPattern) return null;
+  const interval = Math.max(1, task.repeatInterval ?? 1);
 
   if (task.repeatPattern === "daily") {
+    if (interval > 1) return `Repeats every ${interval} days`;
     return `Repeats ${formatRepeatDays(task.repeatDays ?? ALL_REPEAT_DAYS_MASK)}`;
   }
 
@@ -491,9 +513,14 @@ function getRepeatSummary(task: Task) {
     const repeatDays =
       task.repeatDays ??
       (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : getRepeatDayBit(1));
+    if (interval === 2) return `Repeats fortnightly on ${formatRepeatDays(repeatDays)}`;
+    if (interval > 1) return `Repeats every ${interval} weeks on ${formatRepeatDays(repeatDays)}`;
     return `Repeats weekly on ${formatRepeatDays(repeatDays)}`;
   }
 
+  if (interval > 1) {
+    return `Repeats every ${interval} months on day ${task.repeatMonthlyDay ?? 1}`;
+  }
   return `Repeats monthly on day ${task.repeatMonthlyDay ?? 1}`;
 }
 
@@ -569,18 +596,32 @@ function isRecurringTaskDueOnDate(task: Task, dateValue: string) {
   if (!isTaskActiveOnDate(task, dateValue)) return false;
 
   if (task.repeatPattern === "daily") {
-    return matchesRepeatDays(dateValue, task.repeatDays);
+    return (
+      dayDifference(dateValue, toDateOnly(task.startDate)) %
+        Math.max(1, task.repeatInterval ?? 1) ===
+        0 && matchesRepeatDays(dateValue, task.repeatDays)
+    );
   }
 
   if (task.repeatPattern === "weekly") {
     const repeatDays =
       task.repeatDays ??
       (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : null);
-    return matchesRepeatDays(dateValue, repeatDays);
+    return (
+      Math.floor(dayDifference(dateValue, toDateOnly(task.startDate)) / 7) %
+        Math.max(1, task.repeatInterval ?? 1) ===
+        0 && matchesRepeatDays(dateValue, repeatDays)
+    );
   }
 
   if (task.repeatPattern === "monthly") {
-    return getDayOfMonth(dateValue) === (task.repeatMonthlyDay ?? getDayOfMonth(toDateOnly(task.startDate)));
+    return (
+      monthDifference(dateValue, toDateOnly(task.startDate)) %
+        Math.max(1, task.repeatInterval ?? 1) ===
+        0 &&
+      getDayOfMonth(dateValue) ===
+        (task.repeatMonthlyDay ?? getDayOfMonth(toDateOnly(task.startDate)))
+    );
   }
 
   return true;
@@ -1353,6 +1394,7 @@ function normalizeTask(task: Task): Task {
     ...task,
     delegatedTask: task.delegatedTask ?? null,
     noteHistory: task.noteHistory ?? [],
+    repeatInterval: task.repeatInterval ?? 1,
     repeatPaused: task.repeatPaused ?? false,
     repeatPauseUntil: task.repeatPauseUntil ?? null,
     repeatPauseNote: task.repeatPauseNote ?? null,
@@ -2953,6 +2995,7 @@ export function TrackerClient({
           projectId: form.projectId || null,
           repeatEnabled: form.repeatEnabled,
           repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
+          repeatInterval: form.repeatEnabled ? form.repeatInterval : 1,
           repeatDays:
             form.repeatEnabled &&
             (form.repeatPattern === "daily" || form.repeatPattern === "weekly")
@@ -3699,6 +3742,7 @@ export function TrackerClient({
         projectId: editTaskForm.projectId || null,
         repeatEnabled: editTaskForm.repeatEnabled,
         repeatPattern: editTaskForm.repeatEnabled ? editTaskForm.repeatPattern : null,
+        repeatInterval: editTaskForm.repeatEnabled ? editTaskForm.repeatInterval : 1,
         repeatDays:
           editTaskForm.repeatEnabled &&
           (editTaskForm.repeatPattern === "daily" ||

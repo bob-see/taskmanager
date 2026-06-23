@@ -1,0 +1,2 @@
+ALTER TABLE `task`
+  ADD COLUMN `repeatInterval` INTEGER NOT NULL DEFAULT 1;

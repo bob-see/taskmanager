@@ -61,6 +61,7 @@ type OverviewTask = {
   recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | null;
+  repeatInterval: number;
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
@@ -213,6 +214,24 @@ function matchesRepeatDays(dateValue: string, repeatDays: number | null | undefi
   return (mask & getRepeatDayBit(getWeekdayNumber(dateValue))) !== 0;
 }
 
+function dayDifference(left: string, right: string) {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor(
+    (parseDateOnly(left).getTime() - parseDateOnly(right).getTime()) /
+      millisecondsPerDay
+  );
+}
+
+function monthDifference(left: string, right: string) {
+  const leftDate = parseDateOnly(left);
+  const rightDate = parseDateOnly(right);
+  return (
+    (leftDate.getFullYear() - rightDate.getFullYear()) * 12 +
+    leftDate.getMonth() -
+    rightDate.getMonth()
+  );
+}
+
 function createTempId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -276,6 +295,7 @@ function normalizeOverviewTask(task: OverviewTask): OverviewTask {
     ...task,
     delegatedTask: task.delegatedTask ?? null,
     noteHistory: task.noteHistory ?? [],
+    repeatInterval: task.repeatInterval ?? 1,
     repeatPaused: task.repeatPaused ?? false,
     repeatPauseUntil: task.repeatPauseUntil ?? null,
     repeatPauseNote: task.repeatPauseNote ?? null,
@@ -534,18 +554,31 @@ function isRecurringOverviewTaskDueOnDate(task: OverviewTask, dateValue: string)
   if (task.startDate > dateValue) return false;
 
   if (task.repeatPattern === "daily") {
-    return matchesRepeatDays(dateValue, task.repeatDays);
+    return (
+      dayDifference(dateValue, task.startDate) % Math.max(1, task.repeatInterval ?? 1) ===
+        0 && matchesRepeatDays(dateValue, task.repeatDays)
+    );
   }
 
   if (task.repeatPattern === "weekly") {
     const repeatDays =
       task.repeatDays ??
       (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : null);
-    return matchesRepeatDays(dateValue, repeatDays);
+    return (
+      Math.floor(dayDifference(dateValue, task.startDate) / 7) %
+        Math.max(1, task.repeatInterval ?? 1) ===
+        0 && matchesRepeatDays(dateValue, repeatDays)
+    );
   }
 
   if (task.repeatPattern === "monthly") {
-    return getDayOfMonth(dateValue) === (task.repeatMonthlyDay ?? getDayOfMonth(task.startDate));
+    return (
+      monthDifference(dateValue, task.startDate) %
+        Math.max(1, task.repeatInterval ?? 1) ===
+        0 &&
+      getDayOfMonth(dateValue) ===
+        (task.repeatMonthlyDay ?? getDayOfMonth(task.startDate))
+    );
   }
 
   return true;
@@ -1091,6 +1124,7 @@ function ProfileCard({
         projectId: string | null;
         repeatEnabled: boolean;
         repeatPattern: RepeatPattern | null;
+        repeatInterval: number;
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
@@ -1127,6 +1161,7 @@ function ProfileCard({
         recurrenceSeriesId: createdTask.recurrenceSeriesId,
         repeatEnabled: createdTask.repeatEnabled,
         repeatPattern: createdTask.repeatPattern,
+        repeatInterval: createdTask.repeatInterval ?? 1,
         repeatDays: createdTask.repeatDays,
         repeatWeeklyDay: createdTask.repeatWeeklyDay,
         repeatMonthlyDay: createdTask.repeatMonthlyDay,
@@ -1516,6 +1551,7 @@ function ProfileCard({
         recurrenceSeriesId: string | null;
         repeatEnabled: boolean;
         repeatPattern: RepeatPattern | null;
+        repeatInterval: number;
         repeatDays: number | null;
         repeatWeeklyDay: number | null;
         repeatMonthlyDay: number | null;
@@ -1621,6 +1657,7 @@ function ProfileCard({
         projectId: editTaskForm.projectId || null,
         repeatEnabled: editTaskForm.repeatEnabled,
         repeatPattern: editTaskForm.repeatEnabled ? editTaskForm.repeatPattern : null,
+        repeatInterval: editTaskForm.repeatEnabled ? editTaskForm.repeatInterval : 1,
         repeatDays:
           editTaskForm.repeatEnabled &&
           (editTaskForm.repeatPattern === "daily" ||
@@ -1670,6 +1707,7 @@ function ProfileCard({
                   recurrenceSeriesId: savedTask.recurrenceSeriesId,
                   repeatEnabled: savedTask.repeatEnabled,
                   repeatPattern: savedTask.repeatPattern,
+                  repeatInterval: savedTask.repeatInterval ?? 1,
                   repeatDays: savedTask.repeatDays,
                   repeatWeeklyDay: savedTask.repeatWeeklyDay,
                   repeatMonthlyDay: savedTask.repeatMonthlyDay,

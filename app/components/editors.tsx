@@ -14,6 +14,7 @@ export type RepeatPattern = "daily" | "weekly" | "monthly";
 export type RepeatFormState = {
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern;
+  repeatInterval: number;
   repeatDays: number;
   repeatWeeklyDay: number;
   repeatMonthlyDay: number;
@@ -77,6 +78,7 @@ type EditableTask = {
   projectId: string | null;
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | null;
+  repeatInterval: number | null;
   repeatDays: number | null;
   repeatWeeklyDay: number | null;
   repeatMonthlyDay: number | null;
@@ -368,6 +370,7 @@ export function createRepeatDefaults(dateValue: string): RepeatFormState {
   return {
     repeatEnabled: false,
     repeatPattern: "daily",
+    repeatInterval: 1,
     repeatDays: ALL_REPEAT_DAYS_MASK,
     repeatWeeklyDay,
     repeatMonthlyDay: getDayOfMonth(dateValue),
@@ -385,6 +388,7 @@ export function createTaskPayload<T extends TaskCreateFormState>(form: T) {
     projectId: form.projectId || null,
     repeatEnabled: form.repeatEnabled,
     repeatPattern: form.repeatEnabled ? form.repeatPattern : null,
+    repeatInterval: form.repeatEnabled ? form.repeatInterval : 1,
     repeatDays:
       form.repeatEnabled &&
       (form.repeatPattern === "daily" || form.repeatPattern === "weekly")
@@ -423,6 +427,7 @@ export function RepeatFields<T extends RepeatFormState>({
               return {
                 ...prev,
                 repeatEnabled: event.target.checked,
+                repeatInterval: prev.repeatInterval || 1,
                 repeatDays:
                   prev.repeatPattern === "weekly"
                     ? getRepeatDayBit(repeatWeeklyDay)
@@ -450,6 +455,7 @@ export function RepeatFields<T extends RepeatFormState>({
                 onChange((prev) => ({
                   ...prev,
                   repeatPattern,
+                  repeatInterval: prev.repeatInterval || 1,
                   repeatDays:
                     repeatPattern === "daily"
                       ? ALL_REPEAT_DAYS_MASK
@@ -467,6 +473,41 @@ export function RepeatFields<T extends RepeatFormState>({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <div className="tm-muted">Every</div>
+            <div className="flex items-center gap-2">
+              <input
+                className={`w-24 ${inputClass}`}
+                type="number"
+                min={1}
+                max={365}
+                value={form.repeatInterval}
+                onChange={(event) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    repeatInterval: Math.min(
+                      365,
+                      Math.max(1, Number(event.target.value) || 1)
+                    ),
+                  }))
+                }
+              />
+              <span className="tm-muted text-sm">
+                {form.repeatPattern === "daily"
+                  ? form.repeatInterval === 1
+                    ? "day"
+                    : "days"
+                  : form.repeatPattern === "weekly"
+                    ? form.repeatInterval === 1
+                      ? "week"
+                      : "weeks"
+                    : form.repeatInterval === 1
+                      ? "month"
+                      : "months"}
+              </span>
+            </div>
           </label>
 
           {(form.repeatPattern === "daily" || form.repeatPattern === "weekly") && (
@@ -684,6 +725,7 @@ export function createEditTaskForm(task: EditableTask): EditTaskFormState {
     noteHistory: task.noteHistory ?? [],
     repeatEnabled: task.repeatEnabled,
     repeatPattern: task.repeatPattern ?? "daily",
+    repeatInterval: task.repeatInterval ?? repeatDefaults.repeatInterval,
     repeatDays:
       task.repeatDays ??
       (task.repeatPattern === "weekly"
