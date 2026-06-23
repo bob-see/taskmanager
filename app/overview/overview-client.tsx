@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   DelegatedSenderBadge,
   DelegatedTaskStatusPill,
@@ -89,6 +90,9 @@ export type OverviewProfileData = {
 type OverviewClientProps = {
   profiles: OverviewProfileData[];
 };
+
+type TaskPendingAction = "complete" | "update" | "delete";
+const MIN_TASK_PENDING_MS = 500;
 
 type ReorderResponseProfile = {
   id: string;
@@ -234,6 +238,17 @@ function monthDifference(left: string, right: string) {
 
 function createTempId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForMinimumPendingTime(startedAt: number) {
+  const remaining = MIN_TASK_PENDING_MS - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await wait(remaining);
+  }
 }
 
 function toDateOnly(value: string | null) {
@@ -745,6 +760,8 @@ function ProfileCard({
   const [taskReordering, setTaskReordering] = useState(false);
   const [projectReordering, setProjectReordering] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
+  const [pendingTaskActions, setPendingTaskActions] = useState<Record<string, TaskPendingAction>>({});
+  const pendingTaskActionIdsRef = useRef<Set<string>>(new Set());
   const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
   const [deleteTaskModalTask, setDeleteTaskModalTask] = useState<OverviewTask | null>(null);
   const [deleteTaskMode, setDeleteTaskMode] = useState<DeleteMode>("this");
@@ -1574,6 +1591,28 @@ function ProfileCard({
     }
   }
 
+  function startTaskPendingAction(taskId: string, action: TaskPendingAction) {
+    if (pendingTaskActionIdsRef.current.has(taskId)) {
+      return false;
+    }
+
+    pendingTaskActionIdsRef.current.add(taskId);
+    flushSync(() => {
+      setPendingTaskActions((prev) => ({ ...prev, [taskId]: action }));
+    });
+    return true;
+  }
+
+  function finishTaskPendingAction(taskId: string) {
+    pendingTaskActionIdsRef.current.delete(taskId);
+    setPendingTaskActions((prev) => {
+      if (!prev[taskId]) return prev;
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  }
+
   function removeTaskFromCard(task: OverviewTask) {
     setOpenTasks((prev) => prev.filter((item) => item.id !== task.id));
     setCounts((prev) => ({
@@ -1791,6 +1830,8 @@ function ProfileCard({
 
   async function handleToggleTask(task: OverviewTask, completed: boolean) {
     setContextMenu(null);
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(task.id, completed ? "complete" : "update")) return;
     setBusyAction(true);
 
     try {
@@ -1799,6 +1840,7 @@ function ProfileCard({
         completedOn: completed ? todayInputValue() : null,
       });
 
+      await waitForMinimumPendingTime(pendingStartedAt);
       if (completed) {
         setOpenTasks((prev) => prev.filter((item) => item.id !== task.id));
         setCounts((prev) => ({
@@ -1812,31 +1854,41 @@ function ProfileCard({
       alert(error instanceof Error ? error.message : "Could not update task");
     } finally {
       setBusyAction(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(task.id);
     }
   }
 
   async function handleDeleteTask(task: OverviewTask) {
+    setContextMenu(null);
+    if (!window.confirm(`Delete task "${task.title}"?`)) {
+      return;
+    }
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(task.id, "delete")) return;
     setBusyAction(true);
 
     try {
-      if (!window.confirm(`Delete task "${task.title}"?`)) {
-        return;
-      }
-
       await deleteTask(task.id);
+      await waitForMinimumPendingTime(pendingStartedAt);
       removeTaskFromCard(task);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not delete task");
     } finally {
       setBusyAction(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(task.id);
     }
   }
 
   async function handleDeleteRecurringTask(task: OverviewTask, mode: DeleteMode) {
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(task.id, "delete")) return;
     setDeleteTaskSaving(true);
 
     try {
       await deleteTask(task.id, mode);
+      await waitForMinimumPendingTime(pendingStartedAt);
       if (mode === "this") {
         removeTaskFromCard(task);
       } else {
@@ -1848,6 +1900,8 @@ function ProfileCard({
       alert(error instanceof Error ? error.message : "Could not delete task");
     } finally {
       setDeleteTaskSaving(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(task.id);
     }
   }
 
@@ -1902,10 +1956,13 @@ function ProfileCard({
 
   async function handleToggleTaskPriority(task: OverviewTask) {
     setContextMenu(null);
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(task.id, "update")) return;
     setBusyAction(true);
 
     try {
       await patchTask(task.id, { isPriority: !task.isPriority });
+      await waitForMinimumPendingTime(pendingStartedAt);
       setOpenTasks((prev) =>
         prev.map((item) =>
           item.id === task.id ? { ...item, isPriority: !item.isPriority } : item
@@ -1915,6 +1972,8 @@ function ProfileCard({
       alert(error instanceof Error ? error.message : "Could not update task");
     } finally {
       setBusyAction(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(task.id);
     }
   }
 
@@ -2064,7 +2123,24 @@ function ProfileCard({
                     </button>
                     {!isGroupCollapsed && (
                       <div className="space-y-2 border-t border-[color:var(--tm-border)] p-2">
-                        {group.tasks.map((task) => (
+                        {group.tasks.map((task) => {
+                          const pendingAction = pendingTaskActions[task.id] ?? null;
+                          const pendingLabel =
+                            pendingAction === "complete"
+                              ? "Completing..."
+                              : pendingAction === "delete"
+                                ? "Deleting..."
+                                : pendingAction
+                                  ? "Updating..."
+                                  : null;
+                          const pendingToneClass =
+                            pendingAction === "complete"
+                              ? "border-emerald-300 bg-emerald-50/90 text-emerald-800"
+                              : pendingAction === "delete"
+                                ? "border-red-300 bg-red-50/90 text-red-800"
+                                : "border-slate-300 bg-slate-100/90 text-slate-800";
+
+                          return (
                           <article
                             key={task.id}
                             className={`rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 p-3 ${
@@ -2073,6 +2149,14 @@ function ProfileCard({
                                 : ""
                             } ${
                               task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
+                            } ${
+                              pendingAction === "complete"
+                                ? "bg-emerald-50/90 opacity-75 ring-2 ring-emerald-200"
+                                : pendingAction === "delete"
+                                  ? "bg-red-50/80 opacity-75 ring-2 ring-red-200"
+                                  : pendingAction
+                                    ? "bg-slate-100/90 opacity-75 ring-2 ring-slate-200"
+                                    : ""
                             }`}
                             onContextMenu={(event) => openTaskContextMenu(event, task)}
                           >
@@ -2082,18 +2166,40 @@ function ProfileCard({
                                   sender={task.delegatedTask.assignedByUser}
                                 />
                               ) : null}
-                              <span>{task.title}</span>
+                              <span
+                                className={
+                                  pendingAction === "complete" ? "line-through opacity-70" : ""
+                                }
+                              >
+                                {task.title}
+                              </span>
+                              {pendingAction === "complete" && (
+                                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
+                                  ✓
+                                </span>
+                              )}
+                              {pendingLabel ? (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                  {pendingLabel}
+                                </span>
+                              ) : null}
                               {hasTaskNotes(task) && (
                                 <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                               )}
                             </div>
                             {task.delegatedTask ? (
                               <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
+                                {task.delegatedTask ? (
                                 <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+                                ) : null}
                               </div>
                             ) : null}
                           </article>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </section>
@@ -2184,7 +2290,24 @@ function ProfileCard({
                           </td>
                         </tr>
                         {!isGroupCollapsed &&
-                          group.tasks.map((task) => (
+                          group.tasks.map((task) => {
+                            const pendingAction = pendingTaskActions[task.id] ?? null;
+                            const pendingLabel =
+                              pendingAction === "complete"
+                                ? "Completing..."
+                                : pendingAction === "delete"
+                                  ? "Deleting..."
+                                  : pendingAction
+                                    ? "Updating..."
+                                    : null;
+                            const pendingToneClass =
+                              pendingAction === "complete"
+                                ? "border-emerald-300 bg-emerald-50/90 text-emerald-800"
+                                : pendingAction === "delete"
+                                  ? "border-red-300 bg-red-50/90 text-red-800"
+                                  : "border-slate-300 bg-slate-100/90 text-slate-800";
+
+                            return (
                             <tr
                               key={task.id}
                               className={`tm-table-row border-b border-l-4 border-l-transparent border-[color:var(--tm-border)] align-top ${
@@ -2197,6 +2320,14 @@ function ProfileCard({
                                 taskReordering ? "cursor-grabbing" : "cursor-grab"
                               } ${
                                 draggedTaskId === task.id ? "opacity-60" : ""
+                              } ${
+                                pendingAction === "complete"
+                                  ? "bg-emerald-50/90 opacity-75 ring-2 ring-inset ring-emerald-200"
+                                  : pendingAction === "delete"
+                                    ? "bg-red-50/80 opacity-75 ring-2 ring-inset ring-red-200"
+                                    : pendingAction
+                                      ? "bg-slate-100/90 opacity-75 ring-2 ring-inset ring-slate-200"
+                                      : ""
                               } ${
                                 dragOverTaskId === task.id &&
                                 dragOverTaskGroupKey === group.key &&
@@ -2222,7 +2353,28 @@ function ProfileCard({
                                       sender={task.delegatedTask.assignedByUser}
                                     />
                                   ) : null}
-                                  <span className="min-w-0 break-words">{task.title}</span>
+                                  <span
+                                    className={`min-w-0 break-words ${
+                                      pendingAction === "complete"
+                                        ? "line-through opacity-70"
+                                        : ""
+                                    }`}
+                                  >
+                                    {task.title}
+                                  </span>
+                                  {pendingAction === "complete" ? (
+                                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
+                                      ✓
+                                    </span>
+                                  ) : null}
+                                  {pendingLabel ? (
+                                    <span
+                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                    >
+                                      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                      {pendingLabel}
+                                    </span>
+                                  ) : null}
                                   {hasTaskNotes(task) && (
                                     <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                                   )}
@@ -2235,7 +2387,8 @@ function ProfileCard({
                                 )}
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                       </Fragment>
                     );
                   })
@@ -2455,12 +2608,16 @@ function ProfileCard({
           onClick={(event) => event.stopPropagation()}
         >
           {contextMenu.type === "task" ? (
+            (() => {
+              const taskPending = Boolean(pendingTaskActions[contextMenu.task.id]);
+
+              return (
             <>
               <button
                 type="button"
                 className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
                 onClick={() => openTaskEditor(contextMenu.task)}
-                disabled={busyAction || editTaskSaving || editProjectSaving}
+                disabled={busyAction || editTaskSaving || editProjectSaving || taskPending}
               >
                 Edit
               </button>
@@ -2470,7 +2627,7 @@ function ProfileCard({
                 onClick={() =>
                   void handleToggleTask(contextMenu.task, !Boolean(contextMenu.task.completedOn))
                 }
-                disabled={busyAction}
+                disabled={busyAction || taskPending}
               >
                 {contextMenu.task.completedOn ? "Open" : "Done"}
               </button>
@@ -2478,7 +2635,7 @@ function ProfileCard({
                 type="button"
                 className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
                 onClick={() => requestDeleteTask(contextMenu.task)}
-                disabled={busyAction}
+                disabled={busyAction || taskPending}
               >
                 Delete
               </button>
@@ -2486,7 +2643,7 @@ function ProfileCard({
                 type="button"
                 className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
                 onClick={() => void handleToggleTaskPriority(contextMenu.task)}
-                disabled={busyAction}
+                disabled={busyAction || taskPending}
               >
                 {contextMenu.task.isPriority ? "Unprioritise" : "Prioritise"}
               </button>
@@ -2494,11 +2651,13 @@ function ProfileCard({
                 type="button"
                 className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
                 onClick={() => openDelegateTask(contextMenu.task)}
-                disabled={busyAction || Boolean(contextMenu.task.delegatedTask)}
+                disabled={busyAction || taskPending || Boolean(contextMenu.task.delegatedTask)}
               >
                 {contextMenu.task.delegatedTask ? "Already delegated" : "Delegate Task"}
               </button>
             </>
+              );
+            })()
           ) : (
             <>
               {contextMenu.group.projectId && (

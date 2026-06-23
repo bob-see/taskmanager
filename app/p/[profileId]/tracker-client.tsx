@@ -8,7 +8,7 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   AddTaskModal,
@@ -177,6 +177,8 @@ type QuickAddParseResult = {
 
 type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
 type RepeatPausePreset = "tomorrow" | "next-week" | "custom" | "indefinite";
+type TaskPendingAction = "complete" | "update" | "delete";
+const MIN_TASK_PENDING_MS = 500;
 
 const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
   { value: "day", label: "Day" },
@@ -1401,6 +1403,17 @@ function normalizeTask(task: Task): Task {
   };
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForMinimumPendingTime(startedAt: number) {
+  const remaining = MIN_TASK_PENDING_MS - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await wait(remaining);
+  }
+}
+
 function isTaskFormDirty(form: TaskFormState, baseline: TaskFormState) {
   return JSON.stringify(form) !== JSON.stringify(baseline);
 }
@@ -1592,6 +1605,7 @@ function TaskNotesButton({ notes }: { notes: string }) {
 function TaskActionMenu({
   task,
   completionPending = false,
+  pendingAction = null,
   snoozeDisabled = false,
   showSnoozeAction = true,
   completedActionLabel,
@@ -1606,6 +1620,7 @@ function TaskActionMenu({
 }: {
   task: Task;
   completionPending?: boolean;
+  pendingAction?: TaskPendingAction | null;
   snoozeDisabled?: boolean;
   showSnoozeAction?: boolean;
   completedActionLabel?: string;
@@ -1656,9 +1671,12 @@ function TaskActionMenu({
   }
 
   function runAction(action: (task: Task) => void) {
+    if (pendingAction) return;
     closeMenu();
     action(task);
   }
+
+  const actionPending = Boolean(pendingAction);
 
   useEffect(() => {
     if (!open) return;
@@ -1705,6 +1723,7 @@ function TaskActionMenu({
         aria-haspopup="menu"
         aria-label={`Task actions for ${task.title}`}
         className={iconButtonClass}
+        disabled={actionPending}
         type="button"
         onClick={() => {
           if (!open) updatePosition();
@@ -1731,7 +1750,7 @@ function TaskActionMenu({
             {showSnoozeAction && (
               <button
                 className={taskActionMenuItemClass}
-                disabled={snoozeDisabled}
+                disabled={snoozeDisabled || actionPending}
                 role="menuitem"
                 type="button"
                 onClick={() => runAction(onPickSnoozeDate)}
@@ -1741,6 +1760,7 @@ function TaskActionMenu({
             )}
             <button
               className={taskActionMenuItemClass}
+              disabled={actionPending}
               role="menuitem"
               type="button"
               onClick={() => runAction(onTogglePriority)}
@@ -1749,6 +1769,7 @@ function TaskActionMenu({
             </button>
             <button
               className={taskActionMenuItemClass}
+              disabled={actionPending}
               role="menuitem"
               type="button"
               onClick={() => runAction(onOpenEditModal)}
@@ -1757,7 +1778,7 @@ function TaskActionMenu({
             </button>
             <button
               className={taskActionMenuItemClass}
-              disabled={completionPending}
+              disabled={completionPending || actionPending}
               role="menuitem"
               type="button"
               onClick={() => runAction(onToggleCompleted)}
@@ -1767,6 +1788,7 @@ function TaskActionMenu({
             {isRecurringTask(task) && (
               <button
                 className={taskActionMenuItemClass}
+                disabled={actionPending}
                 role="menuitem"
                 type="button"
                 onClick={() => runAction(onToggleRepeatPause)}
@@ -1778,7 +1800,7 @@ function TaskActionMenu({
             )}
             <button
               className={taskActionMenuItemClass}
-              disabled={Boolean(task.delegatedTask)}
+              disabled={Boolean(task.delegatedTask) || actionPending}
               role="menuitem"
               type="button"
               onClick={() => runAction(onDelegate)}
@@ -1787,6 +1809,7 @@ function TaskActionMenu({
             </button>
             <button
               className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
+              disabled={actionPending}
               role="menuitem"
               type="button"
               onClick={() => runAction(onDelete)}
@@ -1805,6 +1828,7 @@ function TaskRow({
   projectName,
   projectArchived = false,
   completionPending = false,
+  pendingAction = null,
   snoozeDisabled = false,
   showSnoozeAction = false,
   selectMode = false,
@@ -1838,6 +1862,7 @@ function TaskRow({
   projectName?: string;
   projectArchived?: boolean;
   completionPending?: boolean;
+  pendingAction?: TaskPendingAction | null;
   snoozeDisabled?: boolean;
   showSnoozeAction?: boolean;
   selectMode?: boolean;
@@ -1870,18 +1895,43 @@ function TaskRow({
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
   const repeatPauseBadge = getRepeatPauseBadge(task, currentDateValue ?? todayInputValue());
+  const pendingComplete = pendingAction === "complete";
+  const pendingLabel =
+    pendingAction === "complete"
+      ? "Completing..."
+      : pendingAction === "delete"
+        ? "Deleting..."
+        : pendingAction
+          ? "Updating..."
+          : null;
+  const pendingToneClass =
+    pendingAction === "complete"
+      ? "border-emerald-300 bg-emerald-50/90 text-emerald-800"
+      : pendingAction === "delete"
+        ? "border-red-300 bg-red-50/90 text-red-800"
+        : "border-slate-300 bg-slate-100/90 text-slate-800";
 
   return (
     <div
-      className={`border-b border-[color:var(--tm-border)] px-2 py-2 transition-colors hover:bg-white/45 ${
+      className={`border-b border-[color:var(--tm-border)] px-2 py-2 transition-all hover:bg-white/45 ${
         projectArchived
           ? "bg-amber-100/20"
-          : "bg-transparent"
+          : pendingAction === "complete"
+            ? "bg-emerald-50/80"
+            : pendingAction === "delete"
+              ? "bg-red-50/70"
+              : pendingAction
+                ? "bg-slate-100/80"
+            : "bg-transparent"
       } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
         task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
       } ${
         draggable ? "cursor-grab" : ""
       } ${dragActive ? "opacity-60" : ""} ${
+        pendingAction
+          ? "opacity-75 ring-2 ring-inset ring-[color:var(--tm-border)]"
+          : ""
+      } ${
         dragOverPosition === "before"
           ? "border-t-2 border-t-[color:var(--tm-text)]"
           : dragOverPosition === "after"
@@ -1915,9 +1965,26 @@ function TaskRow({
               {task.delegatedTask ? (
                 <DelegatedSenderBadge sender={task.delegatedTask.assignedByUser} />
               ) : null}
-              <span className={`line-clamp-1 ${isTaskCompleted(task) ? "line-through opacity-70" : ""}`}>
+              <span
+                className={`line-clamp-1 ${
+                  isTaskCompleted(task) || pendingComplete ? "line-through opacity-70" : ""
+                }`}
+              >
                 {task.title}
               </span>
+              {pendingComplete && (
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
+                  ✓
+                </span>
+              )}
+              {pendingLabel && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {pendingLabel}
+                </span>
+              )}
             </span>
           </button>
         </div>
@@ -2001,6 +2068,7 @@ function TaskRow({
           <TaskActionMenu
             task={task}
             completionPending={completionPending}
+            pendingAction={pendingAction}
             snoozeDisabled={snoozeDisabled}
             showSnoozeAction={showSnoozeAction}
             onPickSnoozeDate={onPickSnoozeDate}
@@ -2191,6 +2259,7 @@ export function TrackerClient({
 }: TrackerClientProps) {
   const router = useRouter();
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
+  const pendingTaskActionIdsRef = useRef<Set<string>>(new Set());
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
   const dragOrderSnapshotRef = useRef<Task[] | null>(null);
   const projectDragOrderSnapshotRef = useRef<Project[] | null>(null);
@@ -2228,6 +2297,7 @@ export function TrackerClient({
   const [editTaskSaving, setEditTaskSaving] = useState(false);
   const [delegateTask, setDelegateTask] = useState<Task | null>(null);
   const [deleteTaskSaving, setDeleteTaskSaving] = useState(false);
+  const [pendingTaskActions, setPendingTaskActions] = useState<Record<string, TaskPendingAction>>({});
   const [completionPendingTaskIds, setCompletionPendingTaskIds] = useState<string[]>([]);
   const [editingCategoryTaskId, setEditingCategoryTaskId] = useState<string | null>(null);
   const [editingCategoryValue, setEditingCategoryValue] = useState("");
@@ -3121,7 +3191,11 @@ export function TrackerClient({
     }
   }
 
-  async function updateTask(taskId: string, body: Record<string, unknown>) {
+  async function updateTask(
+    taskId: string,
+    body: Record<string, unknown>,
+    options: { pendingStartedAt?: number } = {}
+  ) {
     setError(null);
 
     const res = await fetch(`/api/p/${profileId}/tasks/${taskId}`, {
@@ -3140,6 +3214,10 @@ export function TrackerClient({
     const createdTask =
       "task" in payload && payload.createdTask ? normalizeTask(payload.createdTask) : null;
 
+    if (options.pendingStartedAt) {
+      await waitForMinimumPendingTime(options.pendingStartedAt);
+    }
+
     setTasks((prev) => {
       const replaced = prev.map((item) => (item.id === task.id ? task : item));
 
@@ -3154,8 +3232,34 @@ export function TrackerClient({
     return task;
   }
 
+  function startTaskPendingAction(taskId: string, action: TaskPendingAction) {
+    if (pendingTaskActionIdsRef.current.has(taskId)) {
+      return false;
+    }
+
+    pendingTaskActionIdsRef.current.add(taskId);
+    flushSync(() => {
+      setPendingTaskActions((prev) => ({ ...prev, [taskId]: action }));
+    });
+    return true;
+  }
+
+  function finishTaskPendingAction(taskId: string) {
+    pendingTaskActionIdsRef.current.delete(taskId);
+    setPendingTaskActions((prev) => {
+      if (!prev[taskId]) return prev;
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  }
+
   async function toggleTaskCompleted(taskId: string, completed: boolean) {
     if (completionPendingTaskIdsRef.current.has(taskId)) {
+      return;
+    }
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(taskId, completed ? "complete" : "update")) {
       return;
     }
 
@@ -3168,18 +3272,25 @@ export function TrackerClient({
       await updateTask(taskId, {
         completed,
         completedOn: completed ? selectedDay : null,
-      });
+      }, { pendingStartedAt });
     } finally {
+      await waitForMinimumPendingTime(pendingStartedAt);
       completionPendingTaskIdsRef.current.delete(taskId);
       setCompletionPendingTaskIds((prev) => prev.filter((id) => id !== taskId));
+      finishTaskPendingAction(taskId);
     }
   }
 
   async function toggleTaskPriority(task: Task) {
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(task.id, "update")) return;
     try {
-      await updateTask(task.id, { isPriority: !task.isPriority });
+      await updateTask(task.id, { isPriority: !task.isPriority }, { pendingStartedAt });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update task");
+    } finally {
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(task.id);
     }
   }
 
@@ -3194,13 +3305,20 @@ export function TrackerClient({
     if (!isRecurringTask(task)) return;
 
     if (isRepeatPausedOnDate(task, selectedDay)) {
+      const pendingStartedAt = Date.now();
+      if (!startTaskPendingAction(task.id, "update")) return;
       void updateTask(task.id, {
         repeatPaused: false,
         repeatPauseUntil: null,
         repeatPauseNote: null,
-      }).catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Could not resume repeat")
-      );
+      }, { pendingStartedAt })
+        .catch((err: unknown) =>
+          setError(err instanceof Error ? err.message : "Could not resume repeat")
+        )
+        .finally(async () => {
+          await waitForMinimumPendingTime(pendingStartedAt);
+          finishTaskPendingAction(task.id);
+        });
       return;
     }
 
@@ -3431,6 +3549,8 @@ export function TrackerClient({
   }
 
   async function deleteTask(task: Task, mode: DeleteMode) {
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(task.id, "delete")) return;
     setError(null);
     setDeleteTaskSaving(true);
     const scrollY = window.scrollY;
@@ -3445,6 +3565,7 @@ export function TrackerClient({
         throw new Error(responseBody?.error ?? "Could not delete task");
       }
 
+      await waitForMinimumPendingTime(pendingStartedAt);
       await refreshData();
       setDeleteTaskModalTask(null);
       setDeleteTaskMode("this");
@@ -3453,6 +3574,8 @@ export function TrackerClient({
       });
     } finally {
       setDeleteTaskSaving(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(task.id);
     }
   }
 
@@ -4679,6 +4802,10 @@ export function TrackerClient({
                               : false
                           }
                           completionPending={completionPendingTaskIds.includes(task.id)}
+                          pendingAction={
+                            pendingTaskActions[task.id] ??
+                            (completionPendingTaskIds.includes(task.id) ? "complete" : null)
+                          }
                           selectMode={selectMode}
                           selected={selectedTaskIds.includes(task.id)}
                           currentDateValue={selectedDay}
@@ -4945,6 +5072,12 @@ export function TrackerClient({
                                   completionPending={completionPendingTaskIds.includes(
                                     task.id
                                   )}
+                                  pendingAction={
+                                    pendingTaskActions[task.id] ??
+                                    (completionPendingTaskIds.includes(task.id)
+                                      ? "complete"
+                                      : null)
+                                  }
                                   selectMode={selectMode}
                                   selected={selectedTaskIds.includes(task.id)}
                                   currentDateValue={selectedDay}
@@ -5148,7 +5281,26 @@ export function TrackerClient({
                     </tr>
                   </thead>
                   <tbody>
-                    {matrixTasks.map((task) => (
+                    {matrixTasks.map((task) => {
+                      const pendingAction =
+                        pendingTaskActions[task.id] ??
+                        (completionPendingTaskIds.includes(task.id) ? "complete" : null);
+                      const pendingLabel =
+                        pendingAction === "complete"
+                          ? "Completing..."
+                          : pendingAction === "delete"
+                            ? "Deleting..."
+                            : pendingAction
+                              ? "Updating..."
+                              : null;
+                      const pendingToneClass =
+                        pendingAction === "complete"
+                          ? "border-emerald-300 bg-emerald-50/90 text-emerald-800"
+                          : pendingAction === "delete"
+                            ? "border-red-300 bg-red-50/90 text-red-800"
+                            : "border-slate-300 bg-slate-100/90 text-slate-800";
+
+                      return (
                       <tr
                         key={task.id}
                         className={`tm-table-row border-t border-l-4 border-l-transparent align-top ${
@@ -5157,6 +5309,14 @@ export function TrackerClient({
                             : ""
                         } ${
                           task.delegatedTask ? "border-l-sky-200/70" : ""
+                        } ${
+                          pendingAction === "complete"
+                            ? "bg-emerald-50/80 opacity-75 ring-2 ring-inset ring-emerald-200"
+                            : pendingAction === "delete"
+                              ? "bg-red-50/70 opacity-75 ring-2 ring-inset ring-red-200"
+                              : pendingAction
+                                ? "bg-slate-100/80 opacity-75 ring-2 ring-inset ring-slate-200"
+                                : ""
                         }`}
                       >
                         <td className={matrixCellClass}>
@@ -5172,8 +5332,27 @@ export function TrackerClient({
                                 type="button"
                                 onClick={() => openTaskEditor(task)}
                               >
-                                <span className="block truncate">{task.title}</span>
+                                <span
+                                  className={`block truncate ${
+                                    pendingAction === "complete" ? "line-through opacity-70" : ""
+                                  }`}
+                                >
+                                  {task.title}
+                                </span>
                               </button>
+                              {pendingAction === "complete" && (
+                                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
+                                  ✓
+                                </span>
+                              )}
+                              {pendingLabel && (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                  {pendingLabel}
+                                </span>
+                              )}
                               {hasTaskNotes(task) && (
                                 <TaskNotesButton notes={formatTaskNotesPreview(task)} />
                               )}
@@ -5217,6 +5396,7 @@ export function TrackerClient({
                           <TaskActionMenu
                             task={task}
                             completionPending={completionPendingTaskIds.includes(task.id)}
+                            pendingAction={pendingAction}
                             completedActionLabel={taskView === "done" ? "Open" : "Done"}
                             onPickSnoozeDate={openSingleTaskSnoozeDate}
                             onTogglePriority={(selectedTask) => void toggleTaskPriority(selectedTask)}
@@ -5238,7 +5418,8 @@ export function TrackerClient({
                           />
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
