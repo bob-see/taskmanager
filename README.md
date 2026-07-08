@@ -109,12 +109,26 @@ Task Row Actions
 	•	The three-dot Actions button opens the same shared actions menu
 	•	Right-click does not change Select mode selection or interfere with manual drag/reorder
 	•	Task action menu items are shared so future actions stay consistent across entry points
+	•	Task action menus should stay consistent between Overview and profile pages wherever the task supports the same actions
+	•	Task action menus are viewport-aware so options are not cut off near the bottom of the screen
 
 Organisation
 	•	Category memory per profile
 	•	Project progress bars
 	•	Archive support
 	•	Search across tasks and projects
+
+Overview Options
+	•	Overview has an Overview Options menu for page-wide controls
+	•	Overview Options affects the entire Overview page, not a single profile
+	•	Current sections are Filter, Sort and Group By
+	•	Group By currently supports Project and Category
+	•	Overview profile cards use a single Actions button instead of separate Add Task, Add Project and Collapse buttons
+	•	The profile card Actions menu includes Add Task, Add Project and Collapse / Expand
+	•	Overview profile counters use compact labels: Open, Upcoming, Done and OD
+	•	Collapsed Overview profile cards are compact and show only the header, counters and Actions button
+	•	Overdue indicators differ by context: profile pages show a red due date with an OD pill beside the date, while Overview uses a subtle overdue row tint with an OD badge
+	•	Priority styling remains separate from overdue styling
 
 Profile Options
 	•	Each profile/workspace has a Profile Options menu for task display preferences
@@ -214,6 +228,8 @@ Future Notes / TODOs
 	•	Add a local development database/playground for safer delegated workflow testing
 	•	Add notification badges for new delegated notes and status updates
 	•	Consider richer delegated task metadata or hover details later, while keeping rows compact
+	•	Consider a masonry-style Overview layout later so collapsed or short cards naturally close vertical gaps beside taller cards
+	•	Continue moving task menus toward a single shared source of truth so Overview, Profile and future task surfaces use the same action definitions and ordering
 
 ⸻
 

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import {
   DelegatedSenderBadge,
@@ -24,6 +25,9 @@ import {
 } from "@/app/components/editors";
 import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
+
+type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
+type RepeatPausePreset = "tomorrow" | "next-week" | "custom" | "indefinite";
 
 type OverviewProject = {
   id: string;
@@ -137,6 +141,7 @@ type ContextMenuState =
 type DeleteMode = "this" | "future" | "series";
 type OverviewTaskFilter = "all-open" | "today" | "overdue" | "upcoming";
 type OverviewGroupingMode = "project" | "category";
+type OverviewSortMode = "manual" | "start-date" | "due-date";
 
 const cardClass = "tm-card min-w-0 rounded-[12px] border p-4 shadow-sm md:p-5";
 const inputClass =
@@ -150,6 +155,21 @@ const segmentedTabClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
 const priorityChipClass =
   "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800";
+const overdueChipClass =
+  "rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700";
+const taskActionMenuItemClass =
+  "flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm transition-colors hover:bg-white/60 disabled:opacity-50";
+const overviewCounterChipClass =
+  "tm-chip inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] leading-tight";
+const REPEAT_PAUSE_PRESET_OPTIONS: Array<{
+  value: RepeatPausePreset;
+  label: string;
+}> = [
+  { value: "tomorrow", label: "Pause until tomorrow" },
+  { value: "next-week", label: "Pause until next week" },
+  { value: "custom", label: "Custom date" },
+  { value: "indefinite", label: "Pause indefinitely" },
+];
 const OVERVIEW_GROUPING_STORAGE_KEY = "tm-overview-grouping-mode";
 const ALL_REPEAT_DAYS_MASK = 0b1111111;
 
@@ -188,8 +208,45 @@ function DiscardChangesModal({
   );
 }
 
+function OverviewUtilityModal({
+  open,
+  title,
+  children,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="tm-overlay fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className={`${cardClass} max-h-[90vh] w-full max-w-lg overflow-y-auto p-5 shadow-2xl`}>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button
+            aria-label={`Close ${title}`}
+            className="tm-button inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-lg leading-none"
+            type="button"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function todayInputValue() {
   const date = new Date();
+  return dateInputValue(date);
+}
+
+function dateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
@@ -212,6 +269,45 @@ function getDayOfMonth(value: string) {
 
 function getRepeatDayBit(weekday: number) {
   return 1 << (weekday - 1);
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function getNextBusinessDay(value: string) {
+  let next = addDays(parseDateOnly(value), 1);
+
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next = addDays(next, 1);
+  }
+
+  return dateInputValue(next);
+}
+
+function getSnoozeDateValue(baseDateValue: string, preset: SnoozePreset) {
+  if (preset === "tomorrow") {
+    return dateInputValue(addDays(parseDateOnly(baseDateValue), 1));
+  }
+
+  if (preset === "next-business-day") {
+    return getNextBusinessDay(baseDateValue);
+  }
+
+  return dateInputValue(addDays(parseDateOnly(baseDateValue), 7));
+}
+
+function getRepeatPauseUntilForPreset(
+  baseDateValue: string,
+  preset: Exclude<RepeatPausePreset, "custom" | "indefinite">
+) {
+  if (preset === "tomorrow") {
+    return dateInputValue(addDays(parseDateOnly(baseDateValue), 1));
+  }
+
+  return dateInputValue(addDays(parseDateOnly(baseDateValue), 7));
 }
 
 function matchesRepeatDays(dateValue: string, repeatDays: number | null | undefined) {
@@ -362,6 +458,27 @@ function compareTasksForManualSort(
   }
 
   return compareTasksForStartDateSort(left, right);
+}
+
+function compareTasksForDueDateSort(
+  left: { dueAt: string; startDate: string; createdAt: string; id: string },
+  right: { dueAt: string; startDate: string; createdAt: string; id: string }
+) {
+  if (left.dueAt !== right.dueAt) {
+    if (!left.dueAt) return 1;
+    if (!right.dueAt) return -1;
+    return left.dueAt.localeCompare(right.dueAt);
+  }
+
+  return compareTasksForStartDateSort(left, right);
+}
+
+function sortOverviewTasks(tasks: OverviewTask[], sortMode: OverviewSortMode) {
+  return [...tasks].sort((left, right) => {
+    if (sortMode === "start-date") return compareTasksForStartDateSort(left, right);
+    if (sortMode === "due-date") return compareTasksForDueDateSort(left, right);
+    return compareTasksForManualSort(left, right);
+  });
 }
 
 function compareProjectsForManualSort(
@@ -520,6 +637,245 @@ function TaskNotesIndicator({ notes }: { notes: string }) {
         </div>
       )}
     </span>
+  );
+}
+
+function ProfileCardActionsMenu({
+  collapsed,
+  onAddTask,
+  onAddProject,
+  onToggleCollapsed,
+}: {
+  collapsed: boolean;
+  onAddTask: () => void;
+  onAddProject: () => void;
+  onToggleCollapsed: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  function runAction(action: () => void) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="tm-button flex h-8 cursor-pointer items-center rounded-[10px] border px-3 text-xs md:h-9 md:text-sm"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        Actions
+      </button>
+      {open && (
+      <div
+        ref={menuRef}
+        className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-40 overflow-hidden rounded-lg border py-1 shadow-2xl"
+        role="menu"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className={taskActionMenuItemClass}
+          role="menuitem"
+          onClick={() => runAction(onAddTask)}
+        >
+          Add Task
+        </button>
+        <button
+          type="button"
+          className={taskActionMenuItemClass}
+          role="menuitem"
+          onClick={() => runAction(onAddProject)}
+        >
+          Add Project
+        </button>
+        <button
+          type="button"
+          className={taskActionMenuItemClass}
+          role="menuitem"
+          onClick={() => runAction(onToggleCollapsed)}
+        >
+          {collapsed ? "Expand" : "Collapse"}
+        </button>
+      </div>
+      )}
+    </div>
+  );
+}
+
+function OverviewOptionsMenu({
+  selectedFilter,
+  sortMode,
+  groupingMode,
+  filterOptions,
+  sortOptions,
+  groupingOptions,
+  onFilterChange,
+  onSortChange,
+  onGroupingChange,
+}: {
+  selectedFilter: OverviewTaskFilter;
+  sortMode: OverviewSortMode;
+  groupingMode: OverviewGroupingMode;
+  filterOptions: Array<{ value: OverviewTaskFilter; label: string }>;
+  sortOptions: Array<{ value: OverviewSortMode; label: string }>;
+  groupingOptions: Array<{ value: OverviewGroupingMode; label: string }>;
+  onFilterChange: (value: OverviewTaskFilter) => void;
+  onSortChange: (value: OverviewSortMode) => void;
+  onGroupingChange: (value: OverviewGroupingMode) => void;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const menuItemClass =
+    "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-white/70";
+  const selectedClass =
+    "bg-white/80 font-semibold shadow-[inset_3px_0_0_rgba(31,41,55,0.18)]";
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="tm-button flex h-9 cursor-pointer items-center rounded-[10px] border px-3 text-sm"
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        Overview Options
+      </button>
+      {open && (
+      <div
+        ref={menuRef}
+        className="tm-menu absolute right-0 top-full z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border py-2 shadow-2xl"
+        role="menu"
+      >
+        <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+          Applies to entire Overview
+        </div>
+
+        <div className="border-t border-[color:var(--tm-border)] pt-1">
+          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]">
+            Filter
+          </div>
+          {filterOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`${menuItemClass} ${
+                selectedFilter === option.value ? selectedClass : ""
+              }`}
+              onClick={() => onFilterChange(option.value)}
+            >
+              <span>{option.label}</span>
+              <span className="w-4 text-right">
+                {selectedFilter === option.value ? "✓" : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="border-t border-[color:var(--tm-border)] pt-1">
+          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]">
+            Sort
+          </div>
+          {sortOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`${menuItemClass} ${sortMode === option.value ? selectedClass : ""}`}
+              onClick={() => onSortChange(option.value)}
+            >
+              <span>{option.label}</span>
+              <span className="w-4 text-right">{sortMode === option.value ? "✓" : ""}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="border-t border-[color:var(--tm-border)] pt-1">
+          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]">
+            Group By
+          </div>
+          {groupingOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`${menuItemClass} ${
+                groupingMode === option.value ? selectedClass : ""
+              }`}
+              onClick={() => onGroupingChange(option.value)}
+            >
+              <span>{option.label}</span>
+              <span className="w-4 text-right">
+                {groupingMode === option.value ? "✓" : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
+    </div>
   );
 }
 
@@ -717,6 +1073,7 @@ function applyOrderIndex<T extends { id: string; orderIndex: number | null }>(
 type ProfileCardProps = {
   profile: OverviewProfileData;
   selectedFilter: OverviewTaskFilter;
+  sortMode: OverviewSortMode;
   groupingMode: OverviewGroupingMode;
   draggable?: boolean;
   dragActive?: boolean;
@@ -730,6 +1087,7 @@ type ProfileCardProps = {
 function ProfileCard({
   profile,
   selectedFilter,
+  sortMode,
   groupingMode,
   draggable = false,
   dragActive = false,
@@ -755,6 +1113,14 @@ function ProfileCard({
   const [editTaskForm, setEditTaskForm] = useState<EditTaskFormState | null>(null);
   const [editTaskSaving, setEditTaskSaving] = useState(false);
   const [delegateTask, setDelegateTask] = useState<OverviewTask | null>(null);
+  const [singleSnoozeTask, setSingleSnoozeTask] = useState<OverviewTask | null>(null);
+  const [singleSnoozeDateValue, setSingleSnoozeDateValue] = useState("");
+  const [singleSnoozeSaving, setSingleSnoozeSaving] = useState(false);
+  const [repeatPauseTask, setRepeatPauseTask] = useState<OverviewTask | null>(null);
+  const [repeatPausePreset, setRepeatPausePreset] = useState<RepeatPausePreset>("tomorrow");
+  const [repeatPauseUntilValue, setRepeatPauseUntilValue] = useState("");
+  const [repeatPauseNoteValue, setRepeatPauseNoteValue] = useState("");
+  const [repeatPauseSaving, setRepeatPauseSaving] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editProjectForm, setEditProjectForm] = useState<ProjectFormState | null>(null);
   const [editProjectSaving, setEditProjectSaving] = useState(false);
@@ -895,7 +1261,7 @@ function ProfileCard({
   const tasksByGroupKey = useMemo(() => {
     const groups = new Map<string, OverviewTask[]>();
 
-    for (const task of [...filteredOpenTasks].sort(compareTasksForManualSort)) {
+    for (const task of sortOverviewTasks(filteredOpenTasks, sortMode)) {
       const groupKey = getOverviewTaskGroupKey(task, groupingMode);
       const existing = groups.get(groupKey);
 
@@ -907,7 +1273,7 @@ function ProfileCard({
     }
 
     return groups;
-  }, [filteredOpenTasks, groupingMode]);
+  }, [filteredOpenTasks, groupingMode, sortMode]);
 
   const orderedTaskGroups = useMemo(() => {
     const groups: TaskGroup[] = [];
@@ -1950,6 +2316,144 @@ function ProfileCard({
     }
   }
 
+  function getTaskSnoozeBaseDateValue(task: OverviewTask) {
+    return task.startDate > todayInputValue() ? task.startDate : todayInputValue();
+  }
+
+  function openSingleTaskSnoozeDate(task: OverviewTask) {
+    setContextMenu(null);
+    setSingleSnoozeTask(task);
+    setSingleSnoozeDateValue(getSnoozeDateValue(getTaskSnoozeBaseDateValue(task), "tomorrow"));
+  }
+
+  function closeSingleTaskSnoozeModal() {
+    if (singleSnoozeSaving) return;
+    setSingleSnoozeTask(null);
+    setSingleSnoozeDateValue("");
+  }
+
+  async function submitSingleTaskSnooze(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!singleSnoozeTask) return;
+
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(singleSnoozeTask.id, "update")) return;
+    setSingleSnoozeSaving(true);
+
+    try {
+      await patchTask(singleSnoozeTask.id, { startDate: singleSnoozeDateValue });
+      await waitForMinimumPendingTime(pendingStartedAt);
+      setOpenTasks((prev) =>
+        prev.map((task) =>
+          task.id === singleSnoozeTask.id
+            ? { ...task, startDate: singleSnoozeDateValue }
+            : task
+        )
+      );
+      setSingleSnoozeTask(null);
+      setSingleSnoozeDateValue("");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not snooze task");
+    } finally {
+      setSingleSnoozeSaving(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(singleSnoozeTask.id);
+    }
+  }
+
+  function closeRepeatPauseModal() {
+    if (repeatPauseSaving) return;
+    setRepeatPauseTask(null);
+    setRepeatPausePreset("tomorrow");
+    setRepeatPauseUntilValue("");
+    setRepeatPauseNoteValue("");
+  }
+
+  function requestToggleRepeatPause(task: OverviewTask) {
+    setContextMenu(null);
+    if (!isRecurringOverviewTask(task)) return;
+
+    if (isOverviewRepeatPausedOnDate(task, todayInputValue())) {
+      const pendingStartedAt = Date.now();
+      if (!startTaskPendingAction(task.id, "update")) return;
+      void patchTask(task.id, {
+        repeatPaused: false,
+        repeatPauseUntil: null,
+        repeatPauseNote: null,
+      })
+        .then(async () => {
+          await waitForMinimumPendingTime(pendingStartedAt);
+          setOpenTasks((prev) =>
+            prev.map((item) =>
+              item.id === task.id
+                ? {
+                    ...item,
+                    repeatPaused: false,
+                    repeatPauseUntil: null,
+                    repeatPauseNote: null,
+                  }
+                : item
+            )
+          );
+        })
+        .catch((error: unknown) => {
+          alert(error instanceof Error ? error.message : "Could not resume repeat");
+        })
+        .finally(async () => {
+          await waitForMinimumPendingTime(pendingStartedAt);
+          finishTaskPendingAction(task.id);
+        });
+      return;
+    }
+
+    setRepeatPauseTask(task);
+    setRepeatPausePreset("tomorrow");
+    setRepeatPauseUntilValue(getRepeatPauseUntilForPreset(todayInputValue(), "tomorrow"));
+    setRepeatPauseNoteValue(task.repeatPauseNote ?? "");
+  }
+
+  async function pauseRepeatTask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!repeatPauseTask) return;
+
+    const repeatPauseUntil =
+      repeatPausePreset === "indefinite" ? null : repeatPauseUntilValue || null;
+    const pendingStartedAt = Date.now();
+    if (!startTaskPendingAction(repeatPauseTask.id, "update")) return;
+    setRepeatPauseSaving(true);
+
+    try {
+      await patchTask(repeatPauseTask.id, {
+        repeatPaused: true,
+        repeatPauseUntil,
+        repeatPauseNote: repeatPauseNoteValue.trim() || null,
+      });
+      await waitForMinimumPendingTime(pendingStartedAt);
+      setOpenTasks((prev) =>
+        prev.map((task) =>
+          task.id === repeatPauseTask.id
+            ? {
+                ...task,
+                repeatPaused: true,
+                repeatPauseUntil,
+                repeatPauseNote: repeatPauseNoteValue.trim() || null,
+              }
+            : task
+        )
+      );
+      setRepeatPauseTask(null);
+      setRepeatPausePreset("tomorrow");
+      setRepeatPauseUntilValue("");
+      setRepeatPauseNoteValue("");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not pause repeat");
+    } finally {
+      setRepeatPauseSaving(false);
+      await waitForMinimumPendingTime(pendingStartedAt);
+      finishTaskPendingAction(repeatPauseTask.id);
+    }
+  }
+
   async function handleToggleTaskPriority(task: OverviewTask) {
     setContextMenu(null);
     const pendingStartedAt = Date.now();
@@ -1993,7 +2497,7 @@ function ProfileCard({
 
   return (
     <article
-      className={`${cardClass} h-full max-w-full transition ${
+      className={`${cardClass} ${collapsed ? "" : "h-full"} max-w-full transition ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragActive ? "opacity-60" : ""} ${
         dragOverPosition === "before"
@@ -2012,74 +2516,36 @@ function ProfileCard({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold tracking-tight">{profile.name}</h2>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--tm-muted)]">
-            <span className="tm-chip rounded-full border px-2 py-0.5">
-              Open now {displayCounts.openNow}
-            </span>
-            <span className="tm-chip rounded-full border px-2 py-0.5">
-              Upcoming {displayCounts.upcoming}
-            </span>
-            <span className="tm-chip rounded-full border px-2 py-0.5">Done {counts.done}</span>
-            <span className="tm-chip rounded-full border px-2 py-0.5">
-              Overdue {displayCounts.overdue}
-            </span>
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold tracking-tight">{profile.name}</h2>
           </div>
+          <ProfileCardActionsMenu
+            collapsed={collapsed}
+            onAddTask={() => setDialogOpen(true)}
+            onAddProject={() => setProjectDialogOpen(true)}
+            onToggleCollapsed={() => setCollapsed((prev) => !prev)}
+          />
         </div>
-
-        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-          <details className="md:hidden">
-            <summary className="tm-button flex h-8 cursor-pointer list-none items-center justify-center rounded-[10px] border px-3 text-xs">
-              Actions
-            </summary>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                className="tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2 text-xs"
-                onClick={() => setDialogOpen(true)}
-              >
-                Add Task
-              </button>
-              <button
-                type="button"
-                className="tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2 text-xs"
-                onClick={() => setProjectDialogOpen(true)}
-              >
-                Add Project
-              </button>
-              <button
-                type="button"
-                className="tm-button inline-flex h-8 items-center justify-center rounded-[10px] border px-2 text-xs"
-                onClick={() => setCollapsed((prev) => !prev)}
-              >
-                {collapsed ? "Expand" : "Collapse"}
-              </button>
-            </div>
-          </details>
-          <div className="hidden gap-2 md:flex md:flex-wrap">
-          <button
-            type="button"
-            className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-            onClick={() => setDialogOpen(true)}
-          >
-            Add Task
-          </button>
-          <button
-            type="button"
-            className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-            onClick={() => setProjectDialogOpen(true)}
-          >
-            Add Project
-          </button>
-          <button
-            type="button"
-            className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-            onClick={() => setCollapsed((prev) => !prev)}
-          >
-            {collapsed ? "Expand" : "Collapse"}
-          </button>
+        <div className="min-w-0">
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[color:var(--tm-muted)]">
+            <span className={overviewCounterChipClass}>
+              <span>Open</span>
+              <span className="font-semibold text-[color:var(--tm-text)]">{displayCounts.openNow}</span>
+            </span>
+            <span className={overviewCounterChipClass}>
+              <span>Upcoming</span>
+              <span className="font-semibold text-[color:var(--tm-text)]">{displayCounts.upcoming}</span>
+            </span>
+            <span className={overviewCounterChipClass}>
+              <span>Done</span>
+              <span className="font-semibold text-[color:var(--tm-text)]">{counts.done}</span>
+            </span>
+            <span className={overviewCounterChipClass}>
+              <span>OD</span>
+              <span className="font-semibold text-[color:var(--tm-text)]">{displayCounts.overdue}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -2135,11 +2601,14 @@ function ProfileCard({
                               : pendingAction === "delete"
                                 ? "border-red-300 bg-red-50/90 text-red-800"
                                 : "border-slate-300 bg-slate-100/90 text-slate-800";
+                          const taskOverdue = isTaskOverdue(task.dueAt);
 
                           return (
                           <article
                             key={task.id}
                             className={`rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 p-3 ${
+                              taskOverdue ? "bg-[#fff1e7]" : ""
+                            } ${
                               task.isPriority
                                 ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
                                 : ""
@@ -2185,6 +2654,7 @@ function ProfileCard({
                               {hasTaskNotes(task) && (
                                 <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                               )}
+                              {taskOverdue && <span className={overdueChipClass}>OD</span>}
                             </div>
                             {task.delegatedTask ? (
                               <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
@@ -2302,13 +2772,16 @@ function ProfileCard({
                                 : pendingAction === "delete"
                                   ? "border-red-300 bg-red-50/90 text-red-800"
                                   : "border-slate-300 bg-slate-100/90 text-slate-800";
+                            const taskOverdue = isTaskOverdue(task.dueAt);
 
                             return (
                             <tr
                               key={task.id}
                               className={`tm-table-row border-b border-l-4 border-l-transparent border-[color:var(--tm-border)] align-top ${
+                                taskOverdue ? "bg-[#fff1e7]" : ""
+                              } ${
                                 task.isPriority
-                                  ? "bg-[rgba(243,225,220,0.82)] shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]"
+                                  ? `${taskOverdue ? "" : "bg-[rgba(243,225,220,0.82)]"} shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]`
                                   : ""
                               } ${
                                 task.delegatedTask ? "border-l-sky-200/70" : ""
@@ -2374,6 +2847,7 @@ function ProfileCard({
                                   {hasTaskNotes(task) && (
                                     <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
                                   )}
+                                  {taskOverdue && <span className={overdueChipClass}>OD</span>}
                                   {task.delegatedTask ? (
                                     <DelegatedTaskStatusPill status={task.delegatedTask.status} />
                                   ) : null}
@@ -2433,6 +2907,108 @@ function ProfileCard({
         onSubmit={onProjectSubmit}
         onFormChange={(updater) => setProjectDraft((prev) => updater(prev))}
       />
+
+      <OverviewUtilityModal
+        open={Boolean(singleSnoozeTask)}
+        title="Snooze task"
+        onClose={closeSingleTaskSnoozeModal}
+      >
+        {singleSnoozeTask && (
+          <form className="space-y-4" onSubmit={submitSingleTaskSnooze}>
+            <input
+              autoFocus
+              className={`${inputClass} w-full`}
+              required
+              type="date"
+              value={singleSnoozeDateValue}
+              onChange={(event) => setSingleSnoozeDateValue(event.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
+                disabled={singleSnoozeSaving}
+                type="button"
+                onClick={closeSingleTaskSnoozeModal}
+              >
+                Cancel
+              </button>
+              <button className={buttonClass} disabled={singleSnoozeSaving} type="submit">
+                Apply
+              </button>
+            </div>
+          </form>
+        )}
+      </OverviewUtilityModal>
+
+      <OverviewUtilityModal
+        open={Boolean(repeatPauseTask)}
+        title="Pause Repeat"
+        onClose={closeRepeatPauseModal}
+      >
+        {repeatPauseTask && (
+          <form className="space-y-4" onSubmit={pauseRepeatTask}>
+            <div className="space-y-2">
+              {REPEAT_PAUSE_PRESET_OPTIONS.map((option) => (
+                <label key={option.value} className={modalChoiceClass}>
+                  <input
+                    checked={repeatPausePreset === option.value}
+                    name={`overview-repeat-pause-preset-${profile.id}`}
+                    type="radio"
+                    value={option.value}
+                    onChange={() => {
+                      setRepeatPausePreset(option.value);
+                      if (option.value === "tomorrow" || option.value === "next-week") {
+                        setRepeatPauseUntilValue(
+                          getRepeatPauseUntilForPreset(todayInputValue(), option.value)
+                        );
+                      }
+                      if (option.value === "indefinite") {
+                        setRepeatPauseUntilValue("");
+                      }
+                    }}
+                  />
+                  <div className="font-medium">{option.label}</div>
+                </label>
+              ))}
+            </div>
+            {repeatPausePreset === "custom" && (
+              <label className="space-y-1 text-sm">
+                <div className="tm-muted">Pause until</div>
+                <input
+                  autoFocus
+                  className={`${inputClass} w-full`}
+                  required
+                  type="date"
+                  value={repeatPauseUntilValue}
+                  onChange={(event) => setRepeatPauseUntilValue(event.target.value)}
+                />
+              </label>
+            )}
+            <label className="space-y-1 text-sm">
+              <div className="tm-muted">Note</div>
+              <input
+                className={`${inputClass} w-full`}
+                placeholder="Optional reason"
+                value={repeatPauseNoteValue}
+                onChange={(event) => setRepeatPauseNoteValue(event.target.value)}
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
+                disabled={repeatPauseSaving}
+                type="button"
+                onClick={closeRepeatPauseModal}
+              >
+                Cancel
+              </button>
+              <button className={buttonClass} disabled={repeatPauseSaving} type="submit">
+                Pause Repeat
+              </button>
+            </div>
+          </form>
+        )}
+      </OverviewUtilityModal>
 
       <DelegateTaskModal
         open={Boolean(delegateTask)}
@@ -2507,17 +3083,28 @@ function ProfileCard({
 
       {contextMenu && (
         (() => {
+          const menuHeight =
+            contextMenu.type === "task" && isRecurringOverviewTask(contextMenu.task) ? 300 : 240;
+          const maxHeight =
+            typeof window === "undefined"
+              ? menuHeight
+              : Math.min(menuHeight, Math.max(120, window.innerHeight - 24));
           const maxX =
             typeof window === "undefined" ? contextMenu.x : Math.max(12, window.innerWidth - 196);
           const maxY =
-            typeof window === "undefined" ? contextMenu.y : Math.max(12, window.innerHeight - 160);
+            typeof window === "undefined"
+              ? contextMenu.y
+              : Math.max(12, window.innerHeight - maxHeight - 12);
 
           return (
         <div
-          className="fixed z-[60] min-w-[180px] rounded-[12px] border border-[color:var(--tm-border)] bg-[color:var(--tm-bg)] p-1.5 shadow-xl"
+          className="tm-menu fixed z-[60] min-w-44 overflow-hidden rounded-lg border py-1 text-left shadow-2xl"
+          role="menu"
           style={{
             left: Math.min(contextMenu.x, maxX),
             top: Math.min(contextMenu.y, maxY),
+            maxHeight,
+            overflowY: "auto",
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -2529,33 +3116,17 @@ function ProfileCard({
             <>
               <button
                 type="button"
-                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
-                onClick={() => openTaskEditor(contextMenu.task)}
-                disabled={busyAction || editTaskSaving || editProjectSaving || taskPending}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
-                onClick={() =>
-                  void handleToggleTask(contextMenu.task, !Boolean(contextMenu.task.completedOn))
-                }
+                className={taskActionMenuItemClass}
+                role="menuitem"
+                onClick={() => openSingleTaskSnoozeDate(contextMenu.task)}
                 disabled={busyAction || taskPending}
               >
-                {contextMenu.task.completedOn ? "Open" : "Done"}
+                Snooze
               </button>
               <button
                 type="button"
-                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
-                onClick={() => requestDeleteTask(contextMenu.task)}
-                disabled={busyAction || taskPending}
-              >
-                Delete
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                className={taskActionMenuItemClass}
+                role="menuitem"
                 onClick={() => void handleToggleTaskPriority(contextMenu.task)}
                 disabled={busyAction || taskPending}
               >
@@ -2563,11 +3134,54 @@ function ProfileCard({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                className={taskActionMenuItemClass}
+                role="menuitem"
+                onClick={() => openTaskEditor(contextMenu.task)}
+                disabled={busyAction || editTaskSaving || editProjectSaving || taskPending}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={taskActionMenuItemClass}
+                role="menuitem"
+                onClick={() =>
+                  void handleToggleTask(contextMenu.task, !Boolean(contextMenu.task.completedOn))
+                }
+                disabled={busyAction || taskPending}
+              >
+                {contextMenu.task.completedOn ? "Open" : "Done"}
+              </button>
+              {isRecurringOverviewTask(contextMenu.task) && (
+                <button
+                  type="button"
+                  className={taskActionMenuItemClass}
+                  role="menuitem"
+                  onClick={() => requestToggleRepeatPause(contextMenu.task)}
+                  disabled={busyAction || taskPending}
+                >
+                  {isOverviewRepeatPausedOnDate(contextMenu.task, todayInputValue())
+                    ? "Resume Repeat"
+                    : "Pause Repeat"}
+                </button>
+              )}
+              <button
+                type="button"
+                className={taskActionMenuItemClass}
+                role="menuitem"
                 onClick={() => openDelegateTask(contextMenu.task)}
                 disabled={busyAction || taskPending || Boolean(contextMenu.task.delegatedTask)}
               >
                 {contextMenu.task.delegatedTask ? "Already delegated" : "Delegate Task"}
+              </button>
+              <button
+                type="button"
+                className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
+                role="menuitem"
+                onClick={() => requestDeleteTask(contextMenu.task)}
+                disabled={busyAction || taskPending}
+              >
+                Delete
               </button>
             </>
               );
@@ -2577,7 +3191,8 @@ function ProfileCard({
               {contextMenu.group.projectId && (
                 <button
                   type="button"
-                  className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                  className={taskActionMenuItemClass}
+                  role="menuitem"
                   onClick={() => openProjectEditor(contextMenu.group)}
                   disabled={busyAction || editTaskSaving || editProjectSaving}
                 >
@@ -2587,7 +3202,8 @@ function ProfileCard({
               {!contextMenu.group.isUnassigned && (
                 <button
                   type="button"
-                  className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                  className={taskActionMenuItemClass}
+                  role="menuitem"
                   onClick={() => void handleArchiveProject(contextMenu.group)}
                   disabled={busyAction}
                 >
@@ -2597,7 +3213,8 @@ function ProfileCard({
               {contextMenu.group.projectId && (
                 <button
                   type="button"
-                  className="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm hover:bg-white/60 disabled:opacity-50"
+                  className={taskActionMenuItemClass}
+                  role="menuitem"
                   onClick={() => void handleToggleProjectPriority(contextMenu.group)}
                   disabled={busyAction}
                 >
@@ -2618,6 +3235,7 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
   const [orderedProfiles, setOrderedProfiles] = useState(profiles);
   const [query, setQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<OverviewTaskFilter>("all-open");
+  const [sortMode, setSortMode] = useState<OverviewSortMode>("manual");
   const [groupingMode, setGroupingMode] = useState<OverviewGroupingMode>("project");
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -2632,6 +3250,11 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
   const groupingOptions: Array<{ value: OverviewGroupingMode; label: string }> = [
     { value: "project", label: "Project" },
     { value: "category", label: "Category" },
+  ];
+  const sortOptions: Array<{ value: OverviewSortMode; label: string }> = [
+    { value: "manual", label: "Manual" },
+    { value: "start-date", label: "Start date" },
+    { value: "due-date", label: "Due date" },
   ];
 
   useEffect(() => {
@@ -2758,70 +3381,36 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
       <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 md:py-10 xl:px-8 2xl:px-10">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Overview</h1>
             <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
               All profiles and their active tasks in one place.
             </p>
           </div>
 
-        </div>
-
-        <div className="mt-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
-            <details className="relative">
-              <summary className="tm-button flex h-9 cursor-pointer list-none items-center rounded-[10px] border px-3 text-sm">
-                Filter: {filterOptions.find((option) => option.value === selectedFilter)?.label}
-              </summary>
-              <div className="tm-menu absolute left-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
-                {filterOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 ${
-                      selectedFilter === option.value ? "font-semibold" : ""
-                    }`}
-                    onClick={() => setSelectedFilter(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </details>
-
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
-                Group by
-              </span>
-              <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
-                {groupingOptions.map((option) => {
-                  const active = groupingMode === option.value;
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={active ? segmentedActiveTabClass : segmentedTabClass}
-                      onClick={() => setGroupingMode(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:max-w-xl sm:flex-row sm:items-center sm:justify-end">
+            <OverviewOptionsMenu
+              selectedFilter={selectedFilter}
+              sortMode={sortMode}
+              groupingMode={groupingMode}
+              filterOptions={filterOptions}
+              sortOptions={sortOptions}
+              groupingOptions={groupingOptions}
+              onFilterChange={setSelectedFilter}
+              onSortChange={setSortMode}
+              onGroupingChange={setGroupingMode}
+            />
+            <input
+              className={`${inputClass} w-full sm:max-w-xs`}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter profiles by name"
+            />
           </div>
-
-          <input
-            className={`${inputClass} w-full lg:max-w-sm`}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter profiles by name"
-          />
         </div>
 
-        <section className="mt-6 grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-6 grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProfiles.length === 0 ? (
             <div className="tm-card rounded-[12px] border p-4 text-sm text-[color:var(--tm-muted)] md:col-span-2 xl:col-span-3">
               No profiles match this filter.
@@ -2832,6 +3421,7 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
                 key={profile.id}
                 profile={profile}
                 selectedFilter={selectedFilter}
+                sortMode={sortMode}
                 groupingMode={groupingMode}
                 draggable={!reordering}
                 dragActive={draggedId === profile.id}

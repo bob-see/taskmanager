@@ -263,6 +263,8 @@ const chipClass = "tm-chip rounded-full border px-2 py-0.5";
 const smallChipClass = "tm-chip rounded-full border px-2 py-0.5 text-xs";
 const priorityChipClass =
   "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800";
+const overdueChipClass =
+  "rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700";
 const segmentedTabSetClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentedTabClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentedActiveTabClass = "tm-tab-active rounded-full px-3 py-1.5";
@@ -664,6 +666,11 @@ function isTaskUpcomingAfterDate(task: Task, dateValue: string) {
 
 function isTaskCompleted(task: Task) {
   return Boolean(task.completedAt);
+}
+
+function isTaskOverdue(task: Task, referenceDate: string) {
+  const dueDate = toDateOnly(task.dueAt);
+  return !isTaskCompleted(task) && dueDate !== "" && dueDate < referenceDate;
 }
 
 function isOpenTaskNewOnDate(task: Task, dateValue: string) {
@@ -1732,7 +1739,7 @@ function TaskActionMenu({
   const [position, setPosition] = useState<{
     left: number;
     top: number;
-    placement: "above" | "below";
+    maxHeight: number;
   } | null>(null);
 
   function updatePosition() {
@@ -1741,21 +1748,26 @@ function TaskActionMenu({
 
     const rect = button.getBoundingClientRect();
     const menuWidth = 176;
-    const menuHeight = menuRef.current?.offsetHeight ?? (showSnoozeAction ? 224 : 188);
     const gutter = 12;
+    const offset = 8;
+    const menuHeight = menuRef.current?.scrollHeight ?? (showSnoozeAction ? 260 : 220);
+    const availableBelow = window.innerHeight - rect.bottom - gutter - offset;
+    const availableAbove = rect.top - gutter - offset;
+    const openAbove = availableBelow < Math.min(menuHeight, 180) && availableAbove > availableBelow;
+    const availableHeight = Math.max(120, openAbove ? availableAbove : availableBelow);
+    const maxHeight = Math.min(menuHeight, availableHeight);
     const left = Math.min(
       Math.max(gutter, rect.right - menuWidth),
       Math.max(gutter, window.innerWidth - menuWidth - gutter)
     );
-    const shouldOpenAbove =
-      window.innerHeight - rect.bottom < menuHeight + gutter &&
-      rect.top > menuHeight + gutter;
-    const top = shouldOpenAbove ? rect.top - 8 : rect.bottom + 8;
+    const top = openAbove
+      ? Math.max(gutter, rect.top - maxHeight - offset)
+      : Math.min(rect.bottom + offset, window.innerHeight - gutter - maxHeight);
 
     setPosition({
       left,
       top,
-      placement: shouldOpenAbove ? "above" : "below",
+      maxHeight,
     });
   }
 
@@ -1831,7 +1843,8 @@ function TaskActionMenu({
             style={{
               left: position.left,
               top: position.top,
-              transform: position.placement === "above" ? "translateY(-100%)" : undefined,
+              maxHeight: position.maxHeight,
+              overflowY: "auto",
             }}
           >
             <TaskActionMenuItems
@@ -2368,6 +2381,7 @@ function TaskRow({
     .filter(Boolean)
     .join(" ");
   const waitingOnValues = getLatestWaitingOnValues(task);
+  const taskOverdue = isTaskOverdue(task, currentDateValue ?? todayInputValue());
 
   return (
     <div
@@ -2504,8 +2518,11 @@ function TaskRow({
         )}
 
         {visibleColumns.due && (
-          <div className="text-xs text-[color:var(--tm-muted)]">
-            {toDateOnly(task.dueAt) || "—"}
+          <div className="flex items-center gap-1.5 text-xs text-[color:var(--tm-muted)]">
+            <span className={taskOverdue ? "font-medium text-red-700" : ""}>
+              {toDateOnly(task.dueAt) || "—"}
+            </span>
+            {taskOverdue && <span className={overdueChipClass}>OD</span>}
           </div>
         )}
 
@@ -5865,6 +5882,7 @@ export function TrackerClient({
                             ? "border-red-300 bg-red-50/90 text-red-800"
                             : "border-slate-300 bg-slate-100/90 text-slate-800";
                       const waitingOnValues = getLatestWaitingOnValues(task);
+                      const taskOverdue = isTaskOverdue(task, selectedDay);
 
                       return (
                       <tr
@@ -5967,7 +5985,14 @@ export function TrackerClient({
                           </td>
                         )}
                         {visibleColumns.due && (
-                          <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
+                          <td className={matrixCellClass}>
+                            <div className="flex items-center gap-1.5">
+                              <span className={taskOverdue ? "font-medium text-red-700" : ""}>
+                                {toDateOnly(task.dueAt) || "—"}
+                              </span>
+                              {taskOverdue && <span className={overdueChipClass}>OD</span>}
+                            </div>
+                          </td>
                         )}
                         {visibleColumns.waitingOn && (
                           <td className={matrixCellClass}>
@@ -6020,15 +6045,19 @@ export function TrackerClient({
           if (!contextTask) return null;
 
           const menuWidth = 176;
-          const estimatedMenuHeight = taskContextMenu.showSnoozeAction ? 224 : 188;
           const gutter = 12;
+          const estimatedMenuHeight = taskContextMenu.showSnoozeAction ? 260 : 220;
+          const maxHeight = Math.min(
+            estimatedMenuHeight,
+            Math.max(120, window.innerHeight - gutter * 2)
+          );
           const left = Math.min(
             Math.max(gutter, taskContextMenu.x),
             Math.max(gutter, window.innerWidth - menuWidth - gutter)
           );
           const top = Math.min(
             Math.max(gutter, taskContextMenu.y),
-            Math.max(gutter, window.innerHeight - estimatedMenuHeight - gutter)
+            Math.max(gutter, window.innerHeight - maxHeight - gutter)
           );
           const pendingAction =
             pendingTaskActions[contextTask.id] ??
@@ -6038,7 +6067,7 @@ export function TrackerClient({
             <div
               className="tm-menu fixed z-[1000] min-w-44 overflow-hidden rounded-lg border py-1 text-left shadow-2xl"
               role="menu"
-              style={{ left, top }}
+              style={{ left, top, maxHeight, overflowY: "auto" }}
               onPointerDown={(event) => event.stopPropagation()}
               onContextMenu={(event) => {
                 event.preventDefault();

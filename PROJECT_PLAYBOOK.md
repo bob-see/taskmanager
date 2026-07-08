@@ -65,6 +65,33 @@ Whenever a proposed feature adds complexity, ask:
 
 The Overview page is the heart of the application.
 
+## Overview Options Own Page-Wide Controls
+
+Overview has an Overview Options menu for controls that affect the entire Overview page, not a single profile.
+
+Current sections:
+
+- Filter
+- Sort
+- Group By
+
+Overview Group By currently supports:
+
+- Project
+- Category
+
+Overview profile cards use a single Actions button instead of separate Add Task, Add Project and Collapse buttons. The profile card Actions menu includes:
+
+- Add Task
+- Add Project
+- Collapse / Expand
+
+Overview profile counters use compact labels: Open, Upcoming, Done and OD.
+
+Overdue indicators are context-specific: profile pages show a red due date with an OD pill beside the date, while Overview uses a subtle overdue row tint with an OD badge. Priority styling remains separate from overdue styling.
+
+Collapsed Overview profile cards should stay compact and show only the header, counters and Actions button.
+
 ## Capture First, Organise Later
 
 Adding a task should be frictionless.
@@ -135,6 +162,13 @@ Overview and profile task rows support right-click task actions. Profile task ro
 Clicking the task title should continue to open the edit task modal. The three-dot Actions button should continue to open the same actions menu. Right-click must not change Select mode selection or interfere with manual drag/reorder.
 
 Task action menu items should be shared/reused so future task actions stay consistent across right-click menus and explicit Actions buttons.
+
+Task action menus should stay consistent between Overview and profile pages wherever the task supports the same actions. Menus should be viewport-aware so options are not cut off near the bottom of the screen.
+
+Future considerations:
+
+- Consider a masonry-style Overview layout later so collapsed or short cards naturally close vertical gaps beside taller cards.
+- Continue moving task menus toward a single shared source of truth so Overview, Profile and future task surfaces use the same action definitions and ordering.
 
 ## Notes Matter
 
