@@ -102,6 +102,14 @@ Productivity Tools
 	•	Reporting averages (Calendar vs Work week)
 	•	Delegated tasks with accept/decline, lifecycle actions and shared notes
 
+Task Row Actions
+	•	Overview and profile task rows support right-click task actions
+	•	Right-clicking anywhere on a profile task row opens the task actions menu
+	•	Clicking the task title still opens the edit task modal
+	•	The three-dot Actions button opens the same shared actions menu
+	•	Right-click does not change Select mode selection or interfere with manual drag/reorder
+	•	Task action menu items are shared so future actions stay consistent across entry points
+
 Organisation
 	•	Category memory per profile
 	•	Project progress bars

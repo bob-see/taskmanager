@@ -279,6 +279,16 @@ const iconButtonClass =
 const taskActionMenuItemClass =
   "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50";
 
+type TaskActionMenuConfig = {
+  taskId: string;
+  x: number;
+  y: number;
+  showSnoozeAction: boolean;
+  completedActionLabel?: string;
+  toggleCompletedTo?: boolean;
+  pauseReferenceDate: string;
+};
+
 function taskViewToOpenFilter(taskView: TaskView): OpenFilter {
   if (taskView === "today") return "today";
   if (taskView === "upcoming") return "upcoming";
@@ -1753,12 +1763,6 @@ function TaskActionMenu({
     setOpen(false);
   }
 
-  function runAction(action: (task: Task) => void) {
-    if (pendingAction) return;
-    closeMenu();
-    action(task);
-  }
-
   const actionPending = Boolean(pendingAction);
 
   useEffect(() => {
@@ -1830,78 +1834,142 @@ function TaskActionMenu({
               transform: position.placement === "above" ? "translateY(-100%)" : undefined,
             }}
           >
-            {showSnoozeAction && (
-              <button
-                className={taskActionMenuItemClass}
-                disabled={snoozeDisabled || actionPending}
-                role="menuitem"
-                type="button"
-                onClick={() => runAction(onPickSnoozeDate)}
-              >
-                Snooze
-              </button>
-            )}
-            <button
-              className={taskActionMenuItemClass}
-              disabled={actionPending}
-              role="menuitem"
-              type="button"
-              onClick={() => runAction(onTogglePriority)}
-            >
-              {task.isPriority ? "Unprioritise" : "Prioritise"}
-            </button>
-            <button
-              className={taskActionMenuItemClass}
-              disabled={actionPending}
-              role="menuitem"
-              type="button"
-              onClick={() => runAction(onOpenEditModal)}
-            >
-              Edit
-            </button>
-            <button
-              className={taskActionMenuItemClass}
-              disabled={completionPending || actionPending}
-              role="menuitem"
-              type="button"
-              onClick={() => runAction(onToggleCompleted)}
-            >
-              {completedActionLabel ?? (isTaskCompleted(task) ? "Open" : "Done")}
-            </button>
-            {isRecurringTask(task) && (
-              <button
-                className={taskActionMenuItemClass}
-                disabled={actionPending}
-                role="menuitem"
-                type="button"
-                onClick={() => runAction(onToggleRepeatPause)}
-              >
-                {isRepeatPausedOnDate(task, pauseReferenceDate)
-                  ? "Resume Repeat"
-                  : "Pause Repeat"}
-              </button>
-            )}
-            <button
-              className={taskActionMenuItemClass}
-              disabled={Boolean(task.delegatedTask) || actionPending}
-              role="menuitem"
-              type="button"
-              onClick={() => runAction(onDelegate)}
-            >
-              {task.delegatedTask ? "Already delegated" : "Delegate Task"}
-            </button>
-            <button
-              className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
-              disabled={actionPending}
-              role="menuitem"
-              type="button"
-              onClick={() => runAction(onDelete)}
-            >
-              Delete
-            </button>
+            <TaskActionMenuItems
+              task={task}
+              completionPending={completionPending}
+              pendingAction={pendingAction}
+              snoozeDisabled={snoozeDisabled}
+              showSnoozeAction={showSnoozeAction}
+              completedActionLabel={completedActionLabel}
+              pauseReferenceDate={pauseReferenceDate}
+              onClose={closeMenu}
+              onPickSnoozeDate={onPickSnoozeDate}
+              onTogglePriority={onTogglePriority}
+              onOpenEditModal={onOpenEditModal}
+              onToggleCompleted={onToggleCompleted}
+              onToggleRepeatPause={onToggleRepeatPause}
+              onDelegate={onDelegate}
+              onDelete={onDelete}
+            />
           </div>,
           document.body
         )}
+    </>
+  );
+}
+
+function TaskActionMenuItems({
+  task,
+  completionPending = false,
+  pendingAction = null,
+  snoozeDisabled = false,
+  showSnoozeAction = true,
+  completedActionLabel,
+  pauseReferenceDate = todayInputValue(),
+  onClose,
+  onPickSnoozeDate,
+  onTogglePriority,
+  onOpenEditModal,
+  onToggleCompleted,
+  onToggleRepeatPause,
+  onDelegate,
+  onDelete,
+}: {
+  task: Task;
+  completionPending?: boolean;
+  pendingAction?: TaskPendingAction | null;
+  snoozeDisabled?: boolean;
+  showSnoozeAction?: boolean;
+  completedActionLabel?: string;
+  pauseReferenceDate?: string;
+  onClose: () => void;
+  onPickSnoozeDate: (task: Task) => void;
+  onTogglePriority: (task: Task) => void;
+  onOpenEditModal: (task: Task) => void;
+  onToggleCompleted: (task: Task) => void;
+  onToggleRepeatPause: (task: Task) => void;
+  onDelegate: (task: Task) => void;
+  onDelete: (task: Task) => void;
+}) {
+  const actionPending = Boolean(pendingAction);
+
+  function runAction(action: (task: Task) => void) {
+    if (pendingAction) return;
+    onClose();
+    action(task);
+  }
+
+  return (
+    <>
+      {showSnoozeAction && (
+        <button
+          className={taskActionMenuItemClass}
+          disabled={snoozeDisabled || actionPending}
+          role="menuitem"
+          type="button"
+          onClick={() => runAction(onPickSnoozeDate)}
+        >
+          Snooze
+        </button>
+      )}
+      <button
+        className={taskActionMenuItemClass}
+        disabled={actionPending}
+        role="menuitem"
+        type="button"
+        onClick={() => runAction(onTogglePriority)}
+      >
+        {task.isPriority ? "Unprioritise" : "Prioritise"}
+      </button>
+      <button
+        className={taskActionMenuItemClass}
+        disabled={actionPending}
+        role="menuitem"
+        type="button"
+        onClick={() => runAction(onOpenEditModal)}
+      >
+        Edit
+      </button>
+      <button
+        className={taskActionMenuItemClass}
+        disabled={completionPending || actionPending}
+        role="menuitem"
+        type="button"
+        onClick={() => runAction(onToggleCompleted)}
+      >
+        {completedActionLabel ?? (isTaskCompleted(task) ? "Open" : "Done")}
+      </button>
+      {isRecurringTask(task) && (
+        <button
+          className={taskActionMenuItemClass}
+          disabled={actionPending}
+          role="menuitem"
+          type="button"
+          onClick={() => runAction(onToggleRepeatPause)}
+        >
+          {isRepeatPausedOnDate(task, pauseReferenceDate)
+            ? "Resume Repeat"
+            : "Pause Repeat"}
+        </button>
+      )}
+      <button
+        className={taskActionMenuItemClass}
+        disabled={Boolean(task.delegatedTask) || actionPending}
+        role="menuitem"
+        type="button"
+        onClick={() => runAction(onDelegate)}
+      >
+        {task.delegatedTask ? "Already delegated" : "Delegate Task"}
+      </button>
+      <button
+        className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
+        disabled={actionPending}
+        role="menuitem"
+        type="button"
+        onClick={() => runAction(onDelete)}
+      >
+        Delete
+      </button>
     </>
   );
 }
@@ -2233,6 +2301,7 @@ function TaskRow({
   onDragEnd,
   onDragOver,
   onDrop,
+  onContextMenu,
 }: {
   task: Task;
   projectName?: string;
@@ -2268,6 +2337,7 @@ function TaskRow({
   onDragEnd?: () => void;
   onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
@@ -2331,6 +2401,7 @@ function TaskRow({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onContextMenu={onContextMenu}
     >
       <div
         className="grid items-center gap-2 md:[grid-template-columns:var(--task-row-columns)]"
@@ -2759,6 +2830,7 @@ export function TrackerClient({
   const [repeatPauseUntilValue, setRepeatPauseUntilValue] = useState("");
   const [repeatPauseNoteValue, setRepeatPauseNoteValue] = useState("");
   const [bulkSnoozeDateValue, setBulkSnoozeDateValue] = useState("");
+  const [taskContextMenu, setTaskContextMenu] = useState<TaskActionMenuConfig | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<DragPosition | null>(null);
@@ -2866,6 +2938,7 @@ export function TrackerClient({
     setSingleSnoozeTask(null);
     setSingleSnoozeDateValue("");
     setBulkSnoozeDateValue("");
+    setTaskContextMenu(null);
     setDraggedTaskId(null);
     setDragOverTaskId(null);
     setDragOverPosition(null);
@@ -3457,6 +3530,32 @@ export function TrackerClient({
     dragOrderSnapshotRef.current = null;
   }, [manualReorderEnabled]);
 
+  useEffect(() => {
+    if (!taskContextMenu) return;
+
+    function closeContextMenu() {
+      setTaskContextMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeContextMenu();
+      }
+    }
+
+    document.addEventListener("pointerdown", closeContextMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("resize", closeContextMenu);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeContextMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", closeContextMenu, true);
+      window.removeEventListener("resize", closeContextMenu);
+    };
+  }, [taskContextMenu]);
+
   function toggleColumnSort(column: TaskSortColumn) {
     if (sortColumn !== column) {
       setSortColumn(column);
@@ -3485,6 +3584,30 @@ export function TrackerClient({
       ...prev,
       [column]: !prev[column],
     }));
+  }
+
+  function openTaskContextMenu(
+    event: React.MouseEvent,
+    task: Task,
+    options: {
+      showSnoozeAction?: boolean;
+      completedActionLabel?: string;
+      toggleCompletedTo?: boolean;
+      pauseReferenceDate?: string;
+    } = {}
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setTaskContextMenu({
+      taskId: task.id,
+      x: event.clientX,
+      y: event.clientY,
+      showSnoozeAction: options.showSnoozeAction ?? true,
+      completedActionLabel: options.completedActionLabel,
+      toggleCompletedTo: options.toggleCompletedTo,
+      pauseReferenceDate: options.pauseReferenceDate ?? selectedDay,
+    });
   }
 
   function shiftSelectedDay(direction: -1 | 1) {
@@ -5272,6 +5395,13 @@ export function TrackerClient({
                           showSnoozeAction={!isTaskCompleted(task)}
                           snoozeDisabled={bulkSaving}
                           onDelete={requestDeleteTask}
+                          onContextMenu={(event) =>
+                            openTaskContextMenu(event, task, {
+                              showSnoozeAction: !isTaskCompleted(task),
+                              toggleCompletedTo: !isTaskCompleted(task),
+                              pauseReferenceDate: selectedDay,
+                            })
+                          }
                         />
                       ))}
                     </div>
@@ -5546,6 +5676,13 @@ export function TrackerClient({
                                   showSnoozeAction
                                   snoozeDisabled={bulkSaving}
                                   onDelete={requestDeleteTask}
+                                  onContextMenu={(event) =>
+                                    openTaskContextMenu(event, task, {
+                                      showSnoozeAction: true,
+                                      toggleCompletedTo: !isTaskCompleted(task),
+                                      pauseReferenceDate: selectedDay,
+                                    })
+                                  }
                                   onDragStart={(event) => {
                                     event.stopPropagation();
                                     if (!manualReorderEnabled) return;
@@ -5747,6 +5884,14 @@ export function TrackerClient({
                                 ? "bg-slate-100/80 opacity-75 ring-2 ring-inset ring-slate-200"
                                 : ""
                         }`}
+                        onContextMenu={(event) =>
+                          openTaskContextMenu(event, task, {
+                            showSnoozeAction: true,
+                            completedActionLabel: taskView === "done" ? "Open" : "Done",
+                            toggleCompletedTo: taskView !== "done",
+                            pauseReferenceDate: selectedDay,
+                          })
+                        }
                       >
                         <td className={matrixCellClass}>
                           <div className="min-w-0">
@@ -5866,6 +6011,70 @@ export function TrackerClient({
 
         </div>
       )}
+
+      {taskContextMenu &&
+        typeof document !== "undefined" &&
+        (() => {
+          const contextTask =
+            tasks.find((task) => task.id === taskContextMenu.taskId) ?? null;
+          if (!contextTask) return null;
+
+          const menuWidth = 176;
+          const estimatedMenuHeight = taskContextMenu.showSnoozeAction ? 224 : 188;
+          const gutter = 12;
+          const left = Math.min(
+            Math.max(gutter, taskContextMenu.x),
+            Math.max(gutter, window.innerWidth - menuWidth - gutter)
+          );
+          const top = Math.min(
+            Math.max(gutter, taskContextMenu.y),
+            Math.max(gutter, window.innerHeight - estimatedMenuHeight - gutter)
+          );
+          const pendingAction =
+            pendingTaskActions[contextTask.id] ??
+            (completionPendingTaskIds.includes(contextTask.id) ? "complete" : null);
+
+          return createPortal(
+            <div
+              className="tm-menu fixed z-[1000] min-w-44 overflow-hidden rounded-lg border py-1 text-left shadow-2xl"
+              role="menu"
+              style={{ left, top }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
+              <TaskActionMenuItems
+                task={contextTask}
+                completionPending={completionPendingTaskIds.includes(contextTask.id)}
+                pendingAction={pendingAction}
+                snoozeDisabled={bulkSaving}
+                showSnoozeAction={taskContextMenu.showSnoozeAction}
+                completedActionLabel={taskContextMenu.completedActionLabel}
+                pauseReferenceDate={taskContextMenu.pauseReferenceDate}
+                onClose={() => setTaskContextMenu(null)}
+                onPickSnoozeDate={openSingleTaskSnoozeDate}
+                onTogglePriority={toggleTaskPriority}
+                onToggleRepeatPause={requestToggleRepeatPause}
+                onOpenEditModal={openTaskEditor}
+                onToggleCompleted={(selectedTask) =>
+                  void toggleTaskCompleted(
+                    selectedTask.id,
+                    taskContextMenu.toggleCompletedTo ?? !isTaskCompleted(selectedTask)
+                  ).catch((err: unknown) =>
+                    setError(
+                      err instanceof Error ? err.message : "Could not update task"
+                    )
+                  )
+                }
+                onDelegate={openDelegateTask}
+                onDelete={requestDeleteTask}
+              />
+            </div>,
+            document.body
+          );
+        })()}
 
       <AddTaskModal
         open={newTaskOpen}

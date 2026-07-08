@@ -128,6 +128,14 @@ Overview and profile task action menus use the same shared modal. Non-recurring 
 
 The modal uses a retro TaskManager visual style and should remain the shared pattern for future destructive task actions.
 
+## Task Actions Stay Shared Across Entry Points
+
+Overview and profile task rows support right-click task actions. Profile task rows should open the task actions menu when right-clicking anywhere on the row, matching Overview behaviour.
+
+Clicking the task title should continue to open the edit task modal. The three-dot Actions button should continue to open the same actions menu. Right-click must not change Select mode selection or interfere with manual drag/reorder.
+
+Task action menu items should be shared/reused so future task actions stay consistent across right-click menus and explicit Actions buttons.
+
 ## Notes Matter
 
 Task notes preserve context and act as progress logs and memory aids.
