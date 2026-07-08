@@ -85,6 +85,14 @@ Recurring Tasks
 	•	Delete options: this task / future / entire series
 	•	Accurate historical tracking
 
+Task Delete Confirmation
+	•	All task deletes use the shared TaskManager in-app delete confirmation modal
+	•	Browser-native confirm dialogs should not be used for task deletion
+	•	Overview and profile task action menus use the same shared modal
+	•	Non-recurring tasks require confirmation before deletion
+	•	Recurring tasks keep delete scope options: this task only, this and future tasks, entire series
+	•	The modal uses a retro TaskManager visual style and is the shared pattern for future destructive task actions
+
 Productivity Tools
 	•	Multi-select bulk actions
 	•	Inline editing

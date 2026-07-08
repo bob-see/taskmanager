@@ -22,6 +22,7 @@ import {
   type TaskCreateFormState,
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
+import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 
 type OverviewProject = {
@@ -1624,12 +1625,6 @@ function ProfileCard({
 
   function requestDeleteTask(task: OverviewTask) {
     setContextMenu(null);
-
-    if (!task.recurrenceSeriesId) {
-      void handleDeleteTask(task);
-      return;
-    }
-
     setDeleteTaskModalTask(task);
     setDeleteTaskMode("this");
   }
@@ -1861,20 +1856,21 @@ function ProfileCard({
 
   async function handleDeleteTask(task: OverviewTask) {
     setContextMenu(null);
-    if (!window.confirm(`Delete task "${task.title}"?`)) {
-      return;
-    }
     const pendingStartedAt = Date.now();
     if (!startTaskPendingAction(task.id, "delete")) return;
+    setDeleteTaskSaving(true);
     setBusyAction(true);
 
     try {
       await deleteTask(task.id);
       await waitForMinimumPendingTime(pendingStartedAt);
       removeTaskFromCard(task);
+      setDeleteTaskModalTask(null);
+      setDeleteTaskMode("this");
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not delete task");
     } finally {
+      setDeleteTaskSaving(false);
       setBusyAction(false);
       await waitForMinimumPendingTime(pendingStartedAt);
       finishTaskPendingAction(task.id);
@@ -2485,111 +2481,29 @@ function ProfileCard({
         }
       />
 
-      {deleteTaskModalTask && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6"
-          onClick={() => {
-            if (deleteTaskSaving) return;
-            setDeleteTaskModalTask(null);
-            setDeleteTaskMode("this");
-          }}
-        >
-          <div
-            className="tm-card w-full max-w-lg rounded-[16px] border p-5 shadow-xl md:p-6"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold">Delete recurring task</h3>
-              <button
-                type="button"
-                className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-                onClick={() => {
-                  if (deleteTaskSaving) return;
-                  setDeleteTaskModalTask(null);
-                  setDeleteTaskMode("this");
-                }}
-                disabled={deleteTaskSaving}
-              >
-                Close
-              </button>
-            </div>
+      <TaskDeleteConfirmationModal
+        open={Boolean(deleteTaskModalTask)}
+        taskTitle={deleteTaskModalTask?.title ?? ""}
+        recurring={Boolean(deleteTaskModalTask?.recurrenceSeriesId)}
+        mode={deleteTaskMode}
+        saving={deleteTaskSaving}
+        modeName={`overview-delete-mode-${profile.id}`}
+        onModeChange={setDeleteTaskMode}
+        onCancel={() => {
+          setDeleteTaskModalTask(null);
+          setDeleteTaskMode("this");
+        }}
+        onConfirm={(mode) => {
+          if (!deleteTaskModalTask) return;
 
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleDeleteRecurringTask(deleteTaskModalTask, deleteTaskMode);
-              }}
-            >
-              <div className="space-y-2">
-                <label className={modalChoiceClass}>
-                  <input
-                    checked={deleteTaskMode === "this"}
-                    disabled={deleteTaskSaving}
-                    name={`overview-delete-mode-${profile.id}`}
-                    type="radio"
-                    value="this"
-                    onChange={() => setDeleteTaskMode("this")}
-                  />
-                  <div>
-                    <div className="font-medium">This task only</div>
-                  </div>
-                </label>
-                <label className={modalChoiceClass}>
-                  <input
-                    checked={deleteTaskMode === "future"}
-                    disabled={deleteTaskSaving}
-                    name={`overview-delete-mode-${profile.id}`}
-                    type="radio"
-                    value="future"
-                    onChange={() => setDeleteTaskMode("future")}
-                  />
-                  <div>
-                    <div className="font-medium">This and future tasks</div>
-                  </div>
-                </label>
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-300/50 bg-red-50 p-3">
-                  <input
-                    checked={deleteTaskMode === "series"}
-                    disabled={deleteTaskSaving}
-                    name={`overview-delete-mode-${profile.id}`}
-                    type="radio"
-                    value="series"
-                    onChange={() => setDeleteTaskMode("series")}
-                  />
-                  <div>
-                    <div className="font-medium text-red-700">Entire series</div>
-                  </div>
-                </label>
-              </div>
+          if (deleteTaskModalTask.recurrenceSeriesId) {
+            void handleDeleteRecurringTask(deleteTaskModalTask, mode);
+            return;
+          }
 
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="tm-button inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm"
-                  onClick={() => {
-                    if (deleteTaskSaving) return;
-                    setDeleteTaskModalTask(null);
-                    setDeleteTaskMode("this");
-                  }}
-                  disabled={deleteTaskSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={`rounded-[10px] border px-3 text-sm disabled:opacity-50 ${
-                    deleteTaskMode === "series" ? "tm-button-danger" : "tm-button-primary"
-                  } inline-flex h-9 items-center justify-center`}
-                  disabled={deleteTaskSaving}
-                >
-                  Delete
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          void handleDeleteTask(deleteTaskModalTask);
+        }}
+      />
 
       {contextMenu && (
         (() => {

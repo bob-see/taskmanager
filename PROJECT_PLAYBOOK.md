@@ -116,6 +116,18 @@ Waiting On is not a separate task field. It is derived from the latest task note
 
 Future workspace preferences should prefer this menu when practical, including grouping, density, additional columns and other profile-level display options. This keeps the toolbar clean while allowing each workspace to become more configurable over time.
 
+## Task Deletes Use The Shared Modal
+
+All task deletes should use the shared TaskManager in-app delete confirmation modal. Browser-native confirm dialogs should not be used for task deletion.
+
+Overview and profile task action menus use the same shared modal. Non-recurring tasks require confirmation before deletion. Recurring tasks keep their delete scope options:
+
+- This task only
+- This and future tasks
+- Entire series
+
+The modal uses a retro TaskManager visual style and should remain the shared pattern for future destructive task actions.
+
 ## Notes Matter
 
 Task notes preserve context and act as progress logs and memory aids.

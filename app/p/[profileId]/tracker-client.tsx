@@ -23,6 +23,7 @@ import {
   type RepeatPattern,
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
+import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 import { SundayCheckIn } from "@/app/components/sunday-check-in";
 import {
@@ -4038,13 +4039,6 @@ export function TrackerClient({
   }
 
   function requestDeleteTask(task: Task) {
-    if (!task.recurrenceSeriesId) {
-      void deleteTask(task, "this").catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Could not delete task")
-      );
-      return;
-    }
-
     setDeleteTaskModalTask(task);
     setDeleteTaskMode("this");
   }
@@ -6262,91 +6256,25 @@ export function TrackerClient({
         )}
       </Modal>
 
-      <Modal
+      <TaskDeleteConfirmationModal
         open={Boolean(deleteTaskModalTask)}
-        title="Delete recurring task"
-        onClose={() => {
-          if (deleteTaskSaving) return;
+        taskTitle={deleteTaskModalTask?.title ?? ""}
+        recurring={Boolean(deleteTaskModalTask?.recurrenceSeriesId)}
+        mode={deleteTaskMode}
+        saving={deleteTaskSaving}
+        modeName="delete-mode"
+        onModeChange={setDeleteTaskMode}
+        onCancel={() => {
           setDeleteTaskModalTask(null);
           setDeleteTaskMode("this");
         }}
-      >
-        {deleteTaskModalTask && (
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void deleteTask(deleteTaskModalTask, deleteTaskMode).catch((err: unknown) =>
-                setError(err instanceof Error ? err.message : "Could not delete task")
-              );
-            }}
-          >
-            <div className="space-y-2">
-              <label className={modalChoiceClass}>
-                <input
-                  checked={deleteTaskMode === "this"}
-                  disabled={deleteTaskSaving}
-                  name="delete-mode"
-                  type="radio"
-                  value="this"
-                  onChange={() => setDeleteTaskMode("this")}
-                />
-                <div>
-                  <div className="font-medium">This task only</div>
-                </div>
-              </label>
-              <label className={modalChoiceClass}>
-                <input
-                  checked={deleteTaskMode === "future"}
-                  disabled={deleteTaskSaving}
-                  name="delete-mode"
-                  type="radio"
-                  value="future"
-                  onChange={() => setDeleteTaskMode("future")}
-                />
-                <div>
-                  <div className="font-medium">This and future tasks</div>
-                </div>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-red-300/50 bg-red-50 p-3">
-                <input
-                  checked={deleteTaskMode === "series"}
-                  disabled={deleteTaskSaving}
-                  name="delete-mode"
-                  type="radio"
-                  value="series"
-                  onChange={() => setDeleteTaskMode("series")}
-                />
-                <div>
-                  <div className="font-medium text-red-700">Entire series</div>
-                </div>
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                className={buttonClass}
-                disabled={deleteTaskSaving}
-                type="button"
-                onClick={() => {
-                  setDeleteTaskModalTask(null);
-                  setDeleteTaskMode("this");
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className={`rounded-md px-4 py-2 text-sm disabled:opacity-50 ${
-                  deleteTaskMode === "series" ? "tm-button-danger" : "tm-button-primary border"
-                }`}
-                disabled={deleteTaskSaving}
-                type="submit"
-              >
-                Delete
-              </button>
-            </div>
-          </form>
-        )}
-      </Modal>
+        onConfirm={(mode) => {
+          if (!deleteTaskModalTask) return;
+          void deleteTask(deleteTaskModalTask, mode).catch((err: unknown) =>
+            setError(err instanceof Error ? err.message : "Could not delete task")
+          );
+        }}
+      />
 
       <Modal
         open={newProjectOpen}
