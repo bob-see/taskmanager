@@ -100,6 +100,43 @@ Organisation
 	•	Archive support
 	•	Search across tasks and projects
 
+Profile Options
+	•	Each profile/workspace has a Profile Options menu for task display preferences
+	•	Current sections are View, Sort and Columns
+	•	Desktop uses hover/flyout submenus
+	•	Mobile uses an expandable touch-friendly panel
+	•	This menu is the intended home for future workspace customisation rather than adding more controls to the task toolbar
+
+View options
+	•	Active
+	•	Today
+	•	Upcoming
+	•	Overdue
+	•	Paused
+	•	Done
+	•	Archived
+	•	The selected view is visually highlighted
+
+Sort options
+	•	Manual
+	•	Start Date
+	•	Due Date
+	•	The current sort mode is visually highlighted
+
+Column visibility
+	•	Task columns can be individually shown or hidden per profile/workspace
+	•	Configurable columns currently include Category, Due, Waiting On and Tags / Notes
+	•	Column preferences are remembered per profile/workspace
+	•	The task table expands slightly when additional columns such as Waiting On are enabled
+
+Waiting On
+	•	Waiting On is not a separate task field
+	•	It is derived from the latest task note only
+	•	If the most recent note contains one or more Waiting On selections, those values are displayed
+	•	If the most recent note contains no Waiting On selection, the Waiting On column is blank
+	•	Older Waiting On values are intentionally ignored once a newer note exists
+	•	This reflects the current state of the task rather than historical state
+
 Delegated Task Workflow
 	•	Create a new delegated task from the Delegated section
 	•	Delegate an existing task from task actions

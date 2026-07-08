@@ -73,6 +73,49 @@ Adding a task should be frictionless.
 
 Whenever choosing between more functionality and more visibility, prefer visibility.
 
+## Profile Options Own Workspace Customisation
+
+Each profile/workspace has a Profile Options menu for task display preferences.
+
+Current sections:
+
+- View
+- Sort
+- Columns
+
+Profile Options should become the long-term home for workspace customisation rather than adding more controls to the task toolbar.
+
+Desktop uses hover/flyout submenus. Mobile uses an expandable touch-friendly panel below the settings control.
+
+Current task views:
+
+- Active
+- Today
+- Upcoming
+- Overdue
+- Paused
+- Done
+- Archived
+
+Current sort modes:
+
+- Manual
+- Start Date
+- Due Date
+
+Current configurable columns:
+
+- Category
+- Due
+- Waiting On
+- Tags / Notes
+
+The selected view and sort mode should be visually highlighted. Column preferences are remembered per profile/workspace, and the task table may expand slightly when additional columns such as Waiting On are enabled.
+
+Waiting On is not a separate task field. It is derived from the latest task note only: if the most recent note has Waiting On selections, display them; if it does not, display a blank Waiting On cell. Older Waiting On values are intentionally ignored once a newer note exists, because the column represents current task state rather than history.
+
+Future workspace preferences should prefer this menu when practical, including grouping, density, additional columns and other profile-level display options. This keeps the toolbar clean while allowing each workspace to become more configurable over time.
+
 ## Notes Matter
 
 Task notes preserve context and act as progress logs and memory aids.

@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
@@ -140,6 +141,7 @@ type DoneRange = "today" | "week" | "month" | "all";
 type SortMode = "start-date" | "due-date" | "manual";
 type TaskSortColumn = "title" | "category" | "due" | "notes";
 type SortDirection = "asc" | "desc";
+type VisibleTaskColumn = "category" | "due" | "waitingOn" | "notes";
 type DeleteMode = "this" | "future" | "series";
 type DragPosition = "before" | "after";
 type BulkAction =
@@ -208,6 +210,18 @@ const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
   { value: "start-date", label: "Start date" },
   { value: "due-date", label: "Due date" },
 ];
+const TASK_COLUMN_OPTIONS: Array<{ value: VisibleTaskColumn; label: string }> = [
+  { value: "category", label: "Category" },
+  { value: "due", label: "Due" },
+  { value: "waitingOn", label: "Waiting On" },
+  { value: "notes", label: "Tags / Notes" },
+];
+const DEFAULT_VISIBLE_TASK_COLUMNS: Record<VisibleTaskColumn, boolean> = {
+  category: true,
+  due: true,
+  waitingOn: false,
+  notes: true,
+};
 const AVERAGE_BASIS_OPTIONS: Array<{ value: AverageBasis; label: string }> = [
   { value: "calendar-days", label: "Calendar days" },
   { value: "work-week", label: "Work week" },
@@ -261,8 +275,6 @@ const matrixHeaderCellClass =
 const matrixCellClass = "px-3 py-2.5 align-top";
 const iconButtonClass =
   "tm-button inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-sm";
-const taskMatrixHeaderClass =
-  "grid items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid-cols-[minmax(12rem,1.7fr)_minmax(8rem,0.8fr)_minmax(5rem,0.5fr)_minmax(6rem,0.6fr)_auto]";
 const taskActionMenuItemClass =
   "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50";
 
@@ -1372,6 +1384,76 @@ function getTaskNotesText(task: Pick<Task, "noteHistory">) {
     .join("\n\n");
 }
 
+function getColumnPreferenceKey(profileId: string) {
+  return `taskmanager:profile:${profileId}:task-columns`;
+}
+
+function normalizeVisibleTaskColumns(value: unknown): Record<VisibleTaskColumn, boolean> {
+  if (!value || typeof value !== "object") {
+    return { ...DEFAULT_VISIBLE_TASK_COLUMNS };
+  }
+
+  const candidate = value as Partial<Record<VisibleTaskColumn, unknown>>;
+  return {
+    category:
+      typeof candidate.category === "boolean"
+        ? candidate.category
+        : DEFAULT_VISIBLE_TASK_COLUMNS.category,
+    due:
+      typeof candidate.due === "boolean" ? candidate.due : DEFAULT_VISIBLE_TASK_COLUMNS.due,
+    waitingOn:
+      typeof candidate.waitingOn === "boolean"
+        ? candidate.waitingOn
+        : DEFAULT_VISIBLE_TASK_COLUMNS.waitingOn,
+    notes:
+      typeof candidate.notes === "boolean"
+        ? candidate.notes
+        : DEFAULT_VISIBLE_TASK_COLUMNS.notes,
+  };
+}
+
+function loadVisibleTaskColumns(profileId: string) {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_VISIBLE_TASK_COLUMNS };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(getColumnPreferenceKey(profileId));
+    return normalizeVisibleTaskColumns(rawValue ? JSON.parse(rawValue) : null);
+  } catch (error) {
+    console.warn("Could not load task column preferences", error);
+    return { ...DEFAULT_VISIBLE_TASK_COLUMNS };
+  }
+}
+
+function getLatestWaitingOnValues(task: Pick<Task, "noteHistory">) {
+  const latestWaitingOn = task.noteHistory[0]?.waitingOn?.trim() ?? "";
+
+  if (!latestWaitingOn) return [];
+
+  return latestWaitingOn
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function WaitingOnPills({ values }: { values: string[] }) {
+  if (values.length === 0) return null;
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      {values.map((value) => (
+        <span
+          key={value}
+          className="rounded-full border border-slate-300/70 bg-white/55 px-2 py-0.5 text-[11px] text-slate-700"
+        >
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function hasTaskNotes(task: Pick<Task, "noteHistory">) {
   return getTaskNotesText(task).trim().length > 0;
 }
@@ -1823,6 +1905,298 @@ function TaskActionMenu({
   );
 }
 
+function ProfileOptionsMenu({
+  taskView,
+  sortMode,
+  visibleColumns,
+  onTaskViewChange,
+  onSortModeChange,
+  onToggleColumn,
+}: {
+  taskView: TaskView;
+  sortMode: SortMode;
+  visibleColumns: Record<VisibleTaskColumn, boolean>;
+  onTaskViewChange: (view: TaskView) => void;
+  onSortModeChange: (sort: SortMode) => void;
+  onToggleColumn: (column: VisibleTaskColumn) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeSubmenu, setActiveSubmenu] = useState<"view" | "sort" | "columns" | null>(
+    null
+  );
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [mobileMenuTop, setMobileMenuTop] = useState<number | null>(null);
+
+  function updateMobileMenuPosition() {
+    const button = buttonRef.current;
+    if (!button || typeof window === "undefined") return;
+
+    const rect = button.getBoundingClientRect();
+    setMobileMenuTop(Math.min(rect.bottom + 8, window.innerHeight - 16));
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    updateMobileMenuPosition();
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      setOpen(false);
+      setActiveSubmenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setActiveSubmenu(null);
+      }
+    }
+
+    function handleReposition() {
+      updateMobileMenuPosition();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [open]);
+
+  function toggleSubmenu(submenu: "view" | "sort" | "columns") {
+    setActiveSubmenu((current) => (current === submenu ? null : submenu));
+  }
+
+  function closeMenu() {
+    setOpen(false);
+    setActiveSubmenu(null);
+  }
+
+  const menuItemClass =
+    "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-white/70";
+  const selectedMenuItemClass =
+    "bg-white/80 font-semibold shadow-[inset_3px_0_0_rgba(31,41,55,0.18)]";
+  const submenuClass =
+    "tm-menu static mt-1 w-full min-w-0 overflow-hidden rounded-lg border py-1 shadow-2xl md:absolute md:right-full md:top-0 md:mt-0 md:mr-1 md:w-auto md:min-w-44";
+  const chevronClass = "text-xs text-[color:var(--tm-muted)]";
+  const gearGlyph = <span className="leading-none md:text-[22px]">⚙</span>;
+
+  function renderViewOptions() {
+    return TASK_VIEW_OPTIONS.map((option) => (
+      <button
+        key={option.value}
+        className={`${menuItemClass} ${
+          taskView === option.value ? selectedMenuItemClass : ""
+        }`}
+        role="menuitemradio"
+        type="button"
+        aria-checked={taskView === option.value}
+        onClick={() => {
+          onTaskViewChange(option.value);
+          closeMenu();
+        }}
+      >
+        <span>{option.label}</span>
+        <span className="w-4 text-right">{taskView === option.value ? "✓" : ""}</span>
+      </button>
+    ));
+  }
+
+  function renderSortOptions() {
+    return SORT_OPTIONS.map((option) => (
+      <button
+        key={option.value}
+        className={`${menuItemClass} ${
+          sortMode === option.value ? selectedMenuItemClass : ""
+        }`}
+        role="menuitemradio"
+        type="button"
+        aria-checked={sortMode === option.value}
+        onClick={() => {
+          onSortModeChange(option.value);
+          closeMenu();
+        }}
+      >
+        <span>{option.label}</span>
+        <span className="w-4 text-right">{sortMode === option.value ? "✓" : ""}</span>
+      </button>
+    ));
+  }
+
+  function renderColumnOptions() {
+    return TASK_COLUMN_OPTIONS.map((option) => (
+      <button
+        key={option.value}
+        className={`${menuItemClass} ${
+          visibleColumns[option.value] ? selectedMenuItemClass : ""
+        }`}
+        role="menuitemcheckbox"
+        type="button"
+        aria-checked={visibleColumns[option.value]}
+        onClick={() => onToggleColumn(option.value)}
+      >
+        <span>{option.label}</span>
+        <span className="w-4 text-right">
+          {visibleColumns[option.value] ? "✓" : ""}
+        </span>
+      </button>
+    ));
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        ref={buttonRef}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={`${iconButtonClass} md:h-9 md:w-9 md:text-base`}
+        title="Profile Options"
+        type="button"
+        onClick={() => {
+          setOpen((current) => !current);
+          setActiveSubmenu(null);
+        }}
+      >
+        {gearGlyph}
+      </button>
+      {open && (
+        <>
+          <div
+            className="tm-menu fixed left-4 right-4 z-50 max-h-[70vh] overflow-y-auto overflow-x-hidden rounded-lg border py-1 text-left shadow-2xl md:hidden"
+            role="menu"
+            style={{ top: mobileMenuTop ?? undefined }}
+          >
+            <div>
+              <button
+                className={menuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => toggleSubmenu("view")}
+              >
+                <span>View</span>
+                <span className={chevronClass}>{activeSubmenu === "view" ? "⌄" : "›"}</span>
+              </button>
+              {activeSubmenu === "view" && (
+                <div className="border-y border-[color:var(--tm-border)] bg-white/20 py-1" role="menu">
+                  {renderViewOptions()}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <button
+                className={menuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => toggleSubmenu("sort")}
+              >
+                <span>Sort</span>
+                <span className={chevronClass}>{activeSubmenu === "sort" ? "⌄" : "›"}</span>
+              </button>
+              {activeSubmenu === "sort" && (
+                <div className="border-y border-[color:var(--tm-border)] bg-white/20 py-1" role="menu">
+                  {renderSortOptions()}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <button
+                className={menuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => toggleSubmenu("columns")}
+              >
+                <span>Columns</span>
+                <span className={chevronClass}>{activeSubmenu === "columns" ? "⌄" : "›"}</span>
+              </button>
+              {activeSubmenu === "columns" && (
+                <div className="border-t border-[color:var(--tm-border)] bg-white/20 py-1" role="menu">
+                  {renderColumnOptions()}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div
+            className="tm-menu absolute right-0 top-full z-50 mt-2 hidden min-w-48 overflow-visible rounded-lg border py-1 text-left shadow-2xl md:block"
+            role="menu"
+          >
+            <div
+              className="relative"
+              onMouseEnter={() => setActiveSubmenu("view")}
+            >
+              <button
+                className={menuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => toggleSubmenu("view")}
+              >
+                <span>View</span>
+                <span className={chevronClass}>›</span>
+              </button>
+              {activeSubmenu === "view" && (
+                <div className={submenuClass} role="menu">
+                  {renderViewOptions()}
+                </div>
+              )}
+            </div>
+
+            <div
+              className="relative"
+              onMouseEnter={() => setActiveSubmenu("sort")}
+            >
+              <button
+                className={menuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => toggleSubmenu("sort")}
+              >
+                <span>Sort</span>
+                <span className={chevronClass}>›</span>
+              </button>
+              {activeSubmenu === "sort" && (
+                <div className={submenuClass} role="menu">
+                  {renderSortOptions()}
+                </div>
+              )}
+            </div>
+
+            <div
+              className="relative"
+              onMouseEnter={() => setActiveSubmenu("columns")}
+            >
+              <button
+                className={menuItemClass}
+                role="menuitem"
+                type="button"
+                onClick={() => toggleSubmenu("columns")}
+              >
+                <span>Columns</span>
+                <span className={chevronClass}>›</span>
+              </button>
+              {activeSubmenu === "columns" && (
+                <div className={submenuClass} role="menu">
+                  {renderColumnOptions()}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TaskRow({
   task,
   projectName,
@@ -1833,6 +2207,7 @@ function TaskRow({
   showSnoozeAction = false,
   selectMode = false,
   selected = false,
+  visibleColumns,
   currentDateValue,
   editingCategoryTaskId,
   editingCategoryValue,
@@ -1867,6 +2242,7 @@ function TaskRow({
   showSnoozeAction?: boolean;
   selectMode?: boolean;
   selected?: boolean;
+  visibleColumns: Record<VisibleTaskColumn, boolean>;
   currentDateValue?: string;
   editingCategoryTaskId: string | null;
   editingCategoryValue: string;
@@ -1910,6 +2286,17 @@ function TaskRow({
       : pendingAction === "delete"
         ? "border-red-300 bg-red-50/90 text-red-800"
         : "border-slate-300 bg-slate-100/90 text-slate-800";
+  const rowColumns = [
+    "minmax(12rem,1.7fr)",
+    visibleColumns.category ? "minmax(8rem,0.8fr)" : null,
+    visibleColumns.due ? "minmax(5rem,0.5fr)" : null,
+    visibleColumns.waitingOn ? "minmax(7rem,0.65fr)" : null,
+    visibleColumns.notes ? "minmax(6rem,0.6fr)" : null,
+    "auto",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const waitingOnValues = getLatestWaitingOnValues(task);
 
   return (
     <div
@@ -1944,9 +2331,14 @@ function TaskRow({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="grid items-center gap-2 md:grid-cols-[minmax(12rem,1.7fr)_minmax(8rem,0.8fr)_minmax(5rem,0.5fr)_minmax(6rem,0.6fr)_auto]">
+      <div
+        className="grid items-center gap-2 md:[grid-template-columns:var(--task-row-columns)]"
+        style={{ "--task-row-columns": rowColumns } as CSSProperties}
+      >
         {selectMode && (
-          <label className="tm-choice flex items-center gap-2 rounded-md border px-2 py-1 text-xs md:col-span-5">
+          <label
+            className="tm-choice flex items-center gap-2 rounded-md border px-2 py-1 text-xs md:[grid-column:1/-1]"
+          >
             <input
               type="checkbox"
               checked={selected}
@@ -1989,80 +2381,92 @@ function TaskRow({
           </button>
         </div>
 
-        <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
-          {isEditingCategory ? (
-            <div className="tm-chip flex flex-wrap items-center gap-2 rounded-md border px-2 py-1">
-                <CategoryCombobox
-                  autoFocus
-                  className="min-w-32 bg-transparent outline-none"
-                  placeholder="Category"
-                  suggestions={categorySuggestions}
-                  value={editingCategoryValue}
-                  onChange={onChangeCategoryEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      onSaveCategoryEdit();
-                    }
+        {visibleColumns.category && (
+          <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
+            {isEditingCategory ? (
+              <div className="tm-chip flex flex-wrap items-center gap-2 rounded-md border px-2 py-1">
+                  <CategoryCombobox
+                    autoFocus
+                    className="min-w-32 bg-transparent outline-none"
+                    placeholder="Category"
+                    suggestions={categorySuggestions}
+                    value={editingCategoryValue}
+                    onChange={onChangeCategoryEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        onSaveCategoryEdit();
+                      }
 
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      onCancelCategoryEdit();
-                    }
-                  }}
-                />
-                <button
-                  className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
-                  type="button"
-                  onClick={onSaveCategoryEdit}
-                >
-                  Save
-                </button>
-                <button
-                  className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
-                  type="button"
-                  onClick={onCancelCategoryEdit}
-                >
-                  Cancel
-                </button>
-            </div>
-          ) : (
-            <button
-              className="line-clamp-1 text-left transition-colors hover:text-[color:var(--tm-text)]"
-              type="button"
-              onClick={() => onStartCategoryEdit(task)}
-            >
-              {task.category ?? "Uncategorized"}
-            </button>
-          )}
-        </div>
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        onCancelCategoryEdit();
+                      }
+                    }}
+                  />
+                  <button
+                    className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
+                    type="button"
+                    onClick={onSaveCategoryEdit}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
+                    type="button"
+                    onClick={onCancelCategoryEdit}
+                  >
+                    Cancel
+                  </button>
+              </div>
+            ) : (
+              <button
+                className="line-clamp-1 text-left transition-colors hover:text-[color:var(--tm-text)]"
+                type="button"
+                onClick={() => onStartCategoryEdit(task)}
+              >
+                {task.category ?? "Uncategorized"}
+              </button>
+            )}
+          </div>
+        )}
 
-        <div className="text-xs text-[color:var(--tm-muted)]">
-          {toDateOnly(task.dueAt) || "—"}
-        </div>
+        {visibleColumns.due && (
+          <div className="text-xs text-[color:var(--tm-muted)]">
+            {toDateOnly(task.dueAt) || "—"}
+          </div>
+        )}
 
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--tm-muted)]">
-          {task.delegatedTask ? (
-            <DelegatedTaskStatusPill status={task.delegatedTask.status} />
-          ) : null}
-          {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
-          {repeatPauseBadge && (
-            <span className="rounded-full border border-slate-300/70 bg-slate-100/80 px-2 py-0.5 text-slate-700">
-              {repeatPauseBadge}
-            </span>
-          )}
-          {hasTaskNotes(task) && (
-            <TaskNotesButton notes={formatTaskNotesPreview(task)} />
-          )}
-          {task.isPriority && <span className={priorityChipClass}>Priority</span>}
-          {projectArchived && (
-            <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
-              Archived
-            </span>
-          )}
-          {projectName && <span className="line-clamp-1">{projectName}</span>}
-          {task.completedOn && <span>Done {toDateOnly(task.completedOn)}</span>}
-        </div>
+        {visibleColumns.waitingOn && (
+          <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
+            <WaitingOnPills values={waitingOnValues} />
+          </div>
+        )}
+
+        {visibleColumns.notes && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--tm-muted)]">
+            {task.delegatedTask ? (
+              <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+            ) : null}
+            {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
+            {repeatPauseBadge && (
+              <span className="rounded-full border border-slate-300/70 bg-slate-100/80 px-2 py-0.5 text-slate-700">
+                {repeatPauseBadge}
+              </span>
+            )}
+            {hasTaskNotes(task) && (
+              <TaskNotesButton notes={formatTaskNotesPreview(task)} />
+            )}
+            {task.isPriority && <span className={priorityChipClass}>Priority</span>}
+            {projectArchived && (
+              <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
+                Archived
+              </span>
+            )}
+            {projectName && <span className="line-clamp-1">{projectName}</span>}
+            {task.completedOn && <span>Done {toDateOnly(task.completedOn)}</span>}
+          </div>
+        )}
 
         <div className="justify-self-start md:justify-self-end">
           <TaskActionMenu
@@ -2091,10 +2495,12 @@ function TaskRow({
 function SortableTaskHeader({
   sortColumn,
   sortDirection,
+  visibleColumns,
   onSort,
 }: {
   sortColumn: TaskSortColumn | null;
   sortDirection: SortDirection | null;
+  visibleColumns: Record<VisibleTaskColumn, boolean>;
   onSort: (column: TaskSortColumn) => void;
 }) {
   function renderSortableHeader(column: TaskSortColumn, label: string) {
@@ -2115,12 +2521,27 @@ function SortableTaskHeader({
     );
   }
 
+  const headerColumns = [
+    "minmax(12rem,1.7fr)",
+    visibleColumns.category ? "minmax(8rem,0.8fr)" : null,
+    visibleColumns.due ? "minmax(5rem,0.5fr)" : null,
+    visibleColumns.waitingOn ? "minmax(7rem,0.65fr)" : null,
+    visibleColumns.notes ? "minmax(6rem,0.6fr)" : null,
+    "auto",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={taskMatrixHeaderClass}>
+    <div
+      className="grid items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:[grid-template-columns:var(--task-row-columns)]"
+      style={{ "--task-row-columns": headerColumns } as CSSProperties}
+    >
       {renderSortableHeader("title", "Title")}
-      {renderSortableHeader("category", "Category")}
-      {renderSortableHeader("due", "Due")}
-      {renderSortableHeader("notes", "Tags / Notes")}
+      {visibleColumns.category && renderSortableHeader("category", "Category")}
+      {visibleColumns.due && renderSortableHeader("due", "Due")}
+      {visibleColumns.waitingOn && <span>Waiting On</span>}
+      {visibleColumns.notes && renderSortableHeader("notes", "Tags / Notes")}
       <span className="text-left md:text-right">Actions</span>
     </div>
   );
@@ -2261,6 +2682,8 @@ export function TrackerClient({
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
   const pendingTaskActionIdsRef = useRef<Set<string>>(new Set());
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
+  const columnPreferencesHydratedRef = useRef(false);
+  const skipNextColumnPreferenceSaveRef = useRef(false);
   const dragOrderSnapshotRef = useRef<Task[] | null>(null);
   const projectDragOrderSnapshotRef = useRef<Project[] | null>(null);
   const lastSavedPreferencesRef = useRef<{
@@ -2283,6 +2706,9 @@ export function TrackerClient({
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [sortColumn, setSortColumn] = useState<TaskSortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<Record<VisibleTaskColumn, boolean>>(
+    () => ({ ...DEFAULT_VISIBLE_TASK_COLUMNS })
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -2448,8 +2874,33 @@ export function TrackerClient({
     dragOrderSnapshotRef.current = null;
     projectDragOrderSnapshotRef.current = null;
     preferenceSyncProfileIdRef.current = null;
+    columnPreferencesHydratedRef.current = false;
+    skipNextColumnPreferenceSaveRef.current = false;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
+
+  useEffect(() => {
+    setVisibleColumns(loadVisibleTaskColumns(profileId));
+    columnPreferencesHydratedRef.current = true;
+    skipNextColumnPreferenceSaveRef.current = true;
+  }, [profileId]);
+
+  useEffect(() => {
+    if (!columnPreferencesHydratedRef.current || typeof window === "undefined") return;
+    if (skipNextColumnPreferenceSaveRef.current) {
+      skipNextColumnPreferenceSaveRef.current = false;
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        getColumnPreferenceKey(profileId),
+        JSON.stringify(visibleColumns)
+      );
+    } catch (error) {
+      console.warn("Could not persist task column preferences", error);
+    }
+  }, [profileId, visibleColumns]);
 
   useEffect(() => {
     setSortColumn(null);
@@ -3026,6 +3477,13 @@ export function TrackerClient({
     setSortMode(nextSortMode);
     setSortColumn(null);
     setSortDirection(null);
+  }
+
+  function toggleVisibleColumn(column: VisibleTaskColumn) {
+    setVisibleColumns((prev) => ({
+      ...prev,
+      [column]: !prev[column],
+    }));
   }
 
   function shiftSelectedDay(direction: -1 | 1) {
@@ -4488,7 +4946,11 @@ export function TrackerClient({
       )}
 
       {viewMode === "day" ? (
-        <section className={sectionCardClass}>
+        <section
+          className={`${sectionCardClass} ${
+            visibleColumns.waitingOn ? "xl:-mx-3 2xl:-mx-6" : ""
+          }`}
+        >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Tasks</h2>
@@ -4499,6 +4961,14 @@ export function TrackerClient({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <ProfileOptionsMenu
+                taskView={taskView}
+                sortMode={sortMode}
+                visibleColumns={visibleColumns}
+                onTaskViewChange={setTaskView}
+                onSortModeChange={changeSortMode}
+                onToggleColumn={toggleVisibleColumn}
+              />
               <button
                 className={`rounded-md border px-3 py-2 text-sm ${
                   selectMode ? "tm-button-primary" : "tm-button"
@@ -4526,38 +4996,8 @@ export function TrackerClient({
             </div>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap gap-2">
-                <details className="relative">
-                  <summary className="tm-button flex h-9 cursor-pointer list-none items-center rounded-[10px] border px-3 text-sm">
-                    View: {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label}
-                  </summary>
-                  <div className="tm-menu absolute left-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
-                    {TASK_VIEW_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 ${
-                          taskView === option.value ? "font-semibold" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setTaskView(option.value)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-                <select
-                  className={`${inputClass} py-1 text-sm`}
-                  value={sortMode}
-                  onChange={(e) => changeSortMode(e.target.value as SortMode)}
-                >
-                  {SORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value} className="text-black">
-                      Sort: {option.label}
-                    </option>
-                  ))}
-                </select>
-                {taskView === "done" && (
+              {taskView === "done" && (
+                <div className="mb-4 flex flex-wrap gap-2">
                   <select
                     className={`${inputClass} py-1 text-sm`}
                     value={doneRange}
@@ -4569,8 +5009,8 @@ export function TrackerClient({
                       </option>
                     ))}
                   </select>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="tm-muted mb-4 text-sm">
                 Showing {dayViewTasks.length} {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label.toLowerCase()} task
@@ -4787,6 +5227,7 @@ export function TrackerClient({
                       <SortableTaskHeader
                         sortColumn={sortColumn}
                         sortDirection={sortDirection}
+                        visibleColumns={visibleColumns}
                         onSort={toggleColumnSort}
                       />
                       {section.tasks.map((task) => (
@@ -4808,6 +5249,7 @@ export function TrackerClient({
                           }
                           selectMode={selectMode}
                           selected={selectedTaskIds.includes(task.id)}
+                          visibleColumns={visibleColumns}
                           currentDateValue={selectedDay}
                           editingCategoryTaskId={editingCategoryTaskId}
                           editingCategoryValue={editingCategoryValue}
@@ -5058,6 +5500,7 @@ export function TrackerClient({
                             <SortableTaskHeader
                               sortColumn={sortColumn}
                               sortDirection={sortDirection}
+                              visibleColumns={visibleColumns}
                               onSort={toggleColumnSort}
                             />
                             {section.openTasks.map((task) => (
@@ -5080,6 +5523,7 @@ export function TrackerClient({
                                   }
                                   selectMode={selectMode}
                                   selected={selectedTaskIds.includes(task.id)}
+                                  visibleColumns={visibleColumns}
                                   currentDateValue={selectedDay}
                                   editingCategoryTaskId={editingCategoryTaskId}
                                   editingCategoryValue={editingCategoryValue}
@@ -5160,7 +5604,11 @@ export function TrackerClient({
         </section>
       ) : (
         <div className="space-y-4">
-          <section className={sectionCardClass}>
+          <section
+            className={`${sectionCardClass} ${
+              visibleColumns.waitingOn ? "xl:-mx-3 2xl:-mx-6" : ""
+            }`}
+          >
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--tm-border)] pb-4">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -5179,20 +5627,14 @@ export function TrackerClient({
                 )}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <span className="tm-muted">Sort</span>
-                  <select
-                    className={`${inputClass} min-w-[10rem]`}
-                    value={sortMode}
-                    onChange={(e) => changeSortMode(e.target.value as SortMode)}
-                  >
-                    {SORT_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value} className="text-black">
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <ProfileOptionsMenu
+                  taskView={taskView}
+                  sortMode={sortMode}
+                  visibleColumns={visibleColumns}
+                  onTaskViewChange={setTaskView}
+                  onSortModeChange={changeSortMode}
+                  onToggleColumn={toggleVisibleColumn}
+                />
                 <label className="flex items-center gap-2 text-sm">
                   <span className="tm-muted">Average basis</span>
                   <select
@@ -5207,25 +5649,6 @@ export function TrackerClient({
                     ))}
                   </select>
                 </label>
-                <details className="relative">
-                  <summary className="tm-button flex h-10 cursor-pointer list-none items-center rounded-[10px] border px-3 text-sm">
-                    View: {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label}
-                  </summary>
-                  <div className="tm-menu absolute right-0 top-full z-40 mt-2 min-w-44 overflow-hidden rounded-lg border py-1 shadow-2xl">
-                    {TASK_VIEW_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 ${
-                          taskView === option.value ? "font-semibold" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setTaskView(option.value)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </details>
                 {taskView === "done" && (
                   <label className="flex items-center gap-2 text-sm">
                     <span className="tm-muted">Range</span>
@@ -5251,31 +5674,42 @@ export function TrackerClient({
               <div className="text-sm opacity-60">No matching tasks.</div>
             ) : (
               <div className="relative max-h-[520px] max-w-full overflow-y-auto overflow-x-auto">
-                <table className="min-w-[50rem] table-fixed border-separate border-spacing-0 text-sm">
+                <table
+                  className={`table-fixed border-separate border-spacing-0 text-sm ${
+                    visibleColumns.waitingOn ? "min-w-[62rem]" : "min-w-[50rem]"
+                  }`}
+                >
                   <thead>
                     <tr>
                       <SortableTaskTableHeaderCell
-                        className={`${matrixHeaderCellClass} w-[40%]`}
+                        className={`${matrixHeaderCellClass} w-[34%]`}
                         label="Title"
                         sortColumn="title"
                         sortDirection={sortColumn === "title" ? sortDirection : null}
                         onSort={toggleColumnSort}
                       />
                       <th className={`${matrixHeaderCellClass} w-[14%]`}>Project</th>
-                      <SortableTaskTableHeaderCell
-                        className={`${matrixHeaderCellClass} w-[14%]`}
-                        label="Category"
-                        sortColumn="category"
-                        sortDirection={sortColumn === "category" ? sortDirection : null}
-                        onSort={toggleColumnSort}
-                      />
-                      <SortableTaskTableHeaderCell
-                        className={`${matrixHeaderCellClass} w-[120px]`}
-                        label="Due"
-                        sortColumn="due"
-                        sortDirection={sortColumn === "due" ? sortDirection : null}
-                        onSort={toggleColumnSort}
-                      />
+                      {visibleColumns.category && (
+                        <SortableTaskTableHeaderCell
+                          className={`${matrixHeaderCellClass} w-[14%]`}
+                          label="Category"
+                          sortColumn="category"
+                          sortDirection={sortColumn === "category" ? sortDirection : null}
+                          onSort={toggleColumnSort}
+                        />
+                      )}
+                      {visibleColumns.due && (
+                        <SortableTaskTableHeaderCell
+                          className={`${matrixHeaderCellClass} w-[120px]`}
+                          label="Due"
+                          sortColumn="due"
+                          sortDirection={sortColumn === "due" ? sortDirection : null}
+                          onSort={toggleColumnSort}
+                        />
+                      )}
+                      {visibleColumns.waitingOn && (
+                        <th className={`${matrixHeaderCellClass} w-[150px]`}>Waiting On</th>
+                      )}
                       <th className={`${matrixHeaderCellClass} w-[120px]`}>Start</th>
                       <th className={`${matrixHeaderCellClass} w-[72px] text-center`}>Actions</th>
                     </tr>
@@ -5299,6 +5733,7 @@ export function TrackerClient({
                           : pendingAction === "delete"
                             ? "border-red-300 bg-red-50/90 text-red-800"
                             : "border-slate-300 bg-slate-100/90 text-slate-800";
+                      const waitingOnValues = getLatestWaitingOnValues(task);
 
                       return (
                       <tr
@@ -5387,10 +5822,19 @@ export function TrackerClient({
                         <td className={`${matrixCellClass} tm-muted`}>
                           {getTaskProjectLabel(task, projectById)}
                         </td>
-                        <td className={`${matrixCellClass} tm-muted`}>
-                          {task.category ?? "—"}
-                        </td>
-                        <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
+                        {visibleColumns.category && (
+                          <td className={`${matrixCellClass} tm-muted`}>
+                            {task.category ?? "—"}
+                          </td>
+                        )}
+                        {visibleColumns.due && (
+                          <td className={matrixCellClass}>{toDateOnly(task.dueAt) || "—"}</td>
+                        )}
+                        {visibleColumns.waitingOn && (
+                          <td className={matrixCellClass}>
+                            <WaitingOnPills values={waitingOnValues} />
+                          </td>
+                        )}
                         <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
                         <td className={`${matrixCellClass} text-center`}>
                           <TaskActionMenu
