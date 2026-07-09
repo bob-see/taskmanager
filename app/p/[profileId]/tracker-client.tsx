@@ -1987,6 +1987,182 @@ function TaskActionMenuItems({
   );
 }
 
+function ProjectActionsMenu({
+  project,
+  onEdit,
+  onTogglePriority,
+  onToggleCollapsed,
+  onToggleArchived,
+  onDelete,
+}: {
+  project: Project;
+  onEdit: (project: Project) => void;
+  onTogglePriority: (project: Project) => void;
+  onToggleCollapsed: (project: Project) => void;
+  onToggleArchived: (project: Project) => void;
+  onDelete: (project: Project) => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+    maxHeight: number;
+  } | null>(null);
+
+  function updatePosition() {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const menuWidth = 190;
+    const gutter = 12;
+    const offset = 8;
+    const menuHeight = menuRef.current?.scrollHeight ?? 248;
+    const availableBelow = window.innerHeight - rect.bottom - gutter - offset;
+    const availableAbove = rect.top - gutter - offset;
+    const openAbove = availableBelow < Math.min(menuHeight, 180) && availableAbove > availableBelow;
+    const availableHeight = Math.max(120, openAbove ? availableAbove : availableBelow);
+    const maxHeight = Math.min(menuHeight, availableHeight);
+    const left = Math.min(
+      Math.max(gutter, rect.right - menuWidth),
+      Math.max(gutter, window.innerWidth - menuWidth - gutter)
+    );
+    const top = openAbove
+      ? Math.max(gutter, rect.top - maxHeight - offset)
+      : Math.min(rect.bottom + offset, window.innerHeight - gutter - maxHeight);
+
+    setPosition({ left, top, maxHeight });
+  }
+
+  function closeMenu() {
+    setOpen(false);
+  }
+
+  function runAction(action: (project: Project) => void) {
+    closeMenu();
+    action(project);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    updatePosition();
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+
+      closeMenu();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    }
+
+    function handleReposition() {
+      updatePosition();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="tm-button inline-flex h-9 items-center rounded-[10px] border px-3 text-sm"
+        type="button"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!open) updatePosition();
+          setOpen((prev) => !prev);
+        }}
+      >
+        Actions
+      </button>
+
+      {open &&
+        position &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="tm-menu fixed z-[1000] min-w-[190px] overflow-hidden rounded-lg border py-1 text-left shadow-2xl"
+            role="menu"
+            style={{
+              left: position.left,
+              top: position.top,
+              maxHeight: position.maxHeight,
+              overflowY: "auto",
+            }}
+          >
+            <button
+              className={taskActionMenuItemClass}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onEdit)}
+            >
+              Edit Project
+            </button>
+            <button
+              className={taskActionMenuItemClass}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onTogglePriority)}
+            >
+              {project.isPriority ? "Unprioritise" : "Prioritise"}
+            </button>
+            <button
+              className={taskActionMenuItemClass}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onToggleCollapsed)}
+            >
+              {project.collapsed ? "Expand Project" : "Collapse Project"}
+            </button>
+            <button
+              className={taskActionMenuItemClass}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onToggleArchived)}
+            >
+              {project.archived ? "Restore Project" : "Archive Project"}
+            </button>
+            <div className="my-1 border-t border-[color:var(--tm-border)]" />
+            <button
+              className={`${taskActionMenuItemClass} text-red-700 hover:bg-red-50`}
+              role="menuitem"
+              type="button"
+              onClick={() => runAction(onDelete)}
+            >
+              Delete Project
+            </button>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
 function ProfileOptionsMenu({
   taskView,
   sortMode,
@@ -5443,27 +5619,23 @@ export function TrackerClient({
                   routineAffirmation && section.project
                     ? getRoutineStreak(tasks, section.project.id, todayInputValue())
                     : null;
-                const subtitle = section.project
-                  ? [
-                      section.project.category ? `Category ${section.project.category}` : null,
-                      `Start ${toDateOnly(section.project.startDate)}`,
-                      section.project.dueAt ? `Due ${toDateOnly(section.project.dueAt)}` : null,
-                      section.project.isPriority ? "Priority" : null,
-                      section.project.archived ? "Archived" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" • ")
-                  : "Tasks with no project";
+                const noProjectSubtitle = "Tasks with no project";
                 const projectDragPosition =
                   section.project && dragOverProjectId === section.project.id
                     ? dragOverProjectPosition
                     : null;
+                const projectProgressPercent =
+                  section.progressTotal === 0
+                    ? 0
+                    : Math.round(
+                        (section.progressCompleted / section.progressTotal) * 100
+                      );
 
                 return (
                   <section
                     key={section.key}
                     id={section.project ? `project-${section.project.id}` : undefined}
-                    className={`rounded-md border px-3 py-2 ${
+                    className={`rounded-[12px] border p-3 shadow-sm ${
                       section.project?.archived
                         ? "border-amber-300/20 bg-amber-200/5"
                         : "border-[color:var(--tm-border)] bg-white/25"
@@ -5520,117 +5692,121 @@ export function TrackerClient({
                         : undefined
                     }
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--tm-border)] pb-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm font-medium">{section.label}</h3>
-                          {section.project?.isPriority && (
-                            <span className={priorityChipClass}>
-                              Priority
+                    <div className="border-b border-[color:var(--tm-border)] pb-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-medium">{section.label}</h3>
+                            {section.project?.isPriority && (
+                              <span className={priorityChipClass}>Priority</span>
+                            )}
+                            {section.project?.archived && (
+                              <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
+                                Archived
+                              </span>
+                            )}
+                            <span className={`${smallChipClass} opacity-100`}>
+                              {section.openTasks.length}
                             </span>
+                          </div>
+                          {routineAffirmation && (
+                            <div className="tm-routine-support mt-2 rounded-[10px] border px-3 py-2.5">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="tm-routine-support-label text-[10px] font-semibold uppercase leading-none">
+                                  Routine note
+                                </span>
+                                <span
+                                  className="tm-routine-support-streak shrink-0 border-l pl-2 text-[11px] font-medium leading-none"
+                                  aria-label={
+                                    routineStreak
+                                      ? `${routineStreak} day routine streak`
+                                      : "Routine streak ready to begin"
+                                  }
+                                >
+                                  {routineStreak
+                                    ? `🔥 ${routineStreak} day streak`
+                                    : "🌱 A fresh start"}
+                                </span>
+                              </div>
+                              <p className="mt-1.5 text-sm italic leading-5 text-[color:var(--tm-text)]/80">
+                                {routineAffirmation}
+                              </p>
+                            </div>
                           )}
-                          {section.project?.archived && (
-                            <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-xs text-amber-900">
-                              Archived
-                            </span>
+                          {section.project && (
+                            <div className="mt-3 rounded-[12px] border border-amber-700/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.32))] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+                              <div className="grid overflow-hidden rounded-[9px] border border-black/10 bg-white/35 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(96px,0.7fr)_minmax(150px,1.2fr)]">
+                                <div className="min-w-0 border-b border-black/10 px-3 py-2 sm:border-b-0 sm:border-r">
+                                  <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+                                    Category
+                                  </div>
+                                  <div className="mt-1 truncate text-sm font-medium">
+                                    {section.project.category || "None"}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 border-b border-black/10 px-3 py-2 sm:border-b-0 sm:border-r">
+                                  <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+                                    Start
+                                  </div>
+                                  <div className="mt-1 text-sm font-medium">
+                                    {toDateOnly(section.project.startDate)}
+                                  </div>
+                                  {section.project.dueAt && (
+                                    <div className="mt-0.5 text-xs text-[color:var(--tm-muted)]">
+                                      Due {toDateOnly(section.project.dueAt)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 border-b border-black/10 px-3 py-2 sm:border-b-0 sm:border-r">
+                                  <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+                                    Tasks
+                                  </div>
+                                  <div className="mt-1 text-sm font-medium">
+                                    {section.openTasks.length} open
+                                  </div>
+                                </div>
+                                <div className="min-w-0 px-3 py-2">
+                                  <div className="flex items-center justify-between gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+                                    <span>Progress</span>
+                                    <span className="rounded-full border border-amber-800/15 bg-amber-50/70 px-1.5 py-0.5 text-[9px] leading-none text-amber-950">
+                                      {section.progressCompleted}/{section.progressTotal}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 overflow-hidden rounded-full border border-amber-900/15 bg-[linear-gradient(180deg,rgba(68,50,27,0.13),rgba(255,255,255,0.45))] p-0.5 shadow-[inset_0_1px_3px_rgba(15,23,42,0.18)]">
+                                    <div
+                                      className={`h-2.5 rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_1px_3px_rgba(120,78,24,0.18)] transition-[width] ${
+                                        section.project.archived
+                                          ? "bg-amber-500/70"
+                                          : "tm-progress-fill"
+                                      }`}
+                                      style={{ width: `${projectProgressPercent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           )}
-                          <span className={`${smallChipClass} opacity-100`}>
-                            {section.openTasks.length}
-                          </span>
+                          {!section.project && (
+                            <div className="tm-muted mt-1 text-xs">{noProjectSubtitle}</div>
+                          )}
                         </div>
-                        {routineAffirmation && (
-                          <div className="tm-routine-support mt-2 rounded-[10px] border px-3 py-2.5">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="tm-routine-support-label text-[10px] font-semibold uppercase leading-none">
-                                Routine note
-                              </span>
-                              <span
-                                className="tm-routine-support-streak shrink-0 border-l pl-2 text-[11px] font-medium leading-none"
-                                aria-label={
-                                  routineStreak
-                                    ? `${routineStreak} day routine streak`
-                                    : "Routine streak ready to begin"
-                                }
-                              >
-                                {routineStreak
-                                  ? `🔥 ${routineStreak} day streak`
-                                  : "🌱 A fresh start"}
-                              </span>
-                            </div>
-                            <p className="mt-1.5 text-sm italic leading-5 text-[color:var(--tm-text)]/80">
-                              {routineAffirmation}
-                            </p>
-                          </div>
-                        )}
-                        <div className="tm-muted mt-1 text-xs">{subtitle}</div>
-                        {section.project && (
-                          <div className="mt-2 max-w-md">
-                            <div className="tm-muted mb-2 flex items-center justify-between text-xs">
-                              <span>Day progress</span>
-                              <span>
-                                {section.progressCompleted} / {section.progressTotal}
-                              </span>
-                            </div>
-                            <div className={`${progressTrackClass} h-2`}>
-                              <div
-                                className={`h-full rounded-full transition-[width] ${
-                                  section.project.archived ? "bg-amber-500/60" : "tm-progress-fill"
-                                }`}
-                                style={{
-                                  width:
-                                    section.progressTotal === 0
-                                      ? "0%"
-                                      : `${Math.round(
-                                          (section.progressCompleted / section.progressTotal) *
-                                            100
-                                        )}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {section.project && (
-                          <>
-                            <button
-                              className={buttonClass}
-                              type="button"
-                              onClick={() => openProjectEditor(section.project)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className={buttonClass}
-                              type="button"
-                              onClick={() => void toggleProjectPriority(section.project)}
-                            >
-                              {section.project.isPriority ? "Unprioritise" : "Prioritise"}
-                            </button>
-                            <button
-                              className={buttonClass}
-                              type="button"
-                              onClick={() => void toggleProjectCollapsed(section.project)}
-                            >
-                              {section.project.collapsed ? "Expand" : "Collapse"}
-                            </button>
-                            <button
-                              className={buttonClass}
-                              type="button"
-                              onClick={() => void toggleProjectArchived(section.project)}
-                            >
-                              {section.project.archived ? "Restore" : "Archive"}
-                            </button>
-                            <button
-                              className="tm-button-danger inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm"
-                              type="button"
-                              onClick={() => setDeleteProjectModalProject(section.project)}
-                            >
-                              Delete
-                            </button>
-                          </>
-                        )}
+                        <div className="shrink-0">
+                          {section.project && (
+                            <ProjectActionsMenu
+                              project={section.project}
+                              onEdit={openProjectEditor}
+                              onTogglePriority={(project) => void toggleProjectPriority(project)}
+                              onToggleCollapsed={(project) =>
+                                void toggleProjectCollapsed(project)
+                              }
+                              onToggleArchived={(project) =>
+                                void toggleProjectArchived(project)
+                              }
+                              onDelete={setDeleteProjectModalProject}
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
 
