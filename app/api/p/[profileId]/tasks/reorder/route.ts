@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { TASK_ORDER_GAP } from "@/app/api/p/tasks-shared";
+import { Prisma } from "@prisma/client";
 
 type Ctx = {
   params: Promise<{ profileId: string }>;
@@ -77,14 +78,19 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  await prisma.$transaction(async (tx: any) => {
-    for (const [index, id] of orderedIds.entries()) {
-      await tx.task.update({
-        where: { id },
-        data: { orderIndex: (index + 1) * TASK_ORDER_GAP },
-      });
-    }
-  });
+  const orderCases = orderedIds.map((id, index) =>
+    Prisma.sql`WHEN ${id} THEN ${(index + 1) * TASK_ORDER_GAP}`
+  );
+
+  await prisma.$executeRaw`
+    UPDATE task
+    SET
+      orderIndex = CASE id ${Prisma.join(orderCases, " ")} END,
+      updatedAt = CURRENT_TIMESTAMP(3)
+    WHERE profileId = ${profileId}
+      AND completedOn IS NULL
+      AND id IN (${Prisma.join(orderedIds)})
+  `;
 
   return Response.json({ ok: true });
 }
