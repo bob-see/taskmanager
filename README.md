@@ -123,6 +123,7 @@ Overview Options
 	•	Overview Options affects the entire Overview page, not a single profile
 	•	Current sections are Filter, Sort and Group By
 	•	Group By currently supports Project and Category
+	•	Filter, Sort and Group By selections are remembered per logged-in user
 	•	Overview profile cards use a single Actions button instead of separate Add Task, Add Project and Collapse buttons
 	•	The profile card Actions menu includes Add Task, Add Project and Collapse / Expand
 	•	Overview profile counters use compact labels: Open, Upcoming, Done and OD

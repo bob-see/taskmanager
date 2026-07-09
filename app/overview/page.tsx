@@ -270,5 +270,5 @@ export default async function OverviewPage() {
 
   const profiles = await getOverviewData(session.user.email);
 
-  return <OverviewClient profiles={profiles} />;
+  return <OverviewClient profiles={profiles} userPreferenceKey={session.user.email} />;
 }

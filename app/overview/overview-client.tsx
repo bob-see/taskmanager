@@ -94,6 +94,7 @@ export type OverviewProfileData = {
 
 type OverviewClientProps = {
   profiles: OverviewProfileData[];
+  userPreferenceKey: string;
 };
 
 type TaskPendingAction = "complete" | "update" | "delete";
@@ -170,8 +171,61 @@ const REPEAT_PAUSE_PRESET_OPTIONS: Array<{
   { value: "custom", label: "Custom date" },
   { value: "indefinite", label: "Pause indefinitely" },
 ];
-const OVERVIEW_GROUPING_STORAGE_KEY = "tm-overview-grouping-mode";
+const OVERVIEW_OPTIONS_STORAGE_KEY_PREFIX = "tm-overview-options-v1";
 const ALL_REPEAT_DAYS_MASK = 0b1111111;
+const DEFAULT_OVERVIEW_OPTIONS = {
+  selectedFilter: "all-open" as OverviewTaskFilter,
+  sortMode: "manual" as OverviewSortMode,
+  groupingMode: "project" as OverviewGroupingMode,
+};
+
+type OverviewOptionsPreference = typeof DEFAULT_OVERVIEW_OPTIONS;
+
+function isOverviewTaskFilter(value: unknown): value is OverviewTaskFilter {
+  return (
+    value === "all-open" ||
+    value === "today" ||
+    value === "overdue" ||
+    value === "upcoming"
+  );
+}
+
+function isOverviewSortMode(value: unknown): value is OverviewSortMode {
+  return value === "manual" || value === "start-date" || value === "due-date";
+}
+
+function isOverviewGroupingMode(value: unknown): value is OverviewGroupingMode {
+  return value === "project" || value === "category";
+}
+
+function getOverviewOptionsStorageKey(userPreferenceKey: string) {
+  return `${OVERVIEW_OPTIONS_STORAGE_KEY_PREFIX}:${encodeURIComponent(
+    userPreferenceKey
+  )}`;
+}
+
+function parseOverviewOptionsPreference(value: string | null) {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as Partial<
+      Record<keyof OverviewOptionsPreference, unknown>
+    >;
+    return {
+      selectedFilter: isOverviewTaskFilter(parsed.selectedFilter)
+        ? parsed.selectedFilter
+        : DEFAULT_OVERVIEW_OPTIONS.selectedFilter,
+      sortMode: isOverviewSortMode(parsed.sortMode)
+        ? parsed.sortMode
+        : DEFAULT_OVERVIEW_OPTIONS.sortMode,
+      groupingMode: isOverviewGroupingMode(parsed.groupingMode)
+        ? parsed.groupingMode
+        : DEFAULT_OVERVIEW_OPTIONS.groupingMode,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function DiscardChangesModal({
   open,
@@ -3231,15 +3285,25 @@ function ProfileCard({
   );
 }
 
-export function OverviewClient({ profiles }: OverviewClientProps) {
+export function OverviewClient({
+  profiles,
+  userPreferenceKey,
+}: OverviewClientProps) {
   const [orderedProfiles, setOrderedProfiles] = useState(profiles);
   const [query, setQuery] = useState("");
-  const [selectedFilter, setSelectedFilter] = useState<OverviewTaskFilter>("all-open");
-  const [sortMode, setSortMode] = useState<OverviewSortMode>("manual");
-  const [groupingMode, setGroupingMode] = useState<OverviewGroupingMode>("project");
+  const [selectedFilter, setSelectedFilter] = useState<OverviewTaskFilter>(
+    DEFAULT_OVERVIEW_OPTIONS.selectedFilter
+  );
+  const [sortMode, setSortMode] = useState<OverviewSortMode>(
+    DEFAULT_OVERVIEW_OPTIONS.sortMode
+  );
+  const [groupingMode, setGroupingMode] = useState<OverviewGroupingMode>(
+    DEFAULT_OVERVIEW_OPTIONS.groupingMode
+  );
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [overviewOptionsLoaded, setOverviewOptionsLoaded] = useState(false);
 
   const filterOptions: Array<{ value: OverviewTaskFilter; label: string }> = [
     { value: "all-open", label: "All open" },
@@ -3266,19 +3330,38 @@ export function OverviewClient({ profiles }: OverviewClientProps) {
       return;
     }
 
-    const storedGroupingMode = window.localStorage.getItem(OVERVIEW_GROUPING_STORAGE_KEY);
-    if (storedGroupingMode === "project" || storedGroupingMode === "category") {
-      setGroupingMode(storedGroupingMode);
-    }
-  }, []);
+    const storageKey = getOverviewOptionsStorageKey(userPreferenceKey);
+    const storedOptions = parseOverviewOptionsPreference(
+      window.localStorage.getItem(storageKey)
+    );
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
+    if (storedOptions) {
+      setSelectedFilter(storedOptions.selectedFilter);
+      setSortMode(storedOptions.sortMode);
+      setGroupingMode(storedOptions.groupingMode);
+      setOverviewOptionsLoaded(true);
       return;
     }
 
-    window.localStorage.setItem(OVERVIEW_GROUPING_STORAGE_KEY, groupingMode);
-  }, [groupingMode]);
+    setOverviewOptionsLoaded(true);
+  }, [userPreferenceKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !overviewOptionsLoaded) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      getOverviewOptionsStorageKey(userPreferenceKey),
+      JSON.stringify({ selectedFilter, sortMode, groupingMode })
+    );
+  }, [
+    groupingMode,
+    overviewOptionsLoaded,
+    selectedFilter,
+    sortMode,
+    userPreferenceKey,
+  ]);
 
   const filteredProfiles = useMemo(() => {
     const trimmedQuery = query.trim().toLocaleLowerCase();

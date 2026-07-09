@@ -75,6 +75,8 @@ Current sections:
 - Sort
 - Group By
 
+Filter, Sort and Group By selections are remembered per logged-in user.
+
 Overview Group By currently supports:
 
 - Project
