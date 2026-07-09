@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   formatBestPeriodLabel,
@@ -79,6 +79,16 @@ const buttonClass =
 const segmentClass = "tm-tabset inline-flex rounded-full border p-1 text-sm";
 const segmentButtonClass = "tm-tab rounded-full px-3 py-1.5";
 const segmentButtonActiveClass = "tm-tab-active rounded-full px-3 py-1.5";
+
+type ReportSection = "summary" | "productivity" | "time" | "efficiency" | "detail";
+
+const reportSectionOptions: Array<{ value: ReportSection; label: string }> = [
+  { value: "summary", label: "Summary" },
+  { value: "productivity", label: "Productivity" },
+  { value: "time", label: "Time" },
+  { value: "efficiency", label: "Efficiency" },
+  { value: "detail", label: "Detail Report" },
+];
 
 const taskDetailStatusOptions: Array<{ value: TaskDetailStatusScope; label: string }> = [
   { value: "completed", label: "Completed tasks" },
@@ -286,6 +296,60 @@ function SummaryCard({
   );
 }
 
+function InsightMetric({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description?: string;
+}) {
+  return (
+    <div className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/45 px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]">
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-[color:var(--tm-text)]">
+        {value}
+      </div>
+      {description && (
+        <div className="mt-0.5 text-xs text-[color:var(--tm-muted)]">{description}</div>
+      )}
+    </div>
+  );
+}
+
+function ReportPanel({
+  title,
+  description,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className="group" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-[12px] border border-[color:var(--tm-border)] bg-white/35 px-4 py-3 shadow-sm">
+        <span>
+          <span className="block text-base font-semibold tracking-tight">{title}</span>
+          {description && (
+            <span className="mt-1 block text-sm text-[color:var(--tm-muted)]">{description}</span>
+          )}
+        </span>
+        <span className="mt-0.5 rounded-full border border-[color:var(--tm-border)] px-2 py-0.5 text-xs text-[color:var(--tm-muted)]">
+          <span className="group-open:hidden">Open</span>
+          <span className="hidden group-open:inline">Hide</span>
+        </span>
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
 function BreakdownList({
   title,
   items,
@@ -417,6 +481,7 @@ export function ReportsClient(props: ReportsClientProps) {
   const [taskDetailStatusScope, setTaskDetailStatusScope] =
     useState<TaskDetailStatusScope>("completed");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [activeReportSection, setActiveReportSection] = useState<ReportSection>("summary");
 
   function updateQuery(next: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -639,219 +704,348 @@ export function ReportsClient(props: ReportsClientProps) {
           )}
         </section>
 
-        <section className="mt-6">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold tracking-tight">Productivity</h2>
-            <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-              Task creation, completion, backlog and breakdowns for the selected scope and period.
-            </p>
+        <section className="mt-5 rounded-[14px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/85 p-4 shadow-sm md:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+                Selected period
+              </p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">{props.periodLabel}</h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                {props.scopeLabel} report snapshot.
+              </p>
+            </div>
+            <span className="rounded-full border border-[color:var(--tm-border)] bg-white/45 px-3 py-1 text-xs font-medium text-[color:var(--tm-muted)]">
+              {props.selectedPeriod}
+            </span>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <SummaryCard label="Tasks completed" value={`${props.productivity.completedCount}`} />
-            <SummaryCard label="Tasks created" value={`${props.productivity.createdCount}`} />
-            <SummaryCard label="Open tasks" value={`${props.productivity.openTasks}`} />
-            <SummaryCard label="Overdue tasks" value={`${props.productivity.overdueTasks}`} />
-            <SummaryCard
-              label="Backlog / rolled over"
-              value={`${props.productivity.backlogCount}`}
-              description={
-                props.productivity.averagePerDay !== null
-                  ? `Avg completed/day ${props.productivity.averagePerDay.toFixed(1)}`
-                  : undefined
-              }
-            />
-          </div>
-        </section>
 
-        <section className="mt-6">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold tracking-tight">Time</h2>
-            <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-              Logged hours use the effective rounded duration stored with each timesheet entry.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <SummaryCard label="Total hours" value={formatHoursFromMinutes(props.time.totalMinutes)} />
-            <SummaryCard
-              label="Average hours / day"
-              value={
-                props.time.averagePerDay === null
-                  ? "—"
-                  : formatHoursFromMinutes(Math.round(props.time.averagePerDay))
-              }
-              description={
-                props.selectedPeriod === "day"
-                  ? undefined
-                  : props.time.loggedDayCount === null
-                    ? undefined
-                    : props.time.loggedDayCount === 0
-                      ? "No logged days in this period"
-                      : `Based on ${props.time.loggedDayCount} logged day${props.time.loggedDayCount === 1 ? "" : "s"}`
-              }
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+            <InsightMetric label="Tasks completed" value={`${props.productivity.completedCount}`} />
+            <InsightMetric label="Tasks created" value={`${props.productivity.createdCount}`} />
+            <InsightMetric label="Backlog / rolled over" value={`${props.productivity.backlogCount}`} />
+            <InsightMetric label="Total hours" value={formatHoursFromMinutes(props.time.totalMinutes)} />
+            <InsightMetric
+              label="Efficiency"
+              value={formatEfficiency(props.efficiency.tasksPerHour)}
+              description="completed/hour"
             />
-            <SummaryCard
+            <InsightMetric
               label="Current scope"
               value={props.selectedScope === "overview" ? "All profiles" : "Single profile"}
             />
           </div>
         </section>
 
-        <section className="mt-6">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold tracking-tight">Efficiency</h2>
-            <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-              Combined task and time measures for the selected scope and period.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <SummaryCard
-              label="Completed tasks per hour"
-              value={formatEfficiency(props.efficiency.tasksPerHour)}
-              description="Based on total completed tasks divided by logged hours only."
-            />
-            <SummaryCard
-              label="Hours per completed task"
-              value={
-                props.efficiency.hoursPerTask === null
-                  ? "—"
-                  : `${props.efficiency.hoursPerTask.toFixed(2)}h/task`
-              }
-              description="Based on total logged hours divided by completed tasks."
-            />
-          </div>
-        </section>
+        <nav className="mt-5 flex flex-wrap gap-2" aria-label="Report sections">
+          {reportSectionOptions.map((option) => {
+            const active = activeReportSection === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={active ? segmentButtonActiveClass : segmentButtonClass}
+                onClick={() => setActiveReportSection(option.value)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </nav>
 
-        <section className="mt-6 grid gap-4 xl:grid-cols-2">
-          <BreakdownList
-            title="Top projects"
-            items={props.productivity.topProjects}
-            emptyLabel="No completed tasks in this period."
-          />
-          <BreakdownList
-            title="Top categories"
-            items={props.productivity.topCategories}
-            emptyLabel="No completed tasks in this period."
-          />
-          <BreakdownList
-            title={props.selectedPeriod === "month" ? "Hours by week" : "Hours by day"}
-            items={props.time.breakdown.map((item) => ({ label: item.label, minutes: item.minutes }))}
-            formatter={(item) => formatHoursFromMinutes(item.minutes ?? 0)}
-            emptyLabel="No logged time in this period."
-          />
-          {props.selectedScope === "overview" ? (
-            <BreakdownList
-              title="Profile comparisons"
-              items={props.profileComparisons.map((item) => ({
-                label: item.label,
-                minutes: item.minutes,
-                count: item.completed,
-              }))}
-              formatter={(item) => `${item.count ?? 0} tasks · ${formatHoursFromMinutes(item.minutes ?? 0)}`}
-              emptyLabel="No profile activity in this period."
-            />
-          ) : (
+        {activeReportSection === "summary" && (
+          <section className="mt-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Summary</h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                The headline measures for this scope and period.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <SummaryCard label="Tasks completed" value={`${props.productivity.completedCount}`} />
+              <SummaryCard label="Tasks created" value={`${props.productivity.createdCount}`} />
+              <SummaryCard
+                label="Backlog / rolled over"
+                value={`${props.productivity.backlogCount}`}
+                description={
+                  props.productivity.averagePerDay !== null
+                    ? `Avg completed/day ${props.productivity.averagePerDay.toFixed(1)}`
+                    : undefined
+                }
+              />
+              <SummaryCard label="Total hours" value={formatHoursFromMinutes(props.time.totalMinutes)} />
+              <SummaryCard
+                label="Efficiency"
+                value={formatEfficiency(props.efficiency.tasksPerHour)}
+                description="Completed tasks per logged hour."
+              />
+              <SummaryCard
+                label="Current scope"
+                value={props.selectedScope === "overview" ? "All profiles" : "Single profile"}
+              />
+            </div>
+
+            <ReportPanel
+              title="Secondary context"
+              description="Breakdowns and period records are grouped here to keep the dashboard scannable."
+              defaultOpen={false}
+            >
+              <div className="grid gap-4 xl:grid-cols-2">
+                <BreakdownList
+                  title="Top projects"
+                  items={props.productivity.topProjects}
+                  emptyLabel="No completed tasks in this period."
+                />
+                <BreakdownList
+                  title="Top categories"
+                  items={props.productivity.topCategories}
+                  emptyLabel="No completed tasks in this period."
+                />
+                <BreakdownList
+                  title={props.selectedPeriod === "month" ? "Hours by week" : "Hours by day"}
+                  items={props.time.breakdown.map((item) => ({ label: item.label, minutes: item.minutes }))}
+                  formatter={(item) => formatHoursFromMinutes(item.minutes ?? 0)}
+                  emptyLabel="No logged time in this period."
+                />
+                {props.selectedScope === "overview" && (
+                  <BreakdownList
+                    title="Profile comparisons"
+                    items={props.profileComparisons.map((item) => ({
+                      label: item.label,
+                      minutes: item.minutes,
+                      count: item.completed,
+                    }))}
+                    formatter={(item) => `${item.count ?? 0} tasks · ${formatHoursFromMinutes(item.minutes ?? 0)}`}
+                    emptyLabel="No profile activity in this period."
+                  />
+                )}
+              </div>
+            </ReportPanel>
+          </section>
+        )}
+
+        {activeReportSection === "productivity" && (
+          <section className="mt-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Productivity</h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                Task creation, completion, backlog and breakdowns for the selected scope and period.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <SummaryCard label="Tasks completed" value={`${props.productivity.completedCount}`} />
+              <SummaryCard label="Tasks created" value={`${props.productivity.createdCount}`} />
+              <SummaryCard label="Open tasks" value={`${props.productivity.openTasks}`} />
+              <SummaryCard label="Overdue tasks" value={`${props.productivity.overdueTasks}`} />
+              <SummaryCard
+                label="Backlog / rolled over"
+                value={`${props.productivity.backlogCount}`}
+                description={
+                  props.productivity.averagePerDay !== null
+                    ? `Avg completed/day ${props.productivity.averagePerDay.toFixed(1)}`
+                    : undefined
+                }
+              />
+            </div>
+            <ReportPanel title="Productivity breakdowns">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <BreakdownList
+                  title="Top projects"
+                  items={props.productivity.topProjects}
+                  emptyLabel="No completed tasks in this period."
+                />
+                <BreakdownList
+                  title="Top categories"
+                  items={props.productivity.topCategories}
+                  emptyLabel="No completed tasks in this period."
+                />
+              </div>
+            </ReportPanel>
             <InsightBlock
-              title="Definitions"
+              title="Best productivity periods"
               items={[
                 {
-                  label: "Productivity",
-                  value: "Most productive periods are ranked by completed task count.",
+                  label: "Most productive day",
+                  value: props.bestTaskPeriods.bestDay
+                    ? `${formatBestPeriodLabel(props.bestTaskPeriods.bestDay.key, "day")} · ${props.bestTaskPeriods.bestDay.value} tasks`
+                    : "No completed task history yet",
                 },
                 {
-                  label: "Time",
-                  value: "Most hours periods are ranked by effective logged duration.",
+                  label: "Most productive week",
+                  value: props.bestTaskPeriods.bestWeek
+                    ? `${formatBestPeriodLabel(props.bestTaskPeriods.bestWeek.key, "week")} · ${props.bestTaskPeriods.bestWeek.value} tasks`
+                    : "No completed task history yet",
                 },
                 {
-                  label: "Efficiency",
-                  value: "Best efficiency periods are ranked by completed tasks per hour.",
+                  label: "Most productive month",
+                  value: props.bestTaskPeriods.bestMonth
+                    ? `${formatBestPeriodLabel(props.bestTaskPeriods.bestMonth.key, "month-key")} · ${props.bestTaskPeriods.bestMonth.value} tasks`
+                    : "No completed task history yet",
                 },
               ]}
             />
-          )}
-        </section>
+          </section>
+        )}
 
-        <section className="mt-6 grid gap-4 xl:grid-cols-3">
-          <InsightBlock
-            title="Best productivity periods"
-            items={[
-              {
-                label: "Most productive day",
-                value: props.bestTaskPeriods.bestDay
-                  ? `${formatBestPeriodLabel(props.bestTaskPeriods.bestDay.key, "day")} · ${props.bestTaskPeriods.bestDay.value} tasks`
-                  : "No completed task history yet",
-              },
-              {
-                label: "Most productive week",
-                value: props.bestTaskPeriods.bestWeek
-                  ? `${formatBestPeriodLabel(props.bestTaskPeriods.bestWeek.key, "week")} · ${props.bestTaskPeriods.bestWeek.value} tasks`
-                  : "No completed task history yet",
-              },
-              {
-                label: "Most productive month",
-                value: props.bestTaskPeriods.bestMonth
-                  ? `${formatBestPeriodLabel(props.bestTaskPeriods.bestMonth.key, "month-key")} · ${props.bestTaskPeriods.bestMonth.value} tasks`
-                  : "No completed task history yet",
-              },
-            ]}
-          />
-          <InsightBlock
-            title="Best time periods"
-            items={[
-              {
-                label: "Most hours day",
-                value: props.bestTimePeriods.bestDay
-                  ? `${formatBestPeriodLabel(props.bestTimePeriods.bestDay.key, "day")} · ${formatHoursFromMinutes(props.bestTimePeriods.bestDay.value)}`
-                  : "No logged time history yet",
-              },
-              {
-                label: "Most hours week",
-                value: props.bestTimePeriods.bestWeek
-                  ? `${formatBestPeriodLabel(props.bestTimePeriods.bestWeek.key, "week")} · ${formatHoursFromMinutes(props.bestTimePeriods.bestWeek.value)}`
-                  : "No logged time history yet",
-              },
-              {
-                label: "Most hours month",
-                value: props.bestTimePeriods.bestMonth
-                  ? `${formatBestPeriodLabel(props.bestTimePeriods.bestMonth.key, "month-key")} · ${formatHoursFromMinutes(props.bestTimePeriods.bestMonth.value)}`
-                  : "No logged time history yet",
-              },
-            ]}
-          />
-          <InsightBlock
-            title="Best efficiency periods"
-            items={[
-              {
-                label: "Best efficiency day",
-                value: props.bestEfficiencyPeriods.bestDay
-                  ? `${formatBestPeriodLabel(props.bestEfficiencyPeriods.bestDay.key, "day")} · ${formatEfficiency(
-                      props.bestEfficiencyPeriods.bestDay.completed /
-                        (props.bestEfficiencyPeriods.bestDay.minutes / 60)
-                    )}`
-                  : "No valid task/time overlap yet",
-              },
-              {
-                label: "Best efficiency week",
-                value: props.bestEfficiencyPeriods.bestWeek
-                  ? `${formatBestPeriodLabel(props.bestEfficiencyPeriods.bestWeek.key, "week")} · ${formatEfficiency(
-                      props.bestEfficiencyPeriods.bestWeek.completed /
-                        (props.bestEfficiencyPeriods.bestWeek.minutes / 60)
-                    )}`
-                  : "No valid task/time overlap yet",
-              },
-              {
-                label: "Best efficiency month",
-                value: props.bestEfficiencyPeriods.bestMonth
-                  ? `${formatBestPeriodLabel(props.bestEfficiencyPeriods.bestMonth.key, "month-key")} · ${formatEfficiency(
-                      props.bestEfficiencyPeriods.bestMonth.completed /
-                        (props.bestEfficiencyPeriods.bestMonth.minutes / 60)
-                    )}`
-                  : "No valid task/time overlap yet",
-              },
-            ]}
-          />
-        </section>
+        {activeReportSection === "time" && (
+          <section className="mt-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Time</h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                Logged hours use the effective rounded duration stored with each timesheet entry.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <SummaryCard label="Total hours" value={formatHoursFromMinutes(props.time.totalMinutes)} />
+              <SummaryCard
+                label="Average hours / day"
+                value={
+                  props.time.averagePerDay === null
+                    ? "—"
+                    : formatHoursFromMinutes(Math.round(props.time.averagePerDay))
+                }
+                description={
+                  props.selectedPeriod === "day"
+                    ? undefined
+                    : props.time.loggedDayCount === null
+                      ? undefined
+                      : props.time.loggedDayCount === 0
+                        ? "No logged days in this period"
+                        : `Based on ${props.time.loggedDayCount} logged day${props.time.loggedDayCount === 1 ? "" : "s"}`
+                }
+              />
+              <SummaryCard
+                label="Current scope"
+                value={props.selectedScope === "overview" ? "All profiles" : "Single profile"}
+              />
+            </div>
+            <ReportPanel title="Logged time breakdown">
+              <BreakdownList
+                title={props.selectedPeriod === "month" ? "Hours by week" : "Hours by day"}
+                items={props.time.breakdown.map((item) => ({ label: item.label, minutes: item.minutes }))}
+                formatter={(item) => formatHoursFromMinutes(item.minutes ?? 0)}
+                emptyLabel="No logged time in this period."
+              />
+            </ReportPanel>
+            <InsightBlock
+              title="Best time periods"
+              items={[
+                {
+                  label: "Most hours day",
+                  value: props.bestTimePeriods.bestDay
+                    ? `${formatBestPeriodLabel(props.bestTimePeriods.bestDay.key, "day")} · ${formatHoursFromMinutes(props.bestTimePeriods.bestDay.value)}`
+                    : "No logged time history yet",
+                },
+                {
+                  label: "Most hours week",
+                  value: props.bestTimePeriods.bestWeek
+                    ? `${formatBestPeriodLabel(props.bestTimePeriods.bestWeek.key, "week")} · ${formatHoursFromMinutes(props.bestTimePeriods.bestWeek.value)}`
+                    : "No logged time history yet",
+                },
+                {
+                  label: "Most hours month",
+                  value: props.bestTimePeriods.bestMonth
+                    ? `${formatBestPeriodLabel(props.bestTimePeriods.bestMonth.key, "month-key")} · ${formatHoursFromMinutes(props.bestTimePeriods.bestMonth.value)}`
+                    : "No logged time history yet",
+                },
+              ]}
+            />
+          </section>
+        )}
 
-        <section className="mt-6">
+        {activeReportSection === "efficiency" && (
+          <section className="mt-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Efficiency</h2>
+              <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                Combined task and time measures for the selected scope and period.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <SummaryCard
+                label="Completed tasks per hour"
+                value={formatEfficiency(props.efficiency.tasksPerHour)}
+                description="Based on total completed tasks divided by logged hours only."
+              />
+              <SummaryCard
+                label="Hours per completed task"
+                value={
+                  props.efficiency.hoursPerTask === null
+                    ? "—"
+                    : `${props.efficiency.hoursPerTask.toFixed(2)}h/task`
+                }
+                description="Based on total logged hours divided by completed tasks."
+              />
+            </div>
+            <ReportPanel title="Efficiency context">
+              {props.selectedScope === "overview" ? (
+                <BreakdownList
+                  title="Profile comparisons"
+                  items={props.profileComparisons.map((item) => ({
+                    label: item.label,
+                    minutes: item.minutes,
+                    count: item.completed,
+                  }))}
+                  formatter={(item) => `${item.count ?? 0} tasks · ${formatHoursFromMinutes(item.minutes ?? 0)}`}
+                  emptyLabel="No profile activity in this period."
+                />
+              ) : (
+                <InsightBlock
+                  title="Definitions"
+                  items={[
+                    {
+                      label: "Productivity",
+                      value: "Most productive periods are ranked by completed task count.",
+                    },
+                    {
+                      label: "Time",
+                      value: "Most hours periods are ranked by effective logged duration.",
+                    },
+                    {
+                      label: "Efficiency",
+                      value: "Best efficiency periods are ranked by completed tasks per hour.",
+                    },
+                  ]}
+                />
+              )}
+            </ReportPanel>
+            <InsightBlock
+              title="Best efficiency periods"
+              items={[
+                {
+                  label: "Best efficiency day",
+                  value: props.bestEfficiencyPeriods.bestDay
+                    ? `${formatBestPeriodLabel(props.bestEfficiencyPeriods.bestDay.key, "day")} · ${formatEfficiency(
+                        props.bestEfficiencyPeriods.bestDay.completed /
+                          (props.bestEfficiencyPeriods.bestDay.minutes / 60)
+                      )}`
+                    : "No valid task/time overlap yet",
+                },
+                {
+                  label: "Best efficiency week",
+                  value: props.bestEfficiencyPeriods.bestWeek
+                    ? `${formatBestPeriodLabel(props.bestEfficiencyPeriods.bestWeek.key, "week")} · ${formatEfficiency(
+                        props.bestEfficiencyPeriods.bestWeek.completed /
+                          (props.bestEfficiencyPeriods.bestWeek.minutes / 60)
+                      )}`
+                    : "No valid task/time overlap yet",
+                },
+                {
+                  label: "Best efficiency month",
+                  value: props.bestEfficiencyPeriods.bestMonth
+                    ? `${formatBestPeriodLabel(props.bestEfficiencyPeriods.bestMonth.key, "month-key")} · ${formatEfficiency(
+                        props.bestEfficiencyPeriods.bestMonth.completed /
+                          (props.bestEfficiencyPeriods.bestMonth.minutes / 60)
+                      )}`
+                    : "No valid task/time overlap yet",
+                },
+              ]}
+            />
+          </section>
+        )}
+
+        {activeReportSection === "detail" && (
+          <section className="mt-6">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Task Detail Report</h2>
@@ -944,7 +1138,8 @@ export function ReportsClient(props: ReportsClientProps) {
               </div>
             )}
           </article>
-        </section>
+          </section>
+        )}
       </div>
     </main>
   );
