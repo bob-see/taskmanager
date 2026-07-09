@@ -24,6 +24,7 @@ import {
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
 import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
+import { DoneTaskButton } from "@/app/components/done-task-button";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 import { SundayCheckIn } from "@/app/components/sunday-check-in";
 import {
@@ -2733,7 +2734,14 @@ function TaskRow({
           </div>
         )}
 
-        <div className="justify-self-start md:justify-self-end">
+        <div className="flex items-center gap-1 justify-self-start md:justify-self-end">
+          {!isTaskCompleted(task) && (
+            <DoneTaskButton
+              disabled={completionPending || Boolean(pendingAction)}
+              label={`Mark ${task.title} done`}
+              onClick={() => onToggleCompleted(task, true)}
+            />
+          )}
           <TaskActionMenu
             task={task}
             completionPending={completionPending}
@@ -6177,29 +6185,50 @@ export function TrackerClient({
                         )}
                         <td className={matrixCellClass}>{toDateOnly(task.startDate)}</td>
                         <td className={`${matrixCellClass} text-center`}>
-                          <TaskActionMenu
-                            task={task}
-                            completionPending={completionPendingTaskIds.includes(task.id)}
-                            pendingAction={pendingAction}
-                            completedActionLabel={taskView === "done" ? "Open" : "Done"}
-                            onPickSnoozeDate={openSingleTaskSnoozeDate}
-                            onTogglePriority={(selectedTask) => void toggleTaskPriority(selectedTask)}
-                            onToggleRepeatPause={requestToggleRepeatPause}
-                            onOpenEditModal={openTaskEditor}
-                            onToggleCompleted={(selectedTask) =>
-                              void toggleTaskCompleted(selectedTask.id, taskView !== "done").catch(
-                                (err: unknown) =>
-                                  setError(
-                                    err instanceof Error
-                                      ? err.message
-                                      : "Could not update task"
+                          <div className="flex items-center justify-center gap-1">
+                            {!isTaskCompleted(task) && (
+                              <DoneTaskButton
+                                disabled={
+                                  completionPendingTaskIds.includes(task.id) ||
+                                  Boolean(pendingAction)
+                                }
+                                label={`Mark ${task.title} done`}
+                                onClick={() =>
+                                  void toggleTaskCompleted(task.id, true).catch(
+                                    (err: unknown) =>
+                                      setError(
+                                        err instanceof Error
+                                          ? err.message
+                                          : "Could not update task"
+                                      )
                                   )
-                              )
-                            }
-                            onDelegate={openDelegateTask}
-                            onDelete={requestDeleteTask}
-                            pauseReferenceDate={selectedDay}
-                          />
+                                }
+                              />
+                            )}
+                            <TaskActionMenu
+                              task={task}
+                              completionPending={completionPendingTaskIds.includes(task.id)}
+                              pendingAction={pendingAction}
+                              completedActionLabel={taskView === "done" ? "Open" : "Done"}
+                              onPickSnoozeDate={openSingleTaskSnoozeDate}
+                              onTogglePriority={(selectedTask) => void toggleTaskPriority(selectedTask)}
+                              onToggleRepeatPause={requestToggleRepeatPause}
+                              onOpenEditModal={openTaskEditor}
+                              onToggleCompleted={(selectedTask) =>
+                                void toggleTaskCompleted(selectedTask.id, taskView !== "done").catch(
+                                  (err: unknown) =>
+                                    setError(
+                                      err instanceof Error
+                                        ? err.message
+                                        : "Could not update task"
+                                    )
+                                )
+                              }
+                              onDelegate={openDelegateTask}
+                              onDelete={requestDeleteTask}
+                              pauseReferenceDate={selectedDay}
+                            />
+                          </div>
                         </td>
                       </tr>
                       );

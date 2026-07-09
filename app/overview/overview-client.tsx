@@ -24,6 +24,7 @@ import {
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
 import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
+import { DoneTaskButton } from "@/app/components/done-task-button";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 
 type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
@@ -2660,7 +2661,7 @@ function ProfileCard({
                           return (
                           <article
                             key={task.id}
-                            className={`rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 p-3 ${
+                            className={`group/task rounded-[10px] border border-[color:var(--tm-border)] bg-white/55 p-3 ${
                               taskOverdue ? "bg-[#fff1e7]" : ""
                             } ${
                               task.isPriority
@@ -2679,36 +2680,52 @@ function ProfileCard({
                             }`}
                             onContextMenu={(event) => openTaskContextMenu(event, task)}
                           >
-                            <div className="flex min-w-0 flex-wrap items-center gap-1.5 font-medium leading-snug">
-                              {task.delegatedTask ? (
-                                <DelegatedSenderBadge
-                                  sender={task.delegatedTask.assignedByUser}
-                                />
-                              ) : null}
-                              <span
-                                className={
-                                  pendingAction === "complete" ? "line-through opacity-70" : ""
-                                }
-                              >
-                                {task.title}
-                              </span>
-                              {pendingAction === "complete" && (
-                                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
-                                  ✓
-                                </span>
-                              )}
-                              {pendingLabel ? (
+                            <div className="relative min-w-0 overflow-hidden pr-16">
+                              <DoneTaskButton
+                                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/task:opacity-100 group-focus-within/task:opacity-100 focus:opacity-100"
+                                disabled={busyAction || Boolean(pendingAction)}
+                                label={`Mark ${task.title} done`}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={() => void handleToggleTask(task, true)}
+                              />
+                              <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden font-medium leading-snug">
+                                {task.delegatedTask ? (
+                                  <span className="shrink-0">
+                                    <DelegatedSenderBadge
+                                      sender={task.delegatedTask.assignedByUser}
+                                    />
+                                  </span>
+                                ) : null}
                                 <span
-                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                  className={`min-w-0 flex-1 truncate ${
+                                    pendingAction === "complete" ? "line-through opacity-70" : ""
+                                  }`}
+                                  title={task.title}
                                 >
-                                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                  {pendingLabel}
+                                  {task.title}
                                 </span>
-                              ) : null}
-                              {hasTaskNotes(task) && (
-                                <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
-                              )}
-                              {taskOverdue && <span className={overdueChipClass}>OD</span>}
+                                {pendingAction === "complete" && (
+                                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
+                                    ✓
+                                  </span>
+                                )}
+                                {pendingLabel ? (
+                                  <span
+                                    className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                  >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                    {pendingLabel}
+                                  </span>
+                                ) : null}
+                                {hasTaskNotes(task) && (
+                                  <span className="shrink-0">
+                                    <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
+                                  </span>
+                                )}
+                                {taskOverdue && (
+                                  <span className={`${overdueChipClass} shrink-0`}>OD</span>
+                                )}
+                              </div>
                             </div>
                             {task.delegatedTask ? (
                               <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--tm-muted)]">
@@ -2728,8 +2745,8 @@ function ProfileCard({
             )}
           </div>
 
-          <div className="mt-4 hidden max-w-full overflow-x-auto md:block">
-            <table className="w-full min-w-[480px] text-sm">
+          <div className="mt-4 hidden max-w-full overflow-hidden md:block">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                   <th className="px-2 py-2">Title</th>
@@ -2831,7 +2848,7 @@ function ProfileCard({
                             return (
                             <tr
                               key={task.id}
-                              className={`tm-table-row border-b border-l-4 border-l-transparent border-[color:var(--tm-border)] align-top ${
+                              className={`group/task tm-table-row border-b border-l-4 border-l-transparent border-[color:var(--tm-border)] align-top ${
                                 taskOverdue ? "bg-[#fff1e7]" : ""
                               } ${
                                 task.isPriority
@@ -2870,41 +2887,59 @@ function ProfileCard({
                               onContextMenu={(event) => openTaskContextMenu(event, task)}
                             >
                               <td className="px-2 py-2.5 font-medium">
-                                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                  {task.delegatedTask ? (
-                                    <DelegatedSenderBadge
-                                      sender={task.delegatedTask.assignedByUser}
-                                    />
-                                  ) : null}
-                                  <span
-                                    className={`min-w-0 break-words ${
-                                      pendingAction === "complete"
-                                        ? "line-through opacity-70"
-                                        : ""
-                                    }`}
-                                  >
-                                    {task.title}
-                                  </span>
-                                  {pendingAction === "complete" ? (
-                                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
-                                      ✓
-                                    </span>
-                                  ) : null}
-                                  {pendingLabel ? (
+                                <div className="relative min-w-0 overflow-hidden pr-16">
+                                  <DoneTaskButton
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/task:opacity-100 group-focus-within/task:opacity-100 focus:opacity-100"
+                                    disabled={busyAction || Boolean(pendingAction)}
+                                    label={`Mark ${task.title} done`}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={() => void handleToggleTask(task, true)}
+                                  />
+                                  <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">
+                                    {task.delegatedTask ? (
+                                      <span className="shrink-0">
+                                        <DelegatedSenderBadge
+                                          sender={task.delegatedTask.assignedByUser}
+                                        />
+                                      </span>
+                                    ) : null}
                                     <span
-                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                      className={`min-w-0 flex-1 truncate ${
+                                        pendingAction === "complete"
+                                          ? "line-through opacity-70"
+                                          : ""
+                                      }`}
+                                      title={task.title}
                                     >
-                                      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                      {pendingLabel}
+                                      {task.title}
                                     </span>
-                                  ) : null}
-                                  {hasTaskNotes(task) && (
-                                    <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
-                                  )}
-                                  {taskOverdue && <span className={overdueChipClass}>OD</span>}
-                                  {task.delegatedTask ? (
-                                    <DelegatedTaskStatusPill status={task.delegatedTask.status} />
-                                  ) : null}
+                                    {pendingAction === "complete" ? (
+                                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
+                                        ✓
+                                      </span>
+                                    ) : null}
+                                    {pendingLabel ? (
+                                      <span
+                                        className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+                                      >
+                                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                        {pendingLabel}
+                                      </span>
+                                    ) : null}
+                                    {hasTaskNotes(task) && (
+                                      <span className="shrink-0">
+                                        <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
+                                      </span>
+                                    )}
+                                    {taskOverdue && (
+                                      <span className={`${overdueChipClass} shrink-0`}>OD</span>
+                                    )}
+                                    {task.delegatedTask ? (
+                                      <span className="shrink-0">
+                                        <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 </div>
                                 {hasTaskNotes(task) && (
                                   <span className="sr-only">Has notes</span>
