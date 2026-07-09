@@ -75,7 +75,9 @@ Current sections:
 - Sort
 - Group By
 
-Filter, Sort and Group By selections are remembered per logged-in user.
+Filter supports All open, Today, Overdue and Upcoming. Sort supports Manual, Start date and Due date.
+
+Filter, Sort and Group By selections are saved and restored per logged-in user.
 
 Overview Group By currently supports:
 
@@ -89,6 +91,10 @@ Overview profile cards use a single Actions button instead of separate Add Task,
 - Collapse / Expand
 
 Overview profile counters use compact labels: Open, Upcoming, Done and OD.
+
+Overview task rows include a compact retro green Done control. It should stay anchored inside the visible clipped task title area and appear on hover/focus so keyboard users can still reach it without requiring horizontal scrolling.
+
+On mobile, Overview controls should wrap within the viewport. The search field may sit below the Overview Options button.
 
 Overdue indicators are context-specific: profile pages show a red due date with an OD pill beside the date, while Overview uses a subtle overdue row tint with an OD badge. Priority styling remains separate from overdue styling.
 
@@ -144,6 +150,27 @@ The selected view and sort mode should be visually highlighted. Column preferenc
 Waiting On is not a separate task field. It is derived from the latest task note only: if the most recent note has Waiting On selections, display them; if it does not, display a blank Waiting On cell. Older Waiting On values are intentionally ignored once a newer note exists, because the column represents current task state rather than history.
 
 Future workspace preferences should prefer this menu when practical, including grouping, density, additional columns and other profile-level display options. This keeps the toolbar clean while allowing each workspace to become more configurable over time.
+
+## Profile Cards And Mobile Task Lists
+
+Project cards should use a single Actions menu for project actions instead of separate Edit, Prioritise, Expand/Collapse, Archive and Delete buttons. Keep the refreshed retro metadata/progress treatment: compact uppercase labels, clean spacing and a deliberate progress panel.
+
+Profile task rows include a compact green Done control near the task actions button. It should use the existing completion logic and should not replace the shared task action menu.
+
+Desktop profile task lists may remain table-style. Mobile profile task lists should use compact task cards showing the task title, category, due/overdue state, notes indicator, Done and Actions. Normal mobile task viewing should not require horizontal scrolling.
+
+## Reports Stay Scannable
+
+Reports should keep calculations in the reporting utilities and server data flow stable. UX changes should organize the existing data rather than changing the model.
+
+The Reports page uses:
+
+- A selected-period summary panel for completed, created, backlog, total hours, efficiency and current scope
+- Section tabs for Summary, Productivity, Time, Efficiency and Detail Report
+- Collapsible or grouped secondary context for breakdowns, comparisons and best periods
+- A separate Detail Report section so the main report does not become a wall of cards
+
+Report controls should stack cleanly on mobile and cards should become single-column where needed.
 
 ## Task Deletes Use The Shared Modal
 

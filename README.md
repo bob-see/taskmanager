@@ -107,6 +107,8 @@ Task Row Actions
 	•	Right-clicking anywhere on a profile task row opens the task actions menu
 	•	Clicking the task title still opens the edit task modal
 	•	The three-dot Actions button opens the same shared actions menu
+	•	Profile task rows and Overview rows include a compact green Done control for quick completion
+	•	On Overview, the Done control appears on hover/focus within the visible task title area
 	•	Right-click does not change Select mode selection or interfere with manual drag/reorder
 	•	Task action menu items are shared so future actions stay consistent across entry points
 	•	Task action menus should stay consistent between Overview and profile pages wherever the task supports the same actions
@@ -115,6 +117,8 @@ Task Row Actions
 Organisation
 	•	Category memory per profile
 	•	Project progress bars
+	•	Project cards use a single Actions menu for Edit, Prioritise, Expand/Collapse, Archive and Delete
+	•	Project cards use compact retro metadata and progress panels instead of dense inline metadata
 	•	Archive support
 	•	Search across tasks and projects
 
@@ -122,12 +126,15 @@ Overview Options
 	•	Overview has an Overview Options menu for page-wide controls
 	•	Overview Options affects the entire Overview page, not a single profile
 	•	Current sections are Filter, Sort and Group By
+	•	Filter supports All open, Today, Overdue and Upcoming
+	•	Sort supports Manual, Start date and Due date
 	•	Group By currently supports Project and Category
-	•	Filter, Sort and Group By selections are remembered per logged-in user
+	•	Filter, Sort and Group By selections are saved and restored per logged-in user
 	•	Overview profile cards use a single Actions button instead of separate Add Task, Add Project and Collapse buttons
 	•	The profile card Actions menu includes Add Task, Add Project and Collapse / Expand
 	•	Overview profile counters use compact labels: Open, Upcoming, Done and OD
 	•	Collapsed Overview profile cards are compact and show only the header, counters and Actions button
+	•	Overview mobile controls wrap cleanly, with search able to sit below Overview Options on small screens
 	•	Overdue indicators differ by context: profile pages show a red due date with an OD pill beside the date, while Overview uses a subtle overdue row tint with an OD badge
 	•	Priority styling remains separate from overdue styling
 
@@ -159,6 +166,19 @@ Column visibility
 	•	Configurable columns currently include Category, Due, Waiting On and Tags / Notes
 	•	Column preferences are remembered per profile/workspace
 	•	The task table expands slightly when additional columns such as Waiting On are enabled
+
+Profile mobile layout
+	•	Desktop profile task lists use table-style rows
+	•	Mobile profile task lists use compact task cards instead of compressed tables
+	•	Mobile task cards show title, category, due/overdue status, notes indicator, Done and Actions
+	•	Normal mobile task viewing should not require horizontal scrolling
+
+Reports UX
+	•	Reports keep the existing calculations and data model
+	•	A selected-period summary highlights completed, created, backlog, hours, efficiency and scope
+	•	Section tabs split Reports into Summary, Productivity, Time, Efficiency and Detail Report
+	•	Secondary context such as breakdowns, comparisons and best periods is grouped into cleaner panels
+	•	Task Detail Report lives in its own section so the main dashboard stays scannable
 
 Waiting On
 	•	Waiting On is not a separate task field
@@ -760,6 +780,7 @@ The Overview page provides a matrix-style dashboard showing all profiles and the
   - Recurring
   - Unassigned
   - Project
+  - Category
 - Drag and drop:
   - Reorder profile cards
   - Reorder project groups
@@ -774,11 +795,15 @@ The Overview page provides a matrix-style dashboard showing all profiles and the
   - Done / Open
   - Delete
   - Recurring delete options when applicable
+- Compact Done control on task rows for quick completion:
+  - Always available on profile task rows
+  - Shown on Overview row hover/focus to save space
 - Right-click context menu on projects:
   - Edit
   - Archive
 - Hover over a task to preview notes
 - "Show more" to expand long task lists
+- Mobile Overview controls wrap to avoid horizontal scrolling
 
 ### Global filters (Overview)
 Filters apply across all profiles:
@@ -786,6 +811,8 @@ Filters apply across all profiles:
 - Today — tasks due or starting today
 - Overdue — tasks past due
 - Upcoming — future tasks
+
+Overview Options also includes Sort (Manual, Start date, Due date) and Group By (Project, Category). Filter, Sort and Group By selections are saved per logged-in user and restored when returning to Overview.
 
 The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
 
@@ -1564,6 +1591,13 @@ Added:
 	•	Top categories
 	•	Hours-by-day breakdown
 	•	Definitions/help section for reporting logic
+
+Current UX:
+	•	Selected-period summary panel highlights the headline task, time, efficiency and scope values
+	•	Section tabs split Reports into Summary, Productivity, Time, Efficiency and Detail Report
+	•	Secondary context such as top projects, top categories, hours by day/week, profile comparisons and best periods is grouped into cleaner panels
+	•	Task Detail Report is separated from the main dashboard to reduce scanning noise
+	•	Mobile controls stack cleanly and report cards collapse to a single column
 
 Important logic improvements:
 	•	Reports now correctly include current-day task and timesheet data
