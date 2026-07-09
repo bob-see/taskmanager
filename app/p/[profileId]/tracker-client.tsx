@@ -2561,32 +2561,202 @@ function TaskRow({
   const taskOverdue = isTaskOverdue(task, currentDateValue ?? todayInputValue());
 
   return (
-    <div
-      className={`border-b border-[color:var(--tm-border)] px-2 py-2 transition-all hover:bg-white/45 ${
-        projectArchived
-          ? "bg-amber-100/20"
-          : pendingAction === "complete"
-            ? "bg-emerald-50/80"
-            : pendingAction === "delete"
-              ? "bg-red-50/70"
-              : pendingAction
-                ? "bg-slate-100/80"
-            : "bg-transparent"
-      } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
-        task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
-      } ${
-        draggable ? "cursor-grab" : ""
-      } ${dragActive ? "opacity-60" : ""} ${
-        pendingAction
-          ? "opacity-75 ring-2 ring-inset ring-[color:var(--tm-border)]"
-          : ""
-      } ${
-        dragOverPosition === "before"
-          ? "border-t-2 border-t-[color:var(--tm-text)]"
-          : dragOverPosition === "after"
-            ? "border-b-2 border-b-[color:var(--tm-text)]"
+    <>
+      <div
+        className={`rounded-[12px] border border-[color:var(--tm-border)] bg-white/40 p-3 shadow-sm transition-all md:hidden ${
+          projectArchived
+            ? "bg-amber-100/20"
+            : pendingAction === "complete"
+              ? "bg-emerald-50/80"
+              : pendingAction === "delete"
+                ? "bg-red-50/70"
+                : pendingAction
+                  ? "bg-slate-100/80"
+                  : ""
+        } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
+          task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
+        } ${draggable ? "cursor-grab" : ""} ${dragActive ? "opacity-60" : ""} ${
+          pendingAction ? "opacity-75 ring-2 ring-inset ring-[color:var(--tm-border)]" : ""
+        } ${
+          dragOverPosition === "before"
+            ? "border-t-2 border-t-[color:var(--tm-text)]"
+            : dragOverPosition === "after"
+              ? "border-b-2 border-b-[color:var(--tm-text)]"
+              : ""
+        }`}
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onContextMenu={onContextMenu}
+      >
+        {selectMode && (
+          <label className="tm-choice mb-2 flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => onToggleSelected(task.id, e.target.checked)}
+            />
+            <span>Select</span>
+          </label>
+        )}
+
+        <div className="flex items-start justify-between gap-2">
+          <button
+            className={`${taskTitleButtonClass} min-w-0 flex-1 text-sm font-semibold leading-5`}
+            type="button"
+            onClick={() => onOpenEditModal(task)}
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              {task.delegatedTask ? (
+                <DelegatedSenderBadge sender={task.delegatedTask.assignedByUser} />
+              ) : null}
+              <span
+                className={`min-w-0 truncate ${
+                  isTaskCompleted(task) || pendingComplete ? "line-through opacity-70" : ""
+                }`}
+              >
+                {task.title}
+              </span>
+            </span>
+          </button>
+
+          <div className="flex shrink-0 items-center gap-1">
+            {!isTaskCompleted(task) && (
+              <DoneTaskButton
+                disabled={completionPending || Boolean(pendingAction)}
+                label={`Mark ${task.title} done`}
+                onClick={() => onToggleCompleted(task, true)}
+              />
+            )}
+            <TaskActionMenu
+              task={task}
+              completionPending={completionPending}
+              pendingAction={pendingAction}
+              snoozeDisabled={snoozeDisabled}
+              showSnoozeAction={showSnoozeAction}
+              onPickSnoozeDate={onPickSnoozeDate}
+              onTogglePriority={onTogglePriority}
+              onToggleRepeatPause={onToggleRepeatPause}
+              onOpenEditModal={onOpenEditModal}
+              onToggleCompleted={(selectedTask) =>
+                onToggleCompleted(selectedTask, !isTaskCompleted(selectedTask))
+              }
+              onDelegate={onDelegate}
+              onDelete={onDelete}
+              pauseReferenceDate={currentDateValue ?? todayInputValue()}
+            />
+          </div>
+        </div>
+
+        {pendingLabel && (
+          <span
+            className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {pendingLabel}
+          </span>
+        )}
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[color:var(--tm-muted)]">
+          {isEditingCategory ? (
+            <div className="tm-chip flex flex-wrap items-center gap-2 rounded-md border px-2 py-1">
+              <CategoryCombobox
+                autoFocus
+                className="min-w-32 bg-transparent outline-none"
+                placeholder="Category"
+                suggestions={categorySuggestions}
+                value={editingCategoryValue}
+                onChange={onChangeCategoryEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onSaveCategoryEdit();
+                  }
+
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onCancelCategoryEdit();
+                  }
+                }}
+              />
+              <button
+                className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
+                type="button"
+                onClick={onSaveCategoryEdit}
+              >
+                Save
+              </button>
+              <button
+                className="tm-button rounded-md border px-2 py-0.5 text-[11px]"
+                type="button"
+                onClick={onCancelCategoryEdit}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              className={smallChipClass}
+              type="button"
+              onClick={() => onStartCategoryEdit(task)}
+            >
+              {task.category ?? "Uncategorized"}
+            </button>
+          )}
+          <span className={`${smallChipClass} ${taskOverdue ? "text-red-700" : ""}`}>
+            Due {toDateOnly(task.dueAt) || "—"}
+          </span>
+          {taskOverdue && <span className={overdueChipClass}>OD</span>}
+          {hasTaskNotes(task) && <TaskNotesButton notes={formatTaskNotesPreview(task)} />}
+          {waitingOnValues.length > 0 && <WaitingOnPills values={waitingOnValues} />}
+          {task.delegatedTask ? (
+            <DelegatedTaskStatusPill status={task.delegatedTask.status} />
+          ) : null}
+          {repeatSummary && <span className={smallChipClass}>{repeatSummary}</span>}
+          {repeatPauseBadge && (
+            <span className="rounded-full border border-slate-300/70 bg-slate-100/80 px-2 py-0.5 text-slate-700">
+              {repeatPauseBadge}
+            </span>
+          )}
+          {task.isPriority && <span className={priorityChipClass}>Priority</span>}
+          {projectArchived && (
+            <span className="rounded-full border border-amber-300/40 bg-amber-100/80 px-2 py-0.5 text-amber-900">
+              Archived
+            </span>
+          )}
+          {projectName && (
+            <span className={`${smallChipClass} max-w-full truncate`}>{projectName}</span>
+          )}
+          {task.completedOn && <span>Done {toDateOnly(task.completedOn)}</span>}
+        </div>
+      </div>
+
+      <div
+        className={`border-b border-[color:var(--tm-border)] px-2 py-2 transition-all hover:bg-white/45 ${
+          projectArchived
+            ? "bg-amber-100/20"
+            : pendingAction === "complete"
+              ? "bg-emerald-50/80"
+              : pendingAction === "delete"
+                ? "bg-red-50/70"
+                : pendingAction
+                  ? "bg-slate-100/80"
+                  : "bg-transparent"
+        } ${task.isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${
+          task.delegatedTask ? "border-l-4 border-l-sky-200/70" : ""
+        } ${draggable ? "cursor-grab" : ""} ${dragActive ? "opacity-60" : ""} ${
+          pendingAction
+            ? "opacity-75 ring-2 ring-inset ring-[color:var(--tm-border)]"
             : ""
-      }`}
+        } ${
+          dragOverPosition === "before"
+            ? "border-t-2 border-t-[color:var(--tm-text)]"
+            : dragOverPosition === "after"
+              ? "border-b-2 border-b-[color:var(--tm-text)]"
+              : ""
+        } hidden md:block`}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -2762,6 +2932,7 @@ function TaskRow({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -2807,7 +2978,7 @@ function SortableTaskHeader({
 
   return (
     <div
-      className="grid items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:[grid-template-columns:var(--task-row-columns)]"
+      className="hidden items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid md:[grid-template-columns:var(--task-row-columns)]"
       style={{ "--task-row-columns": headerColumns } as CSSProperties}
     >
       {renderSortableHeader("title", "Title")}
@@ -3602,6 +3773,12 @@ export function TrackerClient({
       ? `${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`
       : formatMonthTitle(selectedDate);
   const showStartChipInTables = viewMode === "week" || viewMode === "month";
+  const mobileTaskCardColumns: Record<VisibleTaskColumn, boolean> = {
+    category: true,
+    due: true,
+    waitingOn: true,
+    notes: true,
+  };
   const selectedRangeLabel =
     viewMode === "day"
       ? formatLongDate(selectedDay)
@@ -4936,15 +5113,15 @@ export function TrackerClient({
   return (
     <section className="space-y-4 text-[color:var(--tm-text)]">
       <div className={commandBarClass}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
               {currentProfileName}
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className={segmentedTabSetClass}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
               {VIEW_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -4961,7 +5138,7 @@ export function TrackerClient({
               ))}
             </div>
             <DateInput
-              className={`${inputClass} min-w-[11rem]`}
+              className={`${inputClass} min-w-0 flex-1 sm:flex-none sm:min-w-[11rem]`}
               value={selectedDay}
               onChange={(e) => setSelectedDay(e.target.value)}
             />
@@ -4973,9 +5150,9 @@ export function TrackerClient({
             </button>
           </div>
 
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center gap-2 md:flex-1 md:justify-end">
             <button
-              className={primaryButtonClass}
+              className={`${primaryButtonClass} w-full sm:w-auto`}
               type="button"
               onClick={() => setNewTaskOpen(true)}
             >
@@ -5821,7 +5998,7 @@ export function TrackerClient({
                     {!section.collapsed && (
                       <div className="mt-2 space-y-3">
                         <div>
-                          <div className="overflow-hidden rounded-md border border-[color:var(--tm-border)]">
+                          <div className="space-y-2 md:space-y-0 md:overflow-hidden md:rounded-md md:border md:border-[color:var(--tm-border)]">
                             <SortableTaskHeader
                               sortColumn={sortColumn}
                               sortDirection={sortDirection}
@@ -6005,7 +6182,62 @@ export function TrackerClient({
             ) : matrixTasks.length === 0 ? (
               <div className="text-sm opacity-60">No matching tasks.</div>
             ) : (
-              <div className="relative max-h-[520px] max-w-full overflow-y-auto overflow-x-auto">
+              <>
+                <div className="space-y-2 md:hidden">
+                  {matrixTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      projectName={getTaskProjectLabel(task, projectById)}
+                      projectArchived={
+                        task.projectId
+                          ? projectById.get(task.projectId)?.archived ?? false
+                          : false
+                      }
+                      completionPending={completionPendingTaskIds.includes(task.id)}
+                      pendingAction={
+                        pendingTaskActions[task.id] ??
+                        (completionPendingTaskIds.includes(task.id) ? "complete" : null)
+                      }
+                      visibleColumns={mobileTaskCardColumns}
+                      currentDateValue={selectedDay}
+                      editingCategoryTaskId={editingCategoryTaskId}
+                      editingCategoryValue={editingCategoryValue}
+                      categorySuggestions={categorySuggestions}
+                      onToggleSelected={toggleTaskSelected}
+                      onStartCategoryEdit={startCategoryEdit}
+                      onChangeCategoryEdit={setEditingCategoryValue}
+                      onCancelCategoryEdit={cancelCategoryEdit}
+                      onSaveCategoryEdit={() => void saveCategoryEdit()}
+                      onOpenEditModal={openTaskEditor}
+                      onToggleCompleted={(nextTask, completed) =>
+                        void toggleTaskCompleted(nextTask.id, completed).catch(
+                          (err: unknown) =>
+                            setError(
+                              err instanceof Error ? err.message : "Could not update task"
+                            )
+                        )
+                      }
+                      onSnoozePreset={snoozeTask}
+                      onPickSnoozeDate={openSingleTaskSnoozeDate}
+                      onTogglePriority={toggleTaskPriority}
+                      onToggleRepeatPause={requestToggleRepeatPause}
+                      onDelegate={openDelegateTask}
+                      showSnoozeAction
+                      snoozeDisabled={bulkSaving}
+                      onDelete={requestDeleteTask}
+                      onContextMenu={(event) =>
+                        openTaskContextMenu(event, task, {
+                          showSnoozeAction: true,
+                          completedActionLabel: taskView === "done" ? "Open" : "Done",
+                          toggleCompletedTo: taskView !== "done",
+                          pauseReferenceDate: selectedDay,
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+                <div className="relative hidden max-h-[520px] max-w-full overflow-y-auto overflow-x-auto md:block">
                 <table
                   className={`table-fixed border-separate border-spacing-0 text-sm ${
                     visibleColumns.waitingOn ? "min-w-[62rem]" : "min-w-[50rem]"
@@ -6236,6 +6468,7 @@ export function TrackerClient({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </section>
 

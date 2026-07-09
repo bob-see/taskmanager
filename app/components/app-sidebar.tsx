@@ -301,7 +301,7 @@ export function AppSidebar({
 
   return (
     <>
-      <NotificationCenter />
+      <NotificationCenter placement="desktop" />
       <header className="sticky top-0 z-40 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)]/95 px-4 py-3 backdrop-blur md:hidden">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
@@ -317,13 +317,16 @@ export function AppSidebar({
               <p className="truncate text-xs text-[color:var(--tm-muted)]">{currentSection}</p>
             </div>
           </Link>
-          <button
-            type="button"
-            className="tm-button inline-flex h-9 shrink-0 items-center justify-center rounded-[10px] border px-3 text-sm"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            Menu
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {!mobileMenuOpen ? <NotificationCenter placement="mobile" /> : null}
+            <button
+              type="button"
+              className="tm-button inline-flex h-9 shrink-0 items-center justify-center rounded-[10px] border px-3 text-sm"
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              Menu
+            </button>
+          </div>
         </div>
       </header>
 

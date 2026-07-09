@@ -25,6 +25,7 @@ type NotificationListResponse = {
 };
 
 const POLL_INTERVAL_MS = 60_000;
+type NotificationCenterPlacement = "desktop" | "mobile";
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString(undefined, {
@@ -38,7 +39,11 @@ function unreadLabel(count: number) {
   return `${count} unread notification${count === 1 ? "" : "s"}`;
 }
 
-export function NotificationCenter() {
+export function NotificationCenter({
+  placement = "desktop",
+}: {
+  placement?: NotificationCenterPlacement;
+}) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -229,11 +234,20 @@ export function NotificationCenter() {
     }
   }
 
+  const buttonClass =
+    placement === "mobile"
+      ? "tm-button relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border"
+      : "tm-button fixed left-[13.75rem] top-5 z-[70] hidden h-10 w-10 items-center justify-center rounded-xl border md:inline-flex";
+  const panelClass =
+    placement === "mobile"
+      ? "tm-card fixed left-3 right-3 top-16 z-[80] max-h-[min(38rem,calc(100vh-5rem))] overflow-hidden rounded-[14px] border shadow-2xl"
+      : "tm-card fixed left-72 top-5 z-[80] max-h-[min(38rem,calc(100vh-5rem))] w-96 overflow-hidden rounded-[14px] border shadow-2xl";
+
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className={placement === "mobile" ? "relative shrink-0" : undefined}>
       <button
         type="button"
-        className="tm-button fixed right-[4.75rem] top-3 z-[70] inline-flex h-10 w-10 items-center justify-center rounded-xl border md:left-[13.75rem] md:right-auto md:top-5"
+        className={buttonClass}
         aria-label={unreadLabel(unreadCount)}
         aria-expanded={open}
         aria-controls="notification-panel"
@@ -264,7 +278,7 @@ export function NotificationCenter() {
         <section
           id="notification-panel"
           aria-label="Notifications"
-          className="tm-card fixed left-3 right-3 top-16 z-[80] max-h-[min(38rem,calc(100vh-5rem))] overflow-hidden rounded-[14px] border shadow-2xl md:left-72 md:right-auto md:top-5 md:w-96"
+          className={panelClass}
         >
           <div className="flex items-center justify-between gap-3 border-b border-[color:var(--tm-border)] px-4 py-3">
             <div>

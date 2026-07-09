@@ -3499,7 +3499,7 @@ export function OverviewClient({
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
       <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 md:py-10 xl:px-8 2xl:px-10">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Overview</h1>
             <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
@@ -3507,7 +3507,7 @@ export function OverviewClient({
             </p>
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:max-w-xl sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:max-w-xl sm:flex-1 sm:flex-row sm:items-center sm:justify-end">
             <OverviewOptionsMenu
               selectedFilter={selectedFilter}
               sortMode={sortMode}
