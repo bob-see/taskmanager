@@ -277,10 +277,29 @@ const commandBarClass =
 const matrixHeaderCellClass =
   "sticky top-0 z-10 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]";
 const matrixCellClass = "px-3 py-2.5 align-top";
+const dayTaskGridClass =
+  "items-center gap-2 px-2 md:[grid-template-columns:var(--day-task-grid-columns)]";
+const dayTaskCenterCellClass =
+  "flex min-w-0 w-full items-center justify-center text-center";
+const dayTaskCenterGroupClass =
+  "flex min-w-0 w-full flex-wrap items-center justify-center gap-1.5 text-center";
 const iconButtonClass =
   "tm-button inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-sm";
 const taskActionMenuItemClass =
   "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70 disabled:opacity-50";
+
+function getDayTaskGridColumns(visibleColumns: Record<VisibleTaskColumn, boolean>) {
+  return [
+    "minmax(12rem,1.7fr)",
+    visibleColumns.category ? "minmax(8rem,0.8fr)" : null,
+    visibleColumns.due ? "minmax(5rem,0.5fr)" : null,
+    visibleColumns.waitingOn ? "minmax(7rem,0.65fr)" : null,
+    visibleColumns.notes ? "minmax(6rem,0.6fr)" : null,
+    "4.25rem",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 type TaskActionMenuConfig = {
   taskId: string;
@@ -1456,11 +1475,11 @@ function getLatestWaitingOnValues(task: Pick<Task, "noteHistory">) {
     .filter(Boolean);
 }
 
-function WaitingOnPills({ values }: { values: string[] }) {
+function WaitingOnPills({ values, className = "" }: { values: string[]; className?: string }) {
   if (values.length === 0) return null;
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <div className={`flex min-w-0 flex-wrap items-center gap-1 ${className}`}>
       {values.map((value) => (
         <span
           key={value}
@@ -2547,16 +2566,7 @@ function TaskRow({
       : pendingAction === "delete"
         ? "border-red-300 bg-red-50/90 text-red-800"
         : "border-slate-300 bg-slate-100/90 text-slate-800";
-  const rowColumns = [
-    "minmax(12rem,1.7fr)",
-    visibleColumns.category ? "minmax(8rem,0.8fr)" : null,
-    visibleColumns.due ? "minmax(5rem,0.5fr)" : null,
-    visibleColumns.waitingOn ? "minmax(7rem,0.65fr)" : null,
-    visibleColumns.notes ? "minmax(6rem,0.6fr)" : null,
-    "auto",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const dayTaskGridColumns = getDayTaskGridColumns(visibleColumns);
   const waitingOnValues = getLatestWaitingOnValues(task);
   const taskOverdue = isTaskOverdue(task, currentDateValue ?? todayInputValue());
 
@@ -2734,7 +2744,7 @@ function TaskRow({
       </div>
 
       <div
-        className={`border-b border-[color:var(--tm-border)] px-2 py-2 transition-all hover:bg-white/45 ${
+        className={`border-b border-[color:var(--tm-border)] py-2 transition-all hover:bg-white/45 ${
           projectArchived
             ? "bg-amber-100/20"
             : pendingAction === "complete"
@@ -2765,8 +2775,8 @@ function TaskRow({
       onContextMenu={onContextMenu}
     >
       <div
-        className="grid items-center gap-2 md:[grid-template-columns:var(--task-row-columns)]"
-        style={{ "--task-row-columns": rowColumns } as CSSProperties}
+        className={`grid ${dayTaskGridClass}`}
+        style={{ "--day-task-grid-columns": dayTaskGridColumns } as CSSProperties}
       >
         {selectMode && (
           <label
@@ -2815,9 +2825,9 @@ function TaskRow({
         </div>
 
         {visibleColumns.category && (
-          <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
+          <div className={`${dayTaskCenterCellClass} text-xs text-[color:var(--tm-muted)]`}>
             {isEditingCategory ? (
-              <div className="tm-chip flex flex-wrap items-center gap-2 rounded-md border px-2 py-1">
+              <div className="tm-chip flex flex-wrap items-center justify-center gap-2 rounded-md border px-2 py-1">
                   <CategoryCombobox
                     autoFocus
                     className="min-w-32 bg-transparent outline-none"
@@ -2854,7 +2864,7 @@ function TaskRow({
               </div>
             ) : (
               <button
-                className="line-clamp-1 text-left transition-colors hover:text-[color:var(--tm-text)]"
+                className="line-clamp-1 text-center transition-colors hover:text-[color:var(--tm-text)]"
                 type="button"
                 onClick={() => onStartCategoryEdit(task)}
               >
@@ -2865,7 +2875,7 @@ function TaskRow({
         )}
 
         {visibleColumns.due && (
-          <div className="flex items-center gap-1.5 text-xs text-[color:var(--tm-muted)]">
+          <div className={`${dayTaskCenterGroupClass} text-xs text-[color:var(--tm-muted)]`}>
             <span className={taskOverdue ? "font-medium text-red-700" : ""}>
               {toDateOnly(task.dueAt) || "—"}
             </span>
@@ -2874,13 +2884,13 @@ function TaskRow({
         )}
 
         {visibleColumns.waitingOn && (
-          <div className="min-w-0 text-xs text-[color:var(--tm-muted)]">
-            <WaitingOnPills values={waitingOnValues} />
+          <div className={`${dayTaskCenterCellClass} text-xs text-[color:var(--tm-muted)]`}>
+            <WaitingOnPills className="w-full justify-center" values={waitingOnValues} />
           </div>
         )}
 
         {visibleColumns.notes && (
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--tm-muted)]">
+          <div className={`${dayTaskCenterGroupClass} text-[10px] text-[color:var(--tm-muted)]`}>
             {task.delegatedTask ? (
               <DelegatedTaskStatusPill status={task.delegatedTask.status} />
             ) : null}
@@ -2947,46 +2957,64 @@ function SortableTaskHeader({
   visibleColumns: Record<VisibleTaskColumn, boolean>;
   onSort: (column: TaskSortColumn) => void;
 }) {
-  function renderSortableHeader(column: TaskSortColumn, label: string) {
+  function renderSortableHeader(
+    column: TaskSortColumn,
+    label: string,
+    align: "left" | "center" = "left"
+  ) {
     const active = sortColumn === column && sortDirection;
     const arrow = active === "asc" ? "↑" : active === "desc" ? "↓" : "";
 
+    if (align === "center") {
+      return (
+        <div className="min-w-0 w-full text-center">
+          <button
+            className="group grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center rounded px-1 py-0.5 text-center transition-colors hover:bg-white/45 hover:text-[color:var(--tm-text)]"
+            type="button"
+            onClick={() => onSort(column)}
+          >
+            <span className="col-start-2 truncate">{label}</span>
+            {arrow && (
+              <span className="col-start-3 justify-self-start pl-1 text-[9px] text-[color:var(--tm-muted)] opacity-70">
+                {arrow}
+              </span>
+            )}
+          </button>
+        </div>
+      );
+    }
+
     return (
-      <button
-        className="group inline-flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left transition-colors hover:bg-white/45 hover:text-[color:var(--tm-text)]"
-        type="button"
-        onClick={() => onSort(column)}
-      >
-        <span className="truncate">{label}</span>
-        <span className="w-2 text-[9px] text-[color:var(--tm-muted)] opacity-70">
-          {arrow}
-        </span>
-      </button>
+      <div className="text-left">
+        <button
+          className="group inline-flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left transition-colors hover:bg-white/45 hover:text-[color:var(--tm-text)]"
+          type="button"
+          onClick={() => onSort(column)}
+        >
+          <span className="truncate">{label}</span>
+          <span className="w-2 text-[9px] text-[color:var(--tm-muted)] opacity-70">
+            {arrow}
+          </span>
+        </button>
+      </div>
     );
   }
 
-  const headerColumns = [
-    "minmax(12rem,1.7fr)",
-    visibleColumns.category ? "minmax(8rem,0.8fr)" : null,
-    visibleColumns.due ? "minmax(5rem,0.5fr)" : null,
-    visibleColumns.waitingOn ? "minmax(7rem,0.65fr)" : null,
-    visibleColumns.notes ? "minmax(6rem,0.6fr)" : null,
-    "auto",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const dayTaskGridColumns = getDayTaskGridColumns(visibleColumns);
 
   return (
     <div
-      className="hidden items-center gap-2 border-b border-[color:var(--tm-border)] bg-white/25 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid md:[grid-template-columns:var(--task-row-columns)]"
-      style={{ "--task-row-columns": headerColumns } as CSSProperties}
+      className={`hidden ${dayTaskGridClass} border-b border-[color:var(--tm-border)] bg-white/25 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid`}
+      style={{ "--day-task-grid-columns": dayTaskGridColumns } as CSSProperties}
     >
       {renderSortableHeader("title", "Title")}
-      {visibleColumns.category && renderSortableHeader("category", "Category")}
-      {visibleColumns.due && renderSortableHeader("due", "Due")}
-      {visibleColumns.waitingOn && <span>Waiting On</span>}
-      {visibleColumns.notes && renderSortableHeader("notes", "Tags / Notes")}
-      <span className="text-left md:text-right">Actions</span>
+      {visibleColumns.category && renderSortableHeader("category", "Category", "center")}
+      {visibleColumns.due && renderSortableHeader("due", "Due", "center")}
+      {visibleColumns.waitingOn && (
+        <span className={`${dayTaskCenterCellClass} text-center`}>Waiting On</span>
+      )}
+      {visibleColumns.notes && renderSortableHeader("notes", "Tags / Notes", "center")}
+      <span className="justify-self-end text-right">Actions</span>
     </div>
   );
 }
