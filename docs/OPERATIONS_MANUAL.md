@@ -1,165 +1,107 @@
 # TaskManager Operations Manual
 
-Version: 1.0
+**Version:** 1.1
+**Purpose:** Day-to-day operational runbook for keeping TaskManager running.
 
-## Purpose
+This document covers operational checks, deployment preparation, backups, smoke testing, and incident response. It does not own architecture, migration theory, Push internals, or product philosophy.
 
-This document explains how to operate, maintain, deploy and recover the TaskManager application.
+Owning documents:
 
-Unlike PROJECT_PLAYBOOK.md, which focuses on philosophy and design decisions, this document focuses on practical operation of the system.
+- Current architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+- Migration workflow: [`PRISMA_MIGRATION_WORKFLOW.md`](./PRISMA_MIGRATION_WORKFLOW.md)
+- Migration reconciliation history: [`MIGRATION_HISTORY.md`](./MIGRATION_HISTORY.md)
+- Browser Push details: [`PUSH_NOTIFICATIONS.md`](./PUSH_NOTIFICATIONS.md)
+- Development philosophy: [`../PROJECT_PLAYBOOK.md`](../PROJECT_PLAYBOOK.md)
 
-If PROJECT_PLAYBOOK.md answers:
+## System At A Glance
 
-"Why does TaskManager work this way?"
+- Application: Next.js, React, TypeScript
+- Data access: Prisma
+- Database: MariaDB on Railway
+- Authentication: NextAuth
+- Hosting: Vercel-style Next.js deployment
+- Push delivery: Browser Push using Web Push and the `web-push` package
 
-This document answers:
-
-"How do I keep TaskManager running?"
-
----
-
-# System Overview
-
-## Application Stack
-
-Frontend:
-- Next.js
-- React
-- TypeScript
-
-Backend:
-- Next.js API Routes
-- Prisma
-
-Database:
-- MariaDB
-- Railway
-
-Authentication:
-- NextAuth
-
-Hosting:
-- Vercel
-
-Version Control:
-- GitHub
-
----
-
-# Repository Structure
-
-Key files and folders:
+## Repository Landmarks
 
 ```text
 /
-├── app/
-├── components/
-├── prisma/
-├── public/
-├── docs/
-│   ├── DECISIONS.md
-│   └── OPERATIONS_MANUAL.md
-├── PROJECT_PLAYBOOK.md
+├── app/                         Next.js routes, API routes, pages and feature code
+│   ├── api/                     Authenticated API route handlers
+│   ├── components/              Shared UI components
+│   └── lib/                     Server-side services and utilities
+├── docs/                        Architecture, subsystem and operations documents
+├── prisma/                      Prisma schema and committed migration history
+├── public/                      Static assets, manifest assets and service worker
+├── tests/                       Node test files
+├── PROJECT_PLAYBOOK.md          Development philosophy and Definition of Done
 ├── HOW_TO_WORK_WITH_TASKMANAGER.md
 └── README.md
 ```
 
----
+## Local Operational Checks
 
-# Local Development
-
-## Start Development Environment
-
-```bash
-npm run dev
-```
-
-Application should be available at:
-
-```text
-http://localhost:3000
-```
-
-## Install Dependencies
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-## Verify Application
-
-Check:
-
-- Login
-- Profiles
-- Tasks
-- Projects
-- Timesheets
-- Collaborative Spaces
-
-before considering a build successful.
-
----
-
-# Git Workflow
-
-## Check Status
+Start the development server:
 
 ```bash
-git status
+npm run dev
 ```
 
-## Stage Changes
+Expected local URL:
+
+```text
+http://localhost:3000
+```
+
+Run the standard project checks:
 
 ```bash
-git add .
+npm test
+npm run lint
+npm run build
+npx prisma validate
+npx prisma generate
+npx prisma migrate status
 ```
 
-## Commit Changes
+Use the checks relevant to the changed area. For documentation-only changes, Markdown link verification and `git diff --check` are usually sufficient.
 
-```bash
-git commit -m "meaningful message"
-```
+## Environment Checks
 
-Examples:
+Required local and deployment configuration includes:
 
-```bash
-git commit -m "feat: add task prioritisation"
-git commit -m "fix: resolve timesheet week selection"
-git commit -m "docs: update operations manual"
-```
+- `DATABASE_URL`
+- `NEXTAUTH_SECRET`
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`
 
-## Push Changes
+Do not commit real secrets. Use [`.env.example`](../.env.example) for safe placeholders.
 
-```bash
-git push
-```
+Before deployment, confirm that:
 
-## If Push Is Rejected
+- the Railway database is online
+- `DATABASE_URL` points to the intended database
+- Vercel environment variables are present for the target environment
+- VAPID private values are server-only
+- committed Prisma migrations are present when schema changed
 
-```bash
-git pull --rebase origin main
-git push
-```
+## Database Backups
 
-This commonly occurs when a change was made directly on GitHub.
-
----
-
-# Database Operations
-
-## Before Any Schema Change
-
-Always create a backup.
-
-Examples:
+Create a SQL backup before:
 
 - Prisma migrations
-- New tables
-- Column changes
-- Relationship changes
+- schema changes
+- major deployments
+- manual recovery work
 
-## Backup Naming Standard
+Recommended naming:
 
 ```text
 YYYY-MM-DD-description.sql
@@ -168,188 +110,158 @@ YYYY-MM-DD-description.sql
 Examples:
 
 ```text
-2026-06-06-before-timesheet-update.sql
-2026-06-06-before-profile-refactor.sql
+2026-07-11-before-push-delivery.sql
+2026-07-11-before-notification-preferences.sql
 ```
 
-Store backups in:
+Keep production backups outside public documentation and avoid committing sensitive data.
 
-```text
-/backups
-```
+## Migration Safety
 
-## Database History and Prisma Relation Mode
+TaskManager uses migration-first database evolution.
 
-TaskManager began with an earlier database setup and later moved to Railway/MariaDB.
+Do not use `prisma db push` against the shared Railway database.
 
-Some legacy tables may use MyISAM.
+Do not:
 
-MyISAM does not support database-level foreign keys.
+- run `prisma migrate reset` against Railway
+- delete or rewrite committed migration history
+- edit migration ledger records manually
+- run ad hoc repair commands without investigation, backup and documentation
 
-Prisma may fail with errors such as "Failed to open the referenced table" when attempting to create physical foreign keys.
+If a migration fails, or if `prisma migrate deploy` reports duplicate columns, existing tables, failed migrations or drift:
 
-The current approach is to use Prisma relation mode.
+1. Stop.
+2. Create or confirm a current backup.
+3. Run read-only status and validation checks.
+4. Inspect the migration and live schema.
+5. Follow [`PRISMA_MIGRATION_WORKFLOW.md`](./PRISMA_MIGRATION_WORKFLOW.md).
+6. Update [`MIGRATION_HISTORY.md`](./MIGRATION_HISTORY.md) if manual ledger reconciliation is required.
 
-Do not blindly change relationMode or add physical foreign keys without checking table engines first.
+Do not duplicate drift-recovery steps here; the migration workflow document owns that process.
 
-Before future schema changes, check whether affected tables are MyISAM or InnoDB.
+## Deployment Preparation
 
-If foreign-key issues occur, inspect table definitions before deleting or renaming tables.
+Before deploying:
 
----
+- review `git status`
+- confirm intended changes are committed
+- confirm required migrations are committed
+- create a database backup for schema or high-risk changes
+- run relevant automated checks
+- review environment variables
+- review documentation impact for significant changes
 
-# Prisma Operations
-
-## Create Migration
+Common commands:
 
 ```bash
-npx prisma migrate dev --name migration_name
+git status
+npm test
+npm run build
+npx prisma validate
+npx prisma migrate status
 ```
 
-## Regenerate Client
+## Vercel Deployment Verification
 
-```bash
-npx prisma generate
-```
+After deployment, verify:
 
-## Open Prisma Studio
+- login works
+- sidebar navigation loads
+- Overview loads
+- profile task pages load
+- task create/edit/complete flows work
+- project create/edit flows work
+- delegated task pages load
+- notification bell and notification settings load
+- Browser Push subscription status can be read
+- timesheets load
+- reports load
+- Collaborative Spaces load
 
-```bash
-npx prisma studio
-```
+For changes affecting Push behavior, use the manual verification steps in [`PUSH_NOTIFICATIONS.md`](./PUSH_NOTIFICATIONS.md).
 
-### Prisma db push foreign-key error
+## Railway Connectivity Checks
 
-Symptom:
-`npx prisma db push` fails with:
-"Failed to open the referenced table"
+If database access fails:
 
-Likely cause:
-The referenced table may be MyISAM or otherwise incompatible with physical foreign keys.
+1. Check Railway project status.
+2. Confirm the database service is running.
+3. Confirm `DATABASE_URL` has not changed unexpectedly.
+4. Check recent deployment logs for connection or Prisma errors.
+5. Avoid destructive recovery steps until a backup and diagnosis are complete.
 
-Recommended steps:
+## Incident Response
 
-1. Do not repeatedly rerun db push.
-2. Inspect table definitions.
-3. Confirm Prisma relation mode.
-4. Avoid deleting existing data.
-5. Run `npx prisma validate`.
-6. Run `npx prisma generate`.
-7. Run `npm run build`.
+### Build Or Deployment Failure
 
----
+1. Review Vercel deployment logs.
+2. Reproduce locally where practical.
+3. Run `npm run build`.
+4. Check environment variables if the failure is environment-specific.
+5. Fix, commit and redeploy.
 
-# Railway Operations
-
-## Verify Database Connection
+### Authentication Failure
 
 Check:
 
-- Railway project online
-- Database active
-- Connection string unchanged
+- `NEXTAUTH_SECRET`
+- configured application URL behavior
+- user record state
+- deployment logs for NextAuth errors
 
-## Before Deployment
+### Database Or Migration Failure
 
-Confirm:
+Follow the migration safety section above. Do not attempt manual ledger or schema repair without documented investigation.
 
-- Database healthy
-- Backup completed
-
----
-
-# Vercel Operations
-
-## Deploy
-
-Deployment occurs automatically after pushing to GitHub.
-
-## Verify Deployment
+### Push Notification Failure
 
 Check:
 
-- Login
-- Task creation
-- Project creation
-- Timesheets
-- Collaborative Spaces
+- Browser notification permission
+- active subscription state
+- VAPID environment variables
+- service worker registration
+- server logs for Web Push delivery warnings
 
-Collaborative Spaces column checks:
+Detailed troubleshooting belongs in [`PUSH_NOTIFICATIONS.md`](./PUSH_NOTIFICATIONS.md).
 
-- Archive Column hides the column from the active board and preserves its data.
-- Delete Column requires confirmation and is blocked while cells/cards still
-  reference the column.
+## Post-Deployment Smoke Test
 
-## Review Logs
+For normal deployments, verify:
 
-If deployment fails:
+- login
+- Overview
+- one profile task list
+- create and complete a task
+- create or edit a project
+- delegated task list access
+- notification center open/read behavior
+- settings page access
+- timesheets
+- reports
 
-1. Open Vercel
-2. Open deployment logs
-3. Identify build failure
-4. Fix locally
-5. Recommit and push
+For schema changes, also verify:
 
----
+- `npx prisma migrate status` reports up to date
+- the affected model can be read and written through the application
+- no Prisma runtime errors appear in logs
 
-# Codex Workflow
+## Recovery Cautions
 
-All significant requests should include:
+- Prefer rollback or restore over improvising production fixes.
+- Preserve production data.
+- Document any manual repair.
+- Update the owning documentation after resolving an operational incident.
+- Do not treat generated PDFs or old planning notes as operational sources.
 
-- Goal
-- Current Behaviour
-- Desired Behaviour
-- Constraints
-- Acceptance Criteria
+## Future Runbook Improvements
 
----
+Future focused runbooks may cover:
 
-# Security Checklist
-
-Before deployment verify:
-
-- Users cannot access other users' data
-- API routes validate ownership
-- Authentication works
-- Authorisation works
-- No sensitive data exposed to the client
-
----
-
-# Disaster Recovery
-
-## If Vercel Fails
-
-1. Check deployment logs
-2. Check environment variables
-3. Roll back to previous deployment if necessary
-
-## If Railway Fails
-
-1. Check Railway status
-2. Verify database availability
-3. Restore backup if required
-
-## If GitHub Is Lost
-
-Repository should be recoverable from:
-
-- Local clone
-- SQL backups
-- Documentation stored within the project
-
----
-
-# Future Expansion
-
-Future versions of this manual should include:
-
-- Detailed Railway backup procedures
-- Database restore procedures
-- Environment variable reference
-- Production rollback procedures
-- User administration procedures
-- Authentication troubleshooting
-- Deployment troubleshooting
-
-This document should evolve alongside the application.
+- detailed Railway backup and restore procedures
+- Vercel rollback procedures
+- environment variable rotation
+- user administration
+- authentication troubleshooting
+- security incident handling

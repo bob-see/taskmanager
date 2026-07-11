@@ -1,1801 +1,274 @@
 # TaskManager
 
-## Project Documentation
+TaskManager is a multi-user work management application for task tracking, delegated work, lightweight collaboration, time logging, reporting, and notifications.
 
-Before making significant architectural, workflow or UI changes, review:
+It is designed for practical daily use: fast task capture, clear visibility across work contexts, shared delegated workflows, and enough reporting to understand what is happening without turning the app into a heavy enterprise project-management suite.
 
-- PROJECT_PLAYBOOK.md
-- HOW_TO_WORK_WITH_TASKMANAGER.md
-- docs/DECISIONS.md
+## Current Status
 
-These documents contain the project's design philosophy, development standards, architectural decisions and AI guidance.
+TaskManager is an active Next.js application with the following implemented systems:
 
-TaskManager prioritises:
+- Multi-user authentication and user visibility controls.
+- Profile-based task and project workspaces.
+- Cross-profile Overview workspace.
+- Delegated task lifecycle for work assigned between users.
+- Collaborative Spaces for structured shared workflows.
+- In-app notifications and Browser Push notifications.
+- PWA support, including installed-app usage and Home Screen Push support where the platform allows it.
+- Timesheets and time reports.
+- Productivity, activity, and user reports.
+- Prisma/MariaDB migration history reconciled and documented.
 
-- Speed
-- Simplicity
-- Visibility
-- Low friction
+The application is currently maintained as a private project and internal collaboration platform.
 
-When in doubt, follow the Playbook.
+## Core Concepts
 
-Collaborative Spaces columns support two lifecycle actions: Archive Column hides
-a column from the active board while preserving its cells, and Delete Column
-permanently removes only empty columns after confirmation.
+TaskManager is organised around a few concepts that appear throughout the application:
 
----
+### Profiles
 
-The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
+A profile is a work context. Profiles can represent people, areas of responsibility, or specialised workflows. Most task, project, timesheet, report, routine, and check-in views are scoped to one or more profiles.
 
-⸻
+### Tasks
 
-✨ Core Concepts
+Tasks are the main unit of work. They can stand alone, belong to a project, repeat on a schedule, carry notes and metadata, or become part of a delegated workflow between users.
 
-Profiles
+### Projects
 
-Each profile acts as an independent workspace with its own:
-	•	tasks
-	•	projects
-	•	categories
-	•	reporting context
+Projects group related tasks and provide a higher-level planning surface. They are visible in profile views and the Overview workspace.
 
-This keeps different areas of life or work cleanly separated.
+### Delegation
 
-Projects
+Delegated tasks are shared work items between two users. The delegated-task workflow records sender, recipient, status, notes, completion, closeout, and notification events.
 
-Projects group related tasks and provide progress tracking and reporting context.
-Tasks can exist with or without a project.
+### Notifications
 
-Tasks
+Notifications are stored in the database for the in-app notification center. Browser Push is implemented as an additional delivery channel for the same domain events, not as a separate notification system.
 
-Tasks support:
-	•	start dates (when work becomes active)
-	•	optional due dates
-	•	recurring schedules (daily, weekly, custom)
-	•	categories
-	•	project assignment
-	•	completion tracking
-	•	rollover behaviour
+## Key Features
 
-Delegated Tasks
+### Profiles, Tasks, and Projects
 
-Delegated tasks are shared task objects used when one user assigns work to another user.
+- Profiles act as work contexts.
+- Tasks support start dates, due dates, completion, priority, categories, notes, recurrence, repeat pauses, and project assignment.
+- Projects group related tasks and support priority, collapsed/archived state, due dates, and progress visibility.
+- Profile task views support day, week, month, active, upcoming, overdue, paused, done, and archived workflows.
 
-Important principle:
-	•	A delegated task remains shared
-	•	The assignee does the work
-	•	The original delegator reviews completion and closes the delegated task
-	•	The original task stays in its originating profile/project
-	•	Delegation does not move profile ownership, project ownership or task origin
+### Overview
 
-⸻
+- Overview aggregates active work across profiles.
+- It supports filtering, sorting, grouping, priority visibility, and task/project actions.
+- It is the primary workspace for cross-profile planning.
 
-🚀 Features
+### Delegated Tasks
 
-Scheduling & Planning
-	•	Day / Week / Month calendar views
-	•	Start date driven visibility
-	•	Automatic rollover for incomplete tasks
-	•	Upcoming and overdue tracking
+- Users can create a delegated task or delegate an existing task.
+- Delegated tasks remain shared between delegator and assignee.
+- Lifecycle: pending, accepted, in progress, completed, closed, or declined.
+- Both participants can add shared notes.
+- Delegated task events create notifications.
 
-Recurring Tasks
-	•	Daily and weekly repeat rules
-	•	Series-aware logic (only one active instance shown)
-	•	Temporary repeat pauses with optional pause-until dates
-	•	Delete options: this task / future / entire series
-	•	Accurate historical tracking
+### Notifications and Push
 
-Task Delete Confirmation
-	•	All task deletes use the shared TaskManager in-app delete confirmation modal
-	•	Browser-native confirm dialogs should not be used for task deletion
-	•	Overview and profile task action menus use the same shared modal
-	•	Non-recurring tasks require confirmation before deletion
-	•	Recurring tasks keep delete scope options: this task only, this and future tasks, entire series
-	•	The modal uses a retro TaskManager visual style and is the shared pattern for future destructive task actions
+- In-app notification center with unread counts, mark-read, clear, and archive behavior.
+- Notification preferences per delegated-task event type.
+- Browser Push delivery for delegated task events.
+- Multi-device Push subscriptions per user.
+- Service worker handles Push display, active-tab suppression, click routing, and badge updates.
 
-Productivity Tools
-	•	Multi-select bulk actions
-	•	Inline editing
-	•	Category suggestions
-	•	Project assignment
-	•	Progress tracking
-	•	Reporting averages (Calendar vs Work week)
-	•	Delegated tasks with accept/decline, lifecycle actions and shared notes
+See [Push Notifications](./docs/PUSH_NOTIFICATIONS.md) for implementation and testing details.
 
-Task Row Actions
-	•	Overview and profile task rows support right-click task actions
-	•	Right-clicking anywhere on a profile task row opens the task actions menu
-	•	Clicking the task title still opens the edit task modal
-	•	The three-dot Actions button opens the same shared actions menu
-	•	Profile task rows and Overview rows include a compact green Done control for quick completion
-	•	On Overview, the Done control appears on hover/focus within the visible task title area
-	•	Right-click does not change Select mode selection or interfere with manual drag/reorder
-	•	Task action menu items are shared so future actions stay consistent across entry points
-	•	Task action menus should stay consistent between Overview and profile pages wherever the task supports the same actions
-	•	Task action menus are viewport-aware so options are not cut off near the bottom of the screen
+### Collaborative Spaces
 
-Organisation
-	•	Category memory per profile
-	•	Project progress bars
-	•	Project cards use a single Actions menu for Edit, Prioritise, Expand/Collapse, Archive and Delete
-	•	Project cards use compact retro metadata and progress panels instead of dense inline metadata
-	•	Archive support
-	•	Search across tasks and projects
+- Shared matrix-style workspaces with members, rows, columns, cells, statuses, notes, and print views.
+- Member and owner permissions are enforced server-side.
+- User selection respects group visibility.
 
-Overview Options
-	•	Overview has an Overview Options menu for page-wide controls
-	•	Overview Options affects the entire Overview page, not a single profile
-	•	Current sections are Filter, Sort and Group By
-	•	Filter supports All open, Today, Overdue and Upcoming
-	•	Sort supports Manual, Start date and Due date
-	•	Group By currently supports Project and Category
-	•	Filter, Sort and Group By selections are saved and restored per logged-in user
-	•	Overview profile cards use a single Actions button instead of separate Add Task, Add Project and Collapse buttons
-	•	The profile card Actions menu includes Add Task, Add Project and Collapse / Expand
-	•	Overview profile counters use compact labels: Open, Upcoming, Done and OD
-	•	Collapsed Overview profile cards are compact and show only the header, counters and Actions button
-	•	Overview mobile controls wrap cleanly, with search able to sit below Overview Options on small screens
-	•	Overdue indicators differ by context: profile pages show a red due date with an OD pill beside the date, while Overview uses a subtle overdue row tint with an OD badge
-	•	Priority styling remains separate from overdue styling
+### Timesheets and Reports
 
-Profile Options
-	•	Each profile/workspace has a Profile Options menu for task display preferences
-	•	Current sections are View, Sort and Columns
-	•	Desktop uses hover/flyout submenus
-	•	Mobile uses an expandable touch-friendly panel
-	•	This menu is the intended home for future workspace customisation rather than adding more controls to the task toolbar
+- Profile-based manual and timer-sourced time entries.
+- Week-based timesheet workflow.
+- Reports for productivity, time, efficiency, activity, and profile-level work.
+- Admin-facing user activity reporting.
 
-View options
-	•	Active
-	•	Today
-	•	Upcoming
-	•	Overdue
-	•	Paused
-	•	Done
-	•	Archived
-	•	The selected view is visually highlighted
+## Application Areas
 
-Sort options
-	•	Manual
-	•	Start Date
-	•	Due Date
-	•	The current sort mode is visually highlighted
+The main application areas are:
 
-Column visibility
-	•	Task columns can be individually shown or hidden per profile/workspace
-	•	Configurable columns currently include Category, Due, Waiting On and Tags / Notes
-	•	Column preferences are remembered per profile/workspace
-	•	The task table expands slightly when additional columns such as Waiting On are enabled
+- Profile pages for day-to-day task and project work.
+- Overview for cross-profile planning.
+- Delegated Tasks for assigned-to-me and assigned-by-me workflows.
+- Spaces for shared matrix-style collaboration.
+- Timesheets for weekly time entry.
+- Reports for profile, task, productivity, and activity review.
+- Settings for notification preferences and account-level controls.
 
-Profile mobile layout
-	•	Desktop profile task lists use table-style rows
-	•	Mobile profile task lists use compact task cards instead of compressed tables
-	•	Mobile task cards show title, category, due/overdue status, notes indicator, Done and Actions
-	•	Normal mobile task viewing should not require horizontal scrolling
+Some administrative and specialised workflows are intentionally available only to permitted users. Access checks are enforced server-side.
 
-Reports UX
-	•	Reports keep the existing calculations and data model
-	•	A selected-period summary highlights completed, created, backlog, hours, efficiency and scope
-	•	Section tabs split Reports into Summary, Productivity, Time, Efficiency and Detail Report
-	•	Secondary context such as breakdowns, comparisons and best periods is grouped into cleaner panels
-	•	Task Detail Report lives in its own section so the main dashboard stays scannable
+## Technology Stack
 
-Waiting On
-	•	Waiting On is not a separate task field
-	•	It is derived from the latest task note only
-	•	If the most recent note contains one or more Waiting On selections, those values are displayed
-	•	If the most recent note contains no Waiting On selection, the Waiting On column is blank
-	•	Older Waiting On values are intentionally ignored once a newer note exists
-	•	This reflects the current state of the task rather than historical state
+- [Next.js](https://nextjs.org/) App Router
+- React
+- TypeScript
+- Prisma
+- MariaDB on Railway
+- NextAuth credentials authentication
+- Tailwind CSS
+- Vercel-style deployment
+- Browser Push via the Web Push protocol and `web-push`
 
-Delegated Task Workflow
-	•	Create a new delegated task from the Delegated section
-	•	Delegate an existing task from task actions
-	•	Assigned To Me shows tasks received from other users
-	•	Assigned By Me shows tasks delegated to others
-	•	Receiver can Accept or Decline pending delegated tasks
-	•	Accepted tasks can be moved to In Progress by the assignee
-	•	In Progress tasks can be marked Completed by the assignee
-	•	Completed delegated tasks remain visible for the delegator to review
-	•	The delegator closes completed delegated tasks after review
-	•	Shared notes/activity are attached to the underlying task and visible to both participants
-	•	Lifecycle: Pending → Accepted → In Progress → Completed → Closed
+## Repository Structure
 
-Delegated Task Visual Indicators
-	•	Sender initials badge beside delegated task titles
-	•	Delegated status badge wherever delegated tasks appear
-	•	Completed delegated tasks display as Awaiting Review
-	•	Delegated rows use subtle visual treatment without changing normal task rows
+| Path | Purpose |
+|---|---|
+| `app/` | Next.js routes, layouts, pages, API routes, and feature screens. |
+| `app/api/` | Authenticated server endpoints for profiles, tasks, projects, delegated tasks, notifications, Push subscriptions, spaces, timesheets, users, and check-ins. |
+| `app/components/` | Shared UI components such as the app shell, sidebar, notification center, editors, modals, and common task controls. |
+| `app/lib/` | Server-side utilities and services, including Prisma, notifications, Push delivery, and reporting helpers. |
+| `prisma/` | Prisma schema and migration history. |
+| `public/` | Static assets, manifest icons, service worker, and media assets. |
+| `tests/` | Node test files for recurrence and Push-related behavior. |
+| `docs/` | Architecture, ADRs, Push documentation, migration workflow, migration history, and operations notes. |
+| `scripts/` | Utility scripts used for project-specific maintenance and inspection. |
 
-Admin / Restricted Features
-	•	LOST hatch countdown access is restricted to robert.bob.see@gmail.com
-	•	The LOST page is protected server-side and hidden from other users
+## Getting Started
 
-⸻
+### Prerequisites
 
-🧑‍💻 Tech Stack
-	•	Next.js (App Router)
-	•	React
-	•	TypeScript
-	•	Prisma
-	•	SQLite (local development)
-	•	Tailwind (UI styling)
+- Node.js compatible with the current Next.js version.
+- npm.
+- Access to a MariaDB-compatible database.
+- Required environment variables for database, authentication, and Push configuration.
 
-⸻
+### Installation
 
-🛠️ Getting Started
-
-1. Install dependencies
-
+```bash
 npm install
+```
 
-2. Run the dev server
+### Environment Variables
 
+Create local environment configuration using the repository's example file as a guide:
+
+```bash
+cp .env.example .env
+```
+
+Important variables include:
+
+- `DATABASE_URL`
+- `NEXTAUTH_SECRET`
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`
+
+Do not commit real secrets.
+
+### Development Server
+
+```bash
 npm run dev
+```
 
-Open http://localhost:3000 in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
-⸻
+### Database Migration Workflow
 
-🧭 Product Direction
+TaskManager uses Prisma migrations. Do not use `prisma db push` against the shared Railway database.
 
-The goal of this app is to bridge the gap between simple task lists and heavy project management tools by focusing on:
-	•	clarity over complexity
-	•	real-world scheduling behaviour
-	•	fast daily workflows
-	•	meaningful insights into output
+For the required process, read [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md).
 
-Future Notes / TODOs
-	•	Add a local development database/playground for safer delegated workflow testing
-	•	Add notification badges for new delegated notes and status updates
-	•	Consider richer delegated task metadata or hover details later, while keeping rows compact
-	•	Consider a masonry-style Overview layout later so collapsed or short cards naturally close vertical gaps beside taller cards
-	•	Continue moving task menus toward a single shared source of truth so Overview, Profile and future task surfaces use the same action definitions and ordering
+### Common Commands
 
-⸻
-
-📦 RELEASES
-
-⸻
-
-PR1 — Profiles & Projects Foundation
-
-Summary
-
-Introduced multi-profile architecture and project grouping, transforming the app from a single list into a scalable workspace model.
-
-Added
-	•	Profile model
-	•	Project model
-	•	Task profile + project relations
-	•	Default profile backfill
-	•	Profile selector UI
-	•	Profiles API
-
-⸻
-
-PR2 — Profile-Scoped Tasks & Scheduling
-
-Summary
-
-Established the core task workflow with start dates and rollover behaviour.
-
-Added
-	•	Profile-scoped task lists
-	•	Start date visibility rules
-	•	Automatic rollover
-	•	Profile switching
-	•	Unassigned task grouping
-
-⸻
-
-PR3 — Calendar Views & Progress Tracking
-
-Summary
-
-Introduced time-aware planning and productivity tracking.
-
-Added
-	•	Day / Week / Month views
-	•	Navigation between periods
-	•	Daily progress bar
-	•	Task filters (Today / Upcoming / Overdue)
-
-⸻
-
-PR3.x — UX Clarity Improvements
-
-Summary
-
-Improved visual comprehension of calendar data.
-
-Added
-	•	Calendar legend
-	•	New vs active indicators
-	•	Today filter helper text
-
-⸻
-
-PR4 — Task Editing & Structure
-
-Summary
-
-Enhanced task manipulation and project organisation.
-
-Added
-	•	Edit task modal
-	•	Inline quick edits
-	•	Project assignment UI
-	•	Improved empty states
-
-⸻
-
-PR5 — Categories & Organisation
-
-Summary
-
-Introduced category workflows and improved project context.
-
-Added
-	•	Category field across tasks
-	•	Project progress bars
-	•	Archive support
-	•	Project cards
-
-⸻
-
-PR6 — Recurrence Controls & Delete Logic
-
-Summary
-
-Completed the recurrence lifecycle with safe editing and deletion behaviour.
-
-Added
-	•	Delete scope options (this / future / all)
-	•	Recurrence stability fixes
-	•	Archive behaviour consistency
-
-⸻
-
-PR7 — Reporting & Preferences
-
-Summary
-
-Expanded insights into productivity with flexible reporting.
-
-Added
-	•	Weekly and monthly reporting
-	•	Average calculations
-	•	Work week vs calendar options
-	•	Project column in reports
-
-⸻
-
-PR8 — Series-Aware Recurrence & Accurate Reporting
-
-Summary
-
-Resolved duplication issues by projecting recurring tasks as a single active series.
-
-Added
-	•	Series-aware open task projection
-	•	Accurate calendar counts
-	•	Correct progress calculations
-	•	Consistent behaviour across all views
-
-⸻
-
-PR9 — Day View Editing & Bulk Workflow Tools
-
-Summary
-
-Significantly improved daily workflow speed with bulk operations and smarter editing.
-
-Added
-	•	Multi-select mode
-	•	Bulk actions (complete, move, edit, delete)
-	•	Category suggestions
-	•	Inline project/date/category edits
-
-⸻
-
-PR9.x — Day View UX Polish
-
-Summary
-
-Refined selection and category behaviour for smoother interaction.
-
-Added
-	•	Select all shown
-	•	Improved category dropdown behaviour
-	•	Consistent combobox interactions
-
-⸻
-
-🚀 PR10 — Quick Add + Snooze/Reschedule (Day view)
-
-Summary
-
-PR10 makes the Day view much faster to use by introducing a Quick Add input for rapid task entry and Snooze/Reschedule controls (single task + bulk) to push work forward without editing each task manually.
-
-This milestone focuses on speed and flow — getting tasks in and moving them around becomes a “type → enter → keep going” experience.
-
-What’s Included
-
-⚡ Quick Add (Day view)
-A new Quick Add bar sits at the top of the Day tasks panel (above the Open filters).
-
-Supports inline tokens (order independent):
-	•	#category → sets the task category
-	•	@project → assigns the task to an existing project (matched by name)
-	•	^due:tomorrow or ^due:YYYY-MM-DD → sets due date
-
-Behaviour:
-	•	Creates the task for the selected day in the current profile
-	•	Strips recognised control tokens from the saved title
-	•	Clears after save and keeps focus for rapid entry
-
-Example:
-	•	Call plumber #DREAM @Admin ^due:tomorrow
-
-🕒 Snooze / Reschedule (startDate only)
-Adds “Snooze” actions that adjust startDate (not due date), available in:
-
-Single-task controls
-	•	Tomorrow
-	•	Next business day (skips Sat/Sun)
-	•	Next week (+7 days)
-	•	Pick date…
-
-Bulk toolbar
-	•	Same Snooze options apply to multiple selected tasks at once
-
-🔒 Recurrence-safe behaviour
-	•	Snoozing recurring tasks applies to the current occurrence only
-	•	No series rewrite, no duplication, and tasks continue on their normal repeat cycle
-
-Why This Matters
-
-PR10 dramatically reduces friction in day-to-day usage:
-	•	Adding tasks becomes instant
-	•	Rescheduling is effortless
-	•	Workflows stay clean without opening modals constantly
-
-It sets up the next phase (PR11) to focus on project progress visibility rather than mechanics.
-
-____
-
-📊 PR11 — Project Progress Bars (Day view)
-
-Summary
-
-PR11 introduces per-project progress tracking in the Day view, giving immediate visibility into how work is distributed and progressing across projects.
-
-Alongside the existing overall day progress bar, you can now see completion status for each project (and unassigned tasks), making it easier to spot bottlenecks and understand where your effort is going.
-
-⸻
-
-✨ What’s Included
-
-📂 Project Progress (Today)
-A new section appears directly beneath the main Day progress bar:
-	•	One row per project that has tasks counted for the selected day
-	•	Includes an Unassigned row for tasks without a project
-	•	Displays:
-	•	Project name
-	•	Done / Total count
-	•	Compact progress bar
-
-Rows update instantly when:
-	•	Tasks are marked done or reopened
-	•	The selected day changes
-	•	Profiles change
-	•	Archived visibility toggles
-
-⸻
-
-🗃 Archived Behaviour
-	•	Archived projects are hidden by default
-	•	When Show archived is enabled:
-	•	Archived project rows appear
-	•	Archived styling and badge are applied
-
-⸻
-
-🧠 Why This Matters
-
-PR11 shifts the tracker from just showing what’s done today to showing where progress is happening.
-
-It enables:
-	•	Better daily planning
-	•	Faster identification of stalled projects
-	•	A foundation for future reporting and analytics
-
-⸻
-
-🔒 Scope
-	•	Day view only
-	•	No database or API changes
-	•	Built on the same task visibility logic as the main Day progress bar
-
-____
-
-📅 Latest Update — Tracker UX & Matrix Layout (March 2026)
-
-✅ What we shipped
-
-🎨 Visual refresh (Tracker)
-	•	Switched tracker UI from dark theme to light “retro cream” palette
-	•	Introduced softer card surfaces for better readability
-	•	Improved contrast hierarchy for:
-	•	Headers
-	•	Filters
-	•	Table rows
-	•	Overall goal: closer visual alignment to DREAM matrix clarity
-
-🧭 Navigation & structure
-	•	Added Tracker / Reporting toggle in header
-	•	Cleaner top control bar with:
-	•	View switch (Day / Week / Month)
-	•	Date navigation
-	•	Search
-	•	Archive toggle
-	•	Quick add task
-
-📊 Matrix-style task tables
-	•	Reworked Open and Done into true matrix tables:
-	•	Consistent column headers
-	•	Fixed row density
-	•	Clear task metadata (Project, Category, Dates, Status)
-
-🧷 Sticky header bug fix
-Root issue:
-Sticky <th> cells were offset to viewport (top-[73px]) causing first row to render underneath header.
-
-Fix implemented:
-	•	Each table now lives inside its own scroll container
-(relative max-h-[520px] overflow-y-auto)
-	•	Sticky headers now use top-0 so they anchor to the card, not the page
-
-Result:
-✔ First row fully visible
-✔ Header remains sticky
-✔ No spacer hacks
-✔ No changes to sorting/filtering/data logic
-
-🗂 Reporting direction set
-	•	Confirmed approach: Reporting as a dedicated page
-	•	Concept aligned with DREAM matrix summary philosophy
-
-⸻
-
-🧠 Product direction confirmed
-
-The tracker is evolving toward a personal operational matrix, not just a to-do list.
-
-Core principles going forward:
-	1.	Matrix clarity over card clutter
-	2.	Fast scanning (status + time + ownership)
-	3.	Reporting as a first-class view
-	4.	Minimal cognitive load
-
-⸻
-
-🚧 Next priorities
-
-1️⃣ Reporting page (MVP)
-
-Goal: DREAM-style summary layer
-
-Planned components:
-	•	Period selector (Day / Week / Month / Custom)
-	•	KPI strip:
-	•	Tasks created
-	•	Tasks completed
-	•	Completion rate
-	•	Overdue count
-	•	Category / Project breakdown
-	•	Trend chart (completion over time)
-
-⸻
-
-2️⃣ Drag & drop ordering (DB persisted)
-
-Allow manual prioritisation of tasks
-
-Scope:
-	•	Drag within filtered list
-	•	Persist orderIndex per profile
-	•	No effect on sort modes (date / status)
-
-⸻
-
-3️⃣ Table usability enhancements
-	•	Column visibility toggles
-	•	Density modes (Comfortable / Compact)
-	•	Keyboard navigation
-
-⸻
-
-4️⃣ Header & branding polish
-	•	Final logo placement refinement
-	•	Optional subtle elevation on sticky header
-	•	Responsive tightening for smaller screens
-
-⸻
-
-5️⃣ Data & intelligence layer (future)
-	•	Task aging indicators
-	•	Smart “focus” suggestions
-	•	Reporting export (CSV / PDF)
-
-⸻
-
-🗺 Longer-term vision
-
-The tracker becomes:
-
-A lightweight personal command centre
-sitting philosophically between a task manager and a DREAM matrix.
-
-It should answer instantly:
-	•	What needs attention?
-	•	What’s slipping?
-	•	Where is time going?
-
-____
-
-🧭 PR12 — Profile Ordering (DB Persisted)
-
-Profiles can now be manually reordered via drag and drop on the home screen.
-The order is persisted in the database so it remains consistent across sessions.
-
-Highlights
-	•	Added order field to Profile model
-	•	Drag and drop UI on home screen
-	•	Bulk reorder endpoint (/api/profiles/reorder)
-	•	Optimistic UI updates with rollback on failure
-
-Result
-
-Profiles now behave like a configurable workspace list rather than a fixed menu.
-
-⸻
-
-🧩 PR13 — Tracker Matrix Layout & Reporting Mode
-
-The tracker UI was refactored to adopt a DREAM-style matrix layout with tasks as the primary surface.
-
-Key changes
-	•	Introduced sticky command bar with unified controls
-	•	Moved analytics and summaries to a dedicated Reporting page
-	•	Reduced vertical density and card clutter
-	•	Converted task lists into structured matrix tables
-	•	Added collapsible advanced add section
-
-UX impact
-
-The tracker now loads directly into a working state with tasks visible immediately, reducing cognitive load and aligning the experience with a matrix workflow model.
-
-⸻
-
-🗂 PR14 — Drag & Drop Task Ordering
-
-Tasks can now be manually reordered within the Open list, with order persisted per profile.
-
-Implementation
-	•	Added orderIndex to Task model
-	•	Migration backfilled deterministic ordering
-	•	New reorder endpoint (/tasks/reorder)
-	•	Native drag and drop interaction
-	•	Optimistic updates with persistence on drop
-
-Behaviour
-	•	Manual ordering applies when Sort = Manual
-	•	Other sort modes remain unaffected
-	•	Order persists across refresh and restarts
-
-⸻
-
-⚙️ Default Sort Update
-
-Manual sorting is now the default tracker sort mode, ensuring tasks open in the user-defined priority order immediately.
-
-
-____
-
-🤝 Delegated Tasks — Shared Workflows
-
-Summary
-
-Delegated Tasks introduce lightweight shared work without turning TaskManager into a heavy project management system.
-
-Key behaviour
-	•	New delegated tasks can be created from the Delegated section
-	•	Existing tasks can be delegated from task actions
-	•	Assigned To Me shows tasks received by the current user
-	•	Assigned By Me shows tasks the current user delegated
-	•	Receivers can Accept or Decline pending tasks
-	•	Accepted tasks move through In Progress and Completed
-	•	Delegators review Completed tasks and Close them
-	•	Shared notes/activity are attached to the underlying task
-
-Lifecycle
-	•	Pending
-	•	Accepted
-	•	In Progress
-	•	Completed / Awaiting Review
-	•	Closed
-
-Important principle
-
-Delegated tasks remain shared objects. The original task remains in its originating profile/project and is not duplicated or moved into the assignee's workspace. The assignee performs the work, while the original delegator remains responsible for reviewing completion and closing the delegated task.
-
-Visual indicators
-	•	Sender initials badge identifies who delegated the task
-	•	Delegated status badge shows the lifecycle state
-	•	Completed delegated tasks are labelled Awaiting Review so the delegator knows to review and close
-
-Future follow-ups
-	•	Notification badges for new delegated notes/status updates
-	•	Richer delegated task metadata or hover details
-	•	Local development database/playground for testing collaboration workflows
-
-____
-
-
-🧭 PR17 — Overview Page (All Profiles Dashboard)
-
-Summary
-
-A new Overview page has been introduced to provide a high-level view of all profiles and their active tasks in one place. This allows the user to see workload across all areas (e.g. Simon, Sales, DREAM, Personal) without switching between profiles.
-
-The Overview page acts as a command centre for the system.
-
-Key Features
-	•	Displays all profiles on one screen
-	•	Tasks are grouped by Project
-	•	Tasks without a project are grouped under Unassigned
-	•	Each profile shows summary counts:
-	•	Open
-	•	Done
-	•	Overdue
-	•	Quick Add task bar available directly from Overview
-	•	Ability to:
-	•	Collapse/expand each profile
-	•	Jump directly into a profile’s Tracker via Open tracker
-	•	“Show more” used to keep long lists compact
-
-
-_____
-
-
-## Overview Dashboard
-
-The Overview page provides a matrix-style dashboard showing all profiles and their active tasks in one place.
-
-### Overview features
-- View all profiles side-by-side
-- Tasks grouped by:
-  - Recurring
-  - Unassigned
-  - Project
-  - Category
-- Drag and drop:
-  - Reorder profile cards
-  - Reorder project groups
-  - Reorder tasks within groups
-- Quick actions per profile:
-  - Add Task
-  - Add Project
-  - Collapse
-  - Open Tracker
-- Right-click context menu on tasks:
-  - Edit
-  - Done / Open
-  - Delete
-  - Recurring delete options when applicable
-- Compact Done control on task rows for quick completion:
-  - Always available on profile task rows
-  - Shown on Overview row hover/focus to save space
-- Right-click context menu on projects:
-  - Edit
-  - Archive
-- Hover over a task to preview notes
-- "Show more" to expand long task lists
-- Mobile Overview controls wrap to avoid horizontal scrolling
-
-### Global filters (Overview)
-Filters apply across all profiles:
-- All open — active tasks (not future upcoming)
-- Today — tasks due or starting today
-- Overdue — tasks past due
-- Upcoming — future tasks
-
-Overview Options also includes Sort (Manual, Start date, Due date) and Group By (Project, Category). Filter, Sort and Group By selections are saved per logged-in user and restored when returning to Overview.
-
-The app combines calendar awareness, recurrence logic, and bulk task operations to create a lightweight but powerful planning environment.
-
-⸻
-
-✨ Core Concepts
-
-Profiles
-
-Each profile acts as an independent workspace with its own:
-	•	tasks
-	•	projects
-	•	categories
-	•	reporting context
-
-This keeps different areas of life or work cleanly separated.
-
-Projects
-
-Projects group related tasks and provide progress tracking and reporting context.
-Tasks can exist with or without a project.
-
-Tasks
-
-Tasks support:
-	•	start dates (when work becomes active)
-	•	optional due dates
-	•	recurring schedules (daily, weekly, custom)
-	•	categories
-	•	project assignment
-	•	completion tracking
-	•	rollover behaviour
-
-⸻
-
-🚀 Features
-
-Scheduling & Planning
-	•	Day / Week / Month calendar views
-	•	Start date driven visibility
-	•	Automatic rollover for incomplete tasks
-	•	Upcoming and overdue tracking
-
-Recurring Tasks
-	•	Daily and weekly repeat rules
-	•	Series-aware logic (only one active instance shown)
-	•	Temporary repeat pauses with optional pause-until dates
-	•	Delete options: this task / future / entire series
-	•	Accurate historical tracking
-
-Productivity Tools
-	•	Multi-select bulk actions
-	•	Inline editing
-	•	Category suggestions
-	•	Project assignment
-	•	Progress tracking
-	•	Reporting averages (Calendar vs Work week)
-
-Organisation
-	•	Category memory per profile
-	•	Project progress bars
-	•	Archive support
-	•	Search across tasks and projects
-
-⸻
-
-🧑‍💻 Tech Stack
-	•	Next.js (App Router)
-	•	React
-	•	TypeScript
-	•	Prisma
-	•	SQLite (local development)
-	•	Tailwind (UI styling)
-
-⸻
-
-🛠️ Getting Started
-
-1. Install dependencies
-
-npm install
-
-2. Run the dev server
-
+```bash
 npm run dev
+npm test
+npm run build
+npm run lint
+npx prisma validate
+npx prisma generate
+npx prisma migrate status
+```
 
-Open http://localhost:3000 in your browser.
+Use `npx prisma migrate deploy` for applying committed migrations to the shared Railway database. Do not run schema-changing or migration-ledger-changing commands against shared environments without following the migration workflow.
 
-⸻
+### Tests
 
-🧭 Product Direction
+```bash
+npm test
+```
 
-The goal of this app is to bridge the gap between simple task lists and heavy project management tools by focusing on:
-	•	clarity over complexity
-	•	real-world scheduling behaviour
-	•	fast daily workflows
-	•	meaningful insights into output
+### Build
 
-⸻
+```bash
+npm run build
+```
 
-📦 RELEASES
+## Documentation
 
-⸻
+TaskManager uses repository-first documentation. The implementation is the source of truth, and documentation explains how the implementation works.
 
-PR1 — Profiles & Projects Foundation
+Each major topic has one owning document. Other documents should link to that source instead of duplicating detail.
 
-Summary
+| Document | Purpose |
+|---|---|
+| [README.md](./README.md) | Project overview and repository entry point. |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Technical architecture, modules, data model overview, security model, deployment shape, and review register. |
+| [docs/DECISIONS.md](./docs/DECISIONS.md) | Architecture Decision Records explaining why major decisions were made. |
+| [PROJECT_PLAYBOOK.md](./PROJECT_PLAYBOOK.md) | Development philosophy, workflow standards, documentation strategy, and Definition of Done. |
+| [HOW_TO_WORK_WITH_TASKMANAGER.md](./HOW_TO_WORK_WITH_TASKMANAGER.md) | Quick routing guide for AI coding assistants. |
+| [docs/PUSH_NOTIFICATIONS.md](./docs/PUSH_NOTIFICATIONS.md) | Browser Push implementation, behavior, troubleshooting, and manual test plans. |
+| [docs/PRISMA_MIGRATION_WORKFLOW.md](./docs/PRISMA_MIGRATION_WORKFLOW.md) | Mandatory database migration workflow. |
+| [docs/MIGRATION_HISTORY.md](./docs/MIGRATION_HISTORY.md) | Migration-history reconciliation notes. |
+| [docs/OPERATIONS_MANUAL.md](./docs/OPERATIONS_MANUAL.md) | Operational notes and deployment procedures. |
 
-Introduced multi-profile architecture and project grouping, transforming the app from a single list into a scalable workspace model.
+When updating the repository, prefer changing the document that owns the topic. For example, Push internals belong in `docs/PUSH_NOTIFICATIONS.md`, architecture changes belong in `docs/ARCHITECTURE.md`, and migration process changes belong in `docs/PRISMA_MIGRATION_WORKFLOW.md`.
 
-Added
-	•	Profile model
-	•	Project model
-	•	Task profile + project relations
-	•	Default profile backfill
-	•	Profile selector UI
-	•	Profiles API
+## Contributing
 
-⸻
+TaskManager is maintained with small, intentional changes.
 
-PR2 — Profile-Scoped Tasks & Scheduling
+Before making significant changes:
 
-Summary
+- Read the documentation relevant to the work.
+- Preserve server-side security and ownership checks.
+- Prefer extending existing services and UI surfaces before adding parallel systems.
+- Use Prisma migrations for schema changes.
+- Run relevant automated checks.
+- Manually verify affected workflows.
+- Review documentation impact before marking work complete.
 
-Established the core task workflow with start dates and rollover behaviour.
+The full Definition of Done is documented in [PROJECT_PLAYBOOK.md](./PROJECT_PLAYBOOK.md).
 
-Added
-	•	Profile-scoped task lists
-	•	Start date visibility rules
-	•	Automatic rollover
-	•	Profile switching
-	•	Unassigned task grouping
+## Deployment
 
-⸻
+TaskManager is built for deployment with:
 
-PR3 — Calendar Views & Progress Tracking
+- Vercel-style hosting for the Next.js application.
+- Railway-hosted MariaDB for production data.
+- Prisma migrations for schema evolution.
+- VAPID environment variables for Browser Push.
 
-Summary
+Deployment and operational details are maintained in focused documentation rather than duplicated here:
 
-Introduced time-aware planning and productivity tracking.
+- [Operations Manual](./docs/OPERATIONS_MANUAL.md)
+- [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md)
+- [Push Notifications](./docs/PUSH_NOTIFICATIONS.md)
 
-Added
-	•	Day / Week / Month views
-	•	Navigation between periods
-	•	Daily progress bar
-	•	Task filters (Today / Upcoming / Overdue)
+## Project Status
 
-⸻
+Stable implemented systems include:
 
-PR3.x — UX Clarity Improvements
+- Profile, project, and task management.
+- Overview workspace.
+- Delegated task lifecycle.
+- In-app notifications and Browser Push delivery.
+- Collaborative Spaces.
+- Timesheets and reports.
+- Prisma/MariaDB migration workflow and reconciliation documentation.
 
-Summary
+Current improvement areas include documentation maintenance, permission-helper consolidation, broader automated coverage, notification badge behavior review, and operational hardening.
 
-Improved visual comprehension of calendar data.
+## License
 
-Added
-	•	Calendar legend
-	•	New vs active indicators
-	•	Today filter helper text
-
-⸻
-
-PR4 — Task Editing & Structure
-
-Summary
-
-Enhanced task manipulation and project organisation.
-
-Added
-	•	Edit task modal
-	•	Inline quick edits
-	•	Project assignment UI
-	•	Improved empty states
-
-⸻
-
-PR5 — Categories & Organisation
-
-Summary
-
-Introduced category workflows and improved project context.
-
-Added
-	•	Category field across tasks
-	•	Project progress bars
-	•	Archive support
-	•	Project cards
-
-⸻
-
-PR6 — Recurrence Controls & Delete Logic
-
-Summary
-
-Completed the recurrence lifecycle with safe editing and deletion behaviour.
-
-Added
-	•	Delete scope options (this / future / all)
-	•	Recurrence stability fixes
-	•	Archive behaviour consistency
-
-⸻
-
-PR7 — Reporting & Preferences
-
-Summary
-
-Expanded insights into productivity with flexible reporting.
-
-Added
-	•	Weekly and monthly reporting
-	•	Average calculations
-	•	Work week vs calendar options
-	•	Project column in reports
-
-⸻
-
-PR8 — Series-Aware Recurrence & Accurate Reporting
-
-Summary
-
-Resolved duplication issues by projecting recurring tasks as a single active series.
-
-Added
-	•	Series-aware open task projection
-	•	Accurate calendar counts
-	•	Correct progress calculations
-	•	Consistent behaviour across all views
-
-⸻
-
-PR9 — Day View Editing & Bulk Workflow Tools
-
-Summary
-
-Significantly improved daily workflow speed with bulk operations and smarter editing.
-
-Added
-	•	Multi-select mode
-	•	Bulk actions (complete, move, edit, delete)
-	•	Category suggestions
-	•	Inline project/date/category edits
-
-⸻
-
-PR9.x — Day View UX Polish
-
-Summary
-
-Refined selection and category behaviour for smoother interaction.
-
-Added
-	•	Select all shown
-	•	Improved category dropdown behaviour
-	•	Consistent combobox interactions
-
-⸻
-
-🚀 PR10 — Quick Add + Snooze/Reschedule (Day view)
-
-Summary
-
-PR10 makes the Day view much faster to use by introducing a Quick Add input for rapid task entry and Snooze/Reschedule controls (single task + bulk) to push work forward without editing each task manually.
-
-This milestone focuses on speed and flow — getting tasks in and moving them around becomes a “type → enter → keep going” experience.
-
-What’s Included
-
-⚡ Quick Add (Day view)
-A new Quick Add bar sits at the top of the Day tasks panel (above the Open filters).
-
-Supports inline tokens (order independent):
-	•	#category → sets the task category
-	•	@project → assigns the task to an existing project (matched by name)
-	•	^due:tomorrow or ^due:YYYY-MM-DD → sets due date
-
-Behaviour:
-	•	Creates the task for the selected day in the current profile
-	•	Strips recognised control tokens from the saved title
-	•	Clears after save and keeps focus for rapid entry
-
-Example:
-	•	Call plumber #DREAM @Admin ^due:tomorrow
-
-🕒 Snooze / Reschedule (startDate only)
-Adds “Snooze” actions that adjust startDate (not due date), available in:
-
-Single-task controls
-	•	Tomorrow
-	•	Next business day (skips Sat/Sun)
-	•	Next week (+7 days)
-	•	Pick date…
-
-Bulk toolbar
-	•	Same Snooze options apply to multiple selected tasks at once
-
-🔒 Recurrence-safe behaviour
-	•	Snoozing recurring tasks applies to the current occurrence only
-	•	No series rewrite, no duplication, and tasks continue on their normal repeat cycle
-
-Why This Matters
-
-PR10 dramatically reduces friction in day-to-day usage:
-	•	Adding tasks becomes instant
-	•	Rescheduling is effortless
-	•	Workflows stay clean without opening modals constantly
-
-It sets up the next phase (PR11) to focus on project progress visibility rather than mechanics.
-
-____
-
-📊 PR11 — Project Progress Bars (Day view)
-
-Summary
-
-PR11 introduces per-project progress tracking in the Day view, giving immediate visibility into how work is distributed and progressing across projects.
-
-Alongside the existing overall day progress bar, you can now see completion status for each project (and unassigned tasks), making it easier to spot bottlenecks and understand where your effort is going.
-
-⸻
-
-✨ What’s Included
-
-📂 Project Progress (Today)
-A new section appears directly beneath the main Day progress bar:
-	•	One row per project that has tasks counted for the selected day
-	•	Includes an Unassigned row for tasks without a project
-	•	Displays:
-	•	Project name
-	•	Done / Total count
-	•	Compact progress bar
-
-Rows update instantly when:
-	•	Tasks are marked done or reopened
-	•	The selected day changes
-	•	Profiles change
-	•	Archived visibility toggles
-
-⸻
-
-🗃 Archived Behaviour
-	•	Archived projects are hidden by default
-	•	When Show archived is enabled:
-	•	Archived project rows appear
-	•	Archived styling and badge are applied
-
-⸻
-
-🧠 Why This Matters
-
-PR11 shifts the tracker from just showing what’s done today to showing where progress is happening.
-
-It enables:
-	•	Better daily planning
-	•	Faster identification of stalled projects
-	•	A foundation for future reporting and analytics
-
-⸻
-
-🔒 Scope
-	•	Day view only
-	•	No database or API changes
-	•	Built on the same task visibility logic as the main Day progress bar
-
-____
-
-📅 Latest Update — Tracker UX & Matrix Layout (March 2026)
-
-✅ What we shipped
-
-🎨 Visual refresh (Tracker)
-	•	Switched tracker UI from dark theme to light “retro cream” palette
-	•	Introduced softer card surfaces for better readability
-	•	Improved contrast hierarchy for:
-	•	Headers
-	•	Filters
-	•	Table rows
-	•	Overall goal: closer visual alignment to DREAM matrix clarity
-
-🧭 Navigation & structure
-	•	Added Tracker / Reporting toggle in header
-	•	Cleaner top control bar with:
-	•	View switch (Day / Week / Month)
-	•	Date navigation
-	•	Search
-	•	Archive toggle
-	•	Quick add task
-
-📊 Matrix-style task tables
-	•	Reworked Open and Done into true matrix tables:
-	•	Consistent column headers
-	•	Fixed row density
-	•	Clear task metadata (Project, Category, Dates, Status)
-
-🧷 Sticky header bug fix
-Root issue:
-Sticky <th> cells were offset to viewport (top-[73px]) causing first row to render underneath header.
-
-Fix implemented:
-	•	Each table now lives inside its own scroll container
-(relative max-h-[520px] overflow-y-auto)
-	•	Sticky headers now use top-0 so they anchor to the card, not the page
-
-Result:
-✔ First row fully visible
-✔ Header remains sticky
-✔ No spacer hacks
-✔ No changes to sorting/filtering/data logic
-
-🗂 Reporting direction set
-	•	Confirmed approach: Reporting as a dedicated page
-	•	Concept aligned with DREAM matrix summary philosophy
-
-⸻
-
-🧠 Product direction confirmed
-
-The tracker is evolving toward a personal operational matrix, not just a to-do list.
-
-Core principles going forward:
-	1.	Matrix clarity over card clutter
-	2.	Fast scanning (status + time + ownership)
-	3.	Reporting as a first-class view
-	4.	Minimal cognitive load
-
-⸻
-
-🚧 Next priorities
-
-1️⃣ Reporting page (MVP)
-
-Goal: DREAM-style summary layer
-
-Planned components:
-	•	Period selector (Day / Week / Month / Custom)
-	•	KPI strip:
-	•	Tasks created
-	•	Tasks completed
-	•	Completion rate
-	•	Overdue count
-	•	Category / Project breakdown
-	•	Trend chart (completion over time)
-
-⸻
-
-2️⃣ Drag & drop ordering (DB persisted)
-
-Allow manual prioritisation of tasks
-
-Scope:
-	•	Drag within filtered list
-	•	Persist orderIndex per profile
-	•	No effect on sort modes (date / status)
-
-⸻
-
-3️⃣ Table usability enhancements
-	•	Column visibility toggles
-	•	Density modes (Comfortable / Compact)
-	•	Keyboard navigation
-
-⸻
-
-4️⃣ Header & branding polish
-	•	Final logo placement refinement
-	•	Optional subtle elevation on sticky header
-	•	Responsive tightening for smaller screens
-
-⸻
-
-5️⃣ Data & intelligence layer (future)
-	•	Task aging indicators
-	•	Smart “focus” suggestions
-	•	Reporting export (CSV / PDF)
-
-⸻
-
-🗺 Longer-term vision
-
-The tracker becomes:
-
-A lightweight personal command centre
-sitting philosophically between a task manager and a DREAM matrix.
-
-It should answer instantly:
-	•	What needs attention?
-	•	What’s slipping?
-	•	Where is time going?
-
-____
-
-🧭 PR12 — Profile Ordering (DB Persisted)
-
-Profiles can now be manually reordered via drag and drop on the home screen.
-The order is persisted in the database so it remains consistent across sessions.
-
-Highlights
-	•	Added order field to Profile model
-	•	Drag and drop UI on home screen
-	•	Bulk reorder endpoint (/api/profiles/reorder)
-	•	Optimistic UI updates with rollback on failure
-
-Result
-
-Profiles now behave like a configurable workspace list rather than a fixed menu.
-
-⸻
-
-🧩 PR13 — Tracker Matrix Layout & Reporting Mode
-
-The tracker UI was refactored to adopt a DREAM-style matrix layout with tasks as the primary surface.
-
-Key changes
-	•	Introduced sticky command bar with unified controls
-	•	Moved analytics and summaries to a dedicated Reporting page
-	•	Reduced vertical density and card clutter
-	•	Converted task lists into structured matrix tables
-	•	Added collapsible advanced add section
-
-UX impact
-
-The tracker now loads directly into a working state with tasks visible immediately, reducing cognitive load and aligning the experience with a matrix workflow model.
-
-⸻
-
-🗂 PR14 — Drag & Drop Task Ordering
-
-Tasks can now be manually reordered within the Open list, with order persisted per profile.
-
-Implementation
-	•	Added orderIndex to Task model
-	•	Migration backfilled deterministic ordering
-	•	New reorder endpoint (/tasks/reorder)
-	•	Native drag and drop interaction
-	•	Optimistic updates with persistence on drop
-
-Behaviour
-	•	Manual ordering applies when Sort = Manual
-	•	Other sort modes remain unaffected
-	•	Order persists across refresh and restarts
-
-⸻
-
-⚙️ Default Sort Update
-
-Manual sorting is now the default tracker sort mode, ensuring tasks open in the user-defined priority order immediately.
-
-
-____
-
-
-🧭 PR17 — Overview Page (All Profiles Dashboard)
-
-Summary
-
-A new Overview page has been introduced to provide a high-level view of all profiles and their active tasks in one place. This allows the user to see workload across all areas (e.g. Simon, Sales, DREAM, Personal) without switching between profiles.
-
-The Overview page acts as a command centre for the system.
-
-Key Features
-	•	Displays all profiles on one screen
-	•	Tasks are grouped by Project
-	•	Tasks without a project are grouped under Unassigned
-	•	Each profile shows summary counts:
-	•	Open
-	•	Done
-	•	Overdue
-	•	Quick Add task bar available directly from Overview
-	•	Ability to:
-	•	Collapse/expand each profile
-	•	Jump directly into a profile’s Tracker via Open tracker
-	•	“Show more” used to keep long lists compact
-
-
-_____
-
-
-## Overview Dashboard
-
-The Overview page provides a matrix-style dashboard showing all profiles and their active tasks in one place.
-
-### Overview features
-- View all profiles side-by-side
-- Tasks grouped by:
-  - Recurring
-  - Unassigned
-  - Project
-- Drag and drop:
-  - Reorder profile cards
-  - Reorder project groups
-  - Reorder tasks within groups
-- Quick actions per profile:
-  - Add Task
-  - Add Project
-  - Collapse
-  - Open Tracker
-- Right-click context menu on tasks:
-  - Edit
-  - Done / Open
-  - Delete
-  - Recurring delete options when applicable
-- Right-click context menu on projects:
-  - Edit
-  - Archive
-- Hover over a task to preview notes
-- "Show more" to expand long task lists
-
-### Global filters (Overview)
-Filters apply across all profiles:
-- All open — active tasks (not future upcoming)
-- Today — tasks due or starting today
-- Overdue — tasks past due
-- Upcoming — future tasks
-
-Profiles remain visible even if no tasks match the selected filter.
-
-Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date. A recurring task can also be paused temporarily; paused repeats are excluded from Active, Today, Upcoming, and Overdue, appear in the Paused view, and pause-until dates suppress repeats through that date before resuming automatically.
-
----
-
-## Task Grouping Rules
-
-Tasks are grouped using the following logic:
-
-1. Recurring — all recurring tasks
-2. Unassigned — tasks with no project
-3. Projects — tasks assigned to a project (manual order)
-
-"Recurring" and "Unassigned" are virtual groups and are not stored as projects in the database.
-
----
-
-## Navigation
-
-Home screen:
-- Select a profile to open its Tracker
-- Open the Overview dashboard
-- Add and reorder profiles
-
-Overview:
-- High-level dashboard across all profiles
-
-Tracker:
-- Detailed task management (Day / Week / Month)
-
-Reporting:
-- Summary and reporting view (per profile)
-
----
-
-## Installed App
-
-TaskManager can be installed as a local web app and opened from the dock like a desktop app.
-
-The app uses a web app manifest with:
-- Standalone display mode
-- Start URL: `/`
-- Scope: `/`
-
-This allows Home, Overview, Tracker, and Reporting pages to function inside the installed app without browser UI.
-
-
-
-____
-
-
-🧭 PR18 — App Shell, Timesheets, Reports Hub & Overview Workflow Expansion
-
-Summary
-
-PR18 turns TaskManager into a more complete operational workspace by introducing a shared app shell with sidebar navigation, a dedicated Timesheets system, a central Reports hub, and stronger Overview-page workflows.
-
-This milestone connects task management, reporting, and time logging into a single coherent structure.
-
-⸻
-
-✨ What’s Included
-
-🧱 Shared app shell + sidebar navigation
-A persistent sidebar is now available across the app, creating a more consistent “workspace” feel.
-
-Added:
-	•	App-wide sidebar navigation
-	•	Overview link
-	•	Dynamic profile links
-	•	Timesheets link
-	•	Reports link
-	•	Shared shell/layout across main pages
-
-Result:
-Navigation is now always accessible without needing to return to the home screen.
-
-⸻
-
-🗂 Home / Profiles layout improvement
-The profile selection screen was refactored from a horizontal scrolling row into a cleaner responsive grid.
-
-Added:
-	•	3-column desktop layout
-	•	2-column tablet layout
-	•	1-column mobile layout
-	•	Wrapped profile cards instead of scroll-only profile access
-
-Result:
-The home screen now feels more like a workspace launcher and less like a carousel.
-
-⸻
-
-📋 Overview workflow expansion
-The Overview page became a much stronger all-profiles command centre.
-
-Added:
-	•	Add Task modal support for repeat-task setup
-	•	Group-by toggle:
-	•	Project view
-	•	Category view
-	•	Improved all-profile workflow handling
-	•	Better alignment between Overview and Tracker behaviour
-
-Result:
-Overview can now be used not just for scanning, but for actively managing work across profiles.
-
-⸻
-
-⏱ Timesheets
-A dedicated Timesheets page was introduced to track hours against existing profiles.
-
-Added:
-	•	Weekly timesheet view
-	•	Live timer start/stop flow
-	•	Manual time entry
-	•	Rounding modes:
-	•	Exact
-	•	Nearest 15 min
-	•	Round up to 15 min
-	•	Profile-based hour logging using existing profiles
-	•	Weekly totals by profile and by day
-	•	Overall weekly total
-	•	Entry inspection support for underlying logged time
-
-Behaviour:
-	•	Only one timer can run at a time
-	•	Real times are stored
-	•	Displayed/logged totals follow rounding mode
-
-Result:
-TaskManager now tracks not just what was done, but how long was spent doing it.
-
-⸻
-
-📊 Central Reports hub
-Reporting was expanded from profile-level summaries into a dedicated app-wide Reports page.
-
-Added:
-	•	Reports page in sidebar
-	•	Scope selector:
-	•	Overview
-	•	Single profile
-	•	Period selector:
-	•	Day
-	•	Week
-	•	Month
-	•	Productivity metrics:
-	•	Tasks completed
-	•	Tasks created
-	•	Open tasks
-	•	Overdue tasks
-	•	Backlog / rolled over
-	•	Time metrics:
-	•	Total logged hours
-	•	Average hours/day
-	•	Efficiency metrics:
-	•	Completed tasks per hour
-	•	Hours per completed task
-	•	Top projects
-	•	Top categories
-	•	Hours-by-day breakdown
-	•	Definitions/help section for reporting logic
-
-Current UX:
-	•	Selected-period summary panel highlights the headline task, time, efficiency and scope values
-	•	Section tabs split Reports into Summary, Productivity, Time, Efficiency and Detail Report
-	•	Secondary context such as top projects, top categories, hours by day/week, profile comparisons and best periods is grouped into cleaner panels
-	•	Task Detail Report is separated from the main dashboard to reduce scanning noise
-	•	Mobile controls stack cleanly and report cards collapse to a single column
-
-Important logic improvements:
-	•	Reports now correctly include current-day task and timesheet data
-	•	Week/month average hours per day are based only on days with logged hours
-	•	Efficiency metrics are tied to logged time instead of raw calendar span
-
-Result:
-Reports now acts as the main analytical layer for the app, while existing in-context reporting remains available on profile pages.
-
-⸻
-
-📝 Completed Tasks Detail + Copy Daily Report
-Reports now supports narrative activity reporting, not just KPI summaries.
-
-Added:
-	•	Completed Tasks Detail report
-	•	Shows completed tasks for the selected scope and period
-	•	Includes task context such as:
-	•	Profile
-	•	Project
-	•	Category
-	•	Completed date
-	•	Notes (when present)
-	•	Copy Daily Report button for Day view
-	•	Plain-text daily report generation
-	•	HTML clipboard support for cleaner pasting into rich text editors/email composers
-
-Result:
-The app can now generate a readable end-of-day activity summary suitable for notes, email, or record keeping.
-
-⸻
-
-🧠 Why This Matters
-
-PR18 shifts TaskManager from being primarily a task tracker into a broader personal operations system.
-
-It now combines:
-	•	Task management
-	•	Cross-profile overview
-	•	Time logging
-	•	Productivity reporting
-	•	Activity reporting
-
-This makes the app much closer to a lightweight personal matrix / command centre than a traditional to-do list.
-
-⸻
-
-🔒 Scope
-
-Included:
-	•	New sidebar/app shell structure
-	•	Timesheet data model + routes
-	•	Reports page and reporting utilities
-	•	Overview workflow enhancements
-	•	Daily report copy support
-
-Not yet included:
-	•	CSV/PDF export
-	•	Charts/trend visualisations
-	•	Task-to-timesheet linking
-	•	Multi-profile comparison reports beyond Overview aggregation
-
-----
-
-
-🗺️ ROADMAP
-
-Short Term
-	•	Editing improvements for recurring series
-	•	Keyboard shortcuts
-	•	Bulk rescheduling presets
-
-Medium Term
-	•	Productivity analytics dashboard
-	•	Streak tracking and trends
-	•	Exportable reports
-
-Long Term
-	•	Sync / cloud persistence
-	•	Mobile optimisation
-	•	Collaboration features
-
-⸻
-
-📌 Status
-
-The app is now functionally stable as a personal productivity engine with reliable recurrence behaviour and reporting accuracy.
-
-Future milestones will focus on insights and workflow intelligence rather than core mechanics.
-
-⸻
-
-🤝 Contributing
-
-This project is currently in active development.
-Architecture and behaviour may evolve as new workflows are tested.
-
-⸻
-
-📄 License
-
-Private project – not licensed for distribution.
-:::
-
-⸻
-- Upcoming — future tasks
-
-Profiles remain visible even if no tasks match the selected filter.
-
-Recurring tasks are only visible on dates that match their repeat rule. Daily repeats appear on their configured repeat days, weekly repeats appear only on selected weekdays, and off-schedule recurring tasks are excluded from project sections and progress counts for the selected date. A recurring task can also be paused temporarily; paused repeats are excluded from Active, Today, Upcoming, and Overdue, appear in the Paused view, and pause-until dates suppress repeats through that date before resuming automatically.
-
----
-
-## Task Grouping Rules
-
-Tasks are grouped using the following logic:
-
-1. Recurring — all recurring tasks
-2. Unassigned — tasks with no project
-3. Projects — tasks assigned to a project (manual order)
-
-"Recurring" and "Unassigned" are virtual groups and are not stored as projects in the database.
-
----
-
-## Navigation
-
-Home screen:
-- Select a profile to open its Tracker
-- Open the Overview dashboard
-- Add and reorder profiles
-
-Overview:
-- High-level dashboard across all profiles
-
-Tracker:
-- Detailed task management (Day / Week / Month)
-
-Reporting:
-- Summary and reporting view (per profile)
-
----
-
-## Installed App
-
-TaskManager can be installed as a local web app and opened from the dock like a desktop app.
-
-The app uses a web app manifest with:
-- Standalone display mode
-- Start URL: `/`
-- Scope: `/`
-
-This allows Home, Overview, Tracker, and Reporting pages to function inside the installed app without browser UI.
-
-
-
-____
-
-
-
-
-🗺️ ROADMAP
-
-Short Term
-	•	Editing improvements for recurring series
-	•	Keyboard shortcuts
-	•	Bulk rescheduling presets
-
-Medium Term
-	•	Productivity analytics dashboard
-	•	Streak tracking and trends
-	•	Exportable reports
-
-Long Term
-	•	Sync / cloud persistence
-	•	Mobile optimisation
-	•	Collaboration features
-
-⸻
-
-📌 Status
-
-The app is now functionally stable as a personal productivity engine with reliable recurrence behaviour and reporting accuracy.
-
-Future milestones will focus on insights and workflow intelligence rather than core mechanics.
-
-⸻
-
-🤝 Contributing
-
-This project is currently in active development.
-Architecture and behaviour may evolve as new workflows are tested.
-
-⸻
-
-📄 License
-
-Private project – not licensed for distribution.
-:::
-
-⸻
+Private project - not licensed for distribution.

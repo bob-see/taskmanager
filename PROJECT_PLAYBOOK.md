@@ -6,20 +6,15 @@ Version: 1.1
 
 ## Mandatory Reading
 
-Before making significant changes to TaskManager, AI coding assistants should review:
+Before making significant changes to TaskManager, AI coding assistants should follow the documentation hierarchy:
 
-PROJECT_PLAYBOOK.md
+1. Read `README.md` for project orientation.
+2. Read `docs/ARCHITECTURE.md` for current system structure.
+3. Read subsystem documents relevant to the requested work.
+4. Read `docs/DECISIONS.md` if the work changes architecture, security, data model, operations or significant UX.
+5. Use this Playbook for product philosophy, development standards and Definition of Done.
 
-This document contains:
-- Project philosophy
-- Design principles
-- UI standards
-- Security requirements
-- Deployment procedures
-- Git workflow
-- Historical decision-making rationale
-
-The Playbook should be treated as a source of truth when making implementation decisions.
+The repository implementation is the source of truth. Documentation explains the implementation and should be reviewed when work changes behavior, architecture or operational expectations.
 
 If a requested change appears to conflict with the Playbook:
 
@@ -350,7 +345,7 @@ Avoid complexity unless it clearly improves workflow.
 - Frontend filtering is only a convenience and must not be the only protection
 - API endpoints that return users must respect group visibility
 - Delegated task actions must validate the actor and lifecycle transition server-side
-- LOST hatch countdown access is restricted to robert.bob.see@gmail.com and must remain protected server-side
+- The Lost/Hatch capability is owner-restricted and must remain protected server-side
 
 ---
 
@@ -391,11 +386,11 @@ Pending → Accepted → In Progress → Completed → Closed
 - Delegated status badge wherever delegated tasks appear.
 - Awaiting Review state for completed delegated tasks.
 
-## Future TODOs
+## Future Review
 
 - Local development database/playground for collaboration testing.
-- Notification badges for new delegated notes/status updates.
-- Possible richer delegated task metadata/hover details later.
+- Possible richer delegated task metadata or hover details later.
+- Review delegated task detail navigation only if the list-based workflow becomes insufficient.
 
 ---
 
@@ -414,6 +409,105 @@ Include:
 
 Commit often.
 Prefer small, meaningful commits.
+
+---
+
+# Documentation Philosophy
+
+TaskManager uses repository-first documentation. The repository implementation is always the source of truth, and documentation explains how that implementation works. Historical planning notes and generated PDFs are supporting references; they are not operational sources for current behavior.
+
+Each major topic should have one primary document. Other documents should link to that source instead of duplicating detail. This keeps the documentation maintainable and makes it clear where future corrections belong.
+
+Documentation is layered. It should naturally progress from the README, to the Architecture document, to subsystem documents, to Architecture Decision Records, and finally to this Playbook. Every document should have a clear job rather than trying to explain the whole project.
+
+Documentation evolves with the code. Reviewing documentation impact is part of the Definition of Done for significant feature, architecture, security, data-model, operational or user-facing changes.
+
+---
+
+# Documentation Evolution
+
+Early project documentation may naturally contain temporary notes, implementation detail and evolving ideas. As TaskManager matures, those details should be refined into the Architecture document, ADRs, subsystem documents and operational runbooks.
+
+Documentation should become clearer and simpler as ownership improves. Maturity should not mean endlessly increasing document size. Obsolete guidance should be removed rather than retained indefinitely, and generated PDFs remain snapshots derived from the living repository documentation.
+
+---
+
+# Documentation Hierarchy
+
+## `README.md`
+
+Purpose: "What is TaskManager?"
+
+Contains:
+
+- Introduction
+- Setup
+- Quick start
+- Technology summary
+- Links to detailed documentation
+
+The README must not become an architecture manual.
+
+## `docs/ARCHITECTURE.md`
+
+Purpose: "How is TaskManager built?"
+
+Contains:
+
+- Architecture
+- System structure
+- Module interactions
+- Engineering principles
+- Technical debt and future review items
+- Architecture review register
+
+## `docs/DECISIONS.md`
+
+Purpose: "Why were these architectural decisions made?"
+
+Contains accepted Architecture Decision Records. It records decision context, rationale, consequences and review triggers. It should not duplicate full architecture descriptions.
+
+## Subsystem Documents
+
+Examples include `docs/PUSH_NOTIFICATIONS.md`, migration documentation, and future focused security, testing or deployment documents.
+
+Each subsystem document explains one subsystem in operational or implementation detail.
+
+## `PROJECT_PLAYBOOK.md`
+
+Purpose: "How should TaskManager continue to be built?"
+
+Contains:
+
+- Product philosophy
+- Workflow guidance
+- Development standards
+- Documentation strategy
+- Coding expectations
+- Long-term direction
+
+## Generated Build Playbook PDF
+
+Purpose: professional snapshot generated from repository documentation.
+
+The generated PDF is not the living source. Repository Markdown files remain authoritative.
+
+---
+
+# Documentation and Definition of Done
+
+Every significant feature or architectural change must complete this checklist before being considered finished:
+
+- Code complete
+- Relevant automated and manual tests complete
+- `docs/ARCHITECTURE.md` reviewed
+- `README.md` reviewed when public setup, capabilities, or project status changed
+- `docs/DECISIONS.md` reviewed when an architectural, security, data-model, operational, or significant UX decision changed
+- Playbook impact reviewed
+- Release notes or changelog reviewed when the change is user-facing
+- Documentation audit completed
+
+“Reviewed — no update required” is an acceptable result. The important standard is that documentation impact is considered deliberately, not discovered later by accident.
 
 ---
 

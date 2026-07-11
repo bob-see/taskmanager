@@ -1,35 +1,22 @@
-# Migration Notes
+# Prisma Migrations Directory
 
-The app currently uses MySQL on Railway (`datasource db.provider = "mysql"`).
+This directory contains TaskManager's committed Prisma migration history.
 
-Older migration folders in this repo were generated while the app used SQLite.
-They are intentionally not a safe migration path for a fresh MySQL database
-because they contain SQLite-specific SQL such as `PRAGMA` statements and table
-redefinition migrations.
+Historical migrations may reflect earlier database stages, including SQLite-era development. Historical provider references in old migration files do not describe the current production database. Current production uses MariaDB on Railway.
 
-For the current Railway MySQL database, do not run `prisma migrate reset`.
-Apply small forward-only MySQL migrations against the existing data instead.
+This file is not the operational migration guide. Current migration procedures are owned by:
 
-If the database is missing `matrixcolumn.archivedAt`, run the archive-column
-migration directly, then mark that migration as applied:
+- [`../../docs/PRISMA_MIGRATION_WORKFLOW.md`](../../docs/PRISMA_MIGRATION_WORKFLOW.md)
+- [`../../docs/MIGRATION_HISTORY.md`](../../docs/MIGRATION_HISTORY.md)
 
-```sh
-npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260608090000_archive_matrix_columns/migration.sql
-npx prisma migrate resolve --applied 20260608090000_archive_matrix_columns
-```
+Do not use historical notes or copied repair commands as maintenance instructions.
 
-If delegated task creation fails with `P2011` / `Null constraint violation on
-Task.profileId`, the existing MySQL database has not applied the nullable
-delegated-task profile migration. Run the forward-only MySQL migration directly,
-then mark it as applied:
+For the shared Railway database, do not:
 
-```sh
-npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260610120000_nullable_delegated_task_profile/migration.sql
-npx prisma migrate resolve --applied 20260610120000_nullable_delegated_task_profile
-```
+- run `prisma db push`
+- run `prisma migrate reset`
+- delete or rewrite committed migration history
+- make undocumented migration-ledger edits
+- run ad hoc repair commands copied from old migration notes
 
-After that, normal deployments can use:
-
-```sh
-npx prisma migrate deploy
-```
+If migration history and the live schema disagree, stop and follow the documented investigation and reconciliation workflow.

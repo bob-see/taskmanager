@@ -1,150 +1,56 @@
 # TaskManager AI Quick Start
 
-## Read This First
+This file is a routing guide for coding assistants. It does not replace the repository's source documents.
 
-Before making significant changes to TaskManager, read:
+## Reading Order
 
-PROJECT_PLAYBOOK.md
+Before significant work, read in this order:
 
----
+1. [`README.md`](./README.md) for project orientation.
+2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for current system structure.
+3. Relevant subsystem documents, such as [`docs/PUSH_NOTIFICATIONS.md`](./docs/PUSH_NOTIFICATIONS.md) or migration documentation.
+4. [`docs/DECISIONS.md`](./docs/DECISIONS.md) if the work changes architecture, security, data model, operations or significant UX.
+5. [`PROJECT_PLAYBOOK.md`](./PROJECT_PLAYBOOK.md) for product philosophy, development standards and Definition of Done.
 
-## Core Principles
+The current repository implementation remains the source of truth.
 
-TaskManager prioritises:
+## Working Rules
 
-- Speed
-- Simplicity
-- Visibility
-- Low friction
-- Practical daily use
+- Preserve multi-user security.
+- Preserve profile-based workflows.
+- Preserve visibility and low-friction task capture.
+- Prefer enhancing existing screens and services before creating new ones.
+- Avoid enterprise-style workflows unless specifically requested.
+- Never expose another user's data.
+- Use group visibility for user pickers, search results and APIs.
+- Keep delegated tasks as shared participant workflows; do not move task origin or profile ownership unless the architecture changes deliberately.
+- Keep notifications on the central dispatcher path; do not create a parallel notification system.
+- Follow the Prisma migration workflow for schema changes.
 
----
+## Before Reporting Significant Work Complete
 
-## Key Rules
+Coding assistants must:
 
-1. Preserve multi-user security.
-2. Preserve profile-based workflows.
-3. Preserve visibility.
-4. Preserve simplicity.
-5. Prefer enhancing existing screens over creating new ones.
-6. Avoid enterprise-style workflows unless specifically requested.
-7. Test before marking work complete.
-8. Never expose another user's data.
-9. When in doubt, choose the lower-friction solution.
+- Run or report the relevant verification.
+- Review documentation impact.
+- Update affected documentation where appropriate.
+- Explicitly state when no documentation update is required.
 
----
-
-## User Visibility Rules
-
-- Before exposing users in any picker, dropdown, search result or API response, check group visibility.
-- Standard users should only receive users who share a group with them.
-- Admin users may operate across the groups they belong to.
-- Do not expose out-of-group users and rely on the frontend to hide them.
-- Future task assignment must use this same visibility model.
-
----
-
-## Delegated Tasks
-
-Delegated Tasks are shared task workflows between a delegator and an assignee.
-
-Core principle:
-
-- A delegated task remains a shared object.
-- The assignee does the work.
-- The original delegator reviews completion and closes the delegated task.
-- The underlying task stays in its originating profile/project.
-- Do not move profile ownership, project ownership or task origin during delegation.
-
-Pages:
-
-- Assigned To Me shows delegated tasks received by the current user.
-- Assigned By Me shows delegated tasks created by the current user.
-
-Creation:
-
-- Users can create a new delegated task.
-- Users can delegate an existing task.
-- Delegating an existing task must not duplicate the task or move it to the receiver's profile.
-
-Lifecycle:
-
-- Pending
-- Accepted
-- In Progress
-- Completed
-- Closed
-
-Workflow:
-
-- Pending tasks can be Accepted or Declined by the assignee.
-- Accepted tasks can be started by the assignee.
-- In Progress tasks can be marked Completed by the assignee.
-- Completed tasks are Awaiting Review for the delegator.
-- The delegator closes completed tasks after review.
-
-Notes/activity:
-
-- Both participants can add shared notes.
-- Notes attach to the underlying Task through the existing TaskNote system.
-- No delegated-note editing/deleting workflow exists yet.
-
-Visual indicators:
-
-- Sender initials badge identifies who delegated the task.
-- Delegated status badge identifies lifecycle state.
-- Completed delegated tasks display as Awaiting Review.
-
-Future TODOs:
-
-- Add notification badges for new delegated notes and status updates.
-- Consider richer delegated metadata/hover details later.
-- Maintain a local development database/playground for safer delegated workflow testing.
-
----
+The full documentation Definition of Done lives in [`PROJECT_PLAYBOOK.md`](./PROJECT_PLAYBOOK.md).
 
 ## Restricted Features
 
-- LOST hatch countdown is Bob-only.
-- Only robert.bob.see@gmail.com should see the floating LOST timer or LOST menu link.
-- The LOST route must remain protected server-side.
+- The Lost/Hatch countdown is owner-restricted.
+- Normal users should not see the floating Lost timer or Lost menu link.
+- The Lost route must remain protected server-side.
 
----
+## Design Questions
 
-# Design Questions
+Before adding a new screen, workflow, setting or module, ask:
 
-Before adding a new screen ask:
-
-Can this be added to Overview?
-
-Before adding a new workflow ask:
-
-Can an existing workflow be extended?
-
-Before adding a new setting ask:
-
-Will users actually change it?
-
-Before adding complexity ask:
-
-Is this solving a real problem that exists today?
-
-Before creating a new module ask:
-
-Can this be achieved by extending an existing module?
+- Can this extend Overview or an existing workflow?
+- Does this reduce friction or create friction?
+- Will users actually change this setting?
+- Is this solving a real problem that exists today?
 
 TaskManager should grow through practical use rather than feature accumulation.
-
----
-
-## Deployment Reminder
-
-Before major changes:
-
-- Commit changes
-- Push to GitHub
-- Create SQL backup
-- Verify Railway database
-- Verify Vercel deployment
-
-Refer to PROJECT_PLAYBOOK.md for detailed procedures.

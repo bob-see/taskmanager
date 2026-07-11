@@ -1,6 +1,6 @@
 # Push Notifications
 
-TaskManager supports browser Web Push for delegated task notifications.
+TaskManager supports Browser Push for delegated task notifications.
 
 ## Architecture
 
@@ -25,12 +25,18 @@ The push path reuses:
 Push delivery is handled by `app/lib/push-delivery.ts` and the testable core in
 `app/lib/push-delivery-core.ts`. It uses the `web-push` package server-side.
 
-## Commit Boundaries
+## Current Scope
 
-Commit 4 added subscription infrastructure: manifest identity, service worker,
-subscription APIs, settings UI and `PushSubscription` storage.
+Implemented Browser Push infrastructure includes:
 
-Commit 5 connects the dispatcher to Web Push for delegated task events:
+- manifest identity
+- service worker registration and handlers
+- subscription APIs
+- settings UI
+- `PushSubscription` storage
+- dispatcher-connected Web Push delivery for delegated task events
+
+Delegated events currently covered:
 
 - New delegated task
 - Accepted
