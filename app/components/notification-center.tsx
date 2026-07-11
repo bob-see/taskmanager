@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type NotificationItem = {
@@ -27,6 +28,7 @@ type NotificationListResponse = {
 
 const POLL_INTERVAL_MS = 60_000;
 type NotificationCenterPlacement = "desktop" | "mobile";
+const TITLE_BADGE_PATTERN = /^\(\d+\)\s+/;
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString(undefined, {
@@ -40,6 +42,86 @@ function unreadLabel(count: number) {
   return `${count} unread notification${count === 1 ? "" : "s"}`;
 }
 
+function withoutTitleBadge(value: string) {
+  return value.replace(TITLE_BADGE_PATTERN, "");
+}
+
+function updateDocumentTitle(unreadCount: number) {
+  const baseTitle = withoutTitleBadge(document.title || "TaskManager");
+  document.title = unreadCount > 0 ? `(${unreadCount}) ${baseTitle}` : baseTitle;
+}
+
+function getFaviconLink() {
+  const existing = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+  if (existing) return existing;
+
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.href = "/logo.png";
+  document.head.appendChild(link);
+  return link;
+}
+
+function setAppBadgeCount(unreadCount: number) {
+  const nav = navigator as Navigator & {
+    setAppBadge?: (count: number) => Promise<void>;
+    clearAppBadge?: () => Promise<void>;
+  };
+
+  if (unreadCount > 0 && nav.setAppBadge) {
+    void nav.setAppBadge(unreadCount).catch(() => undefined);
+  } else if (unreadCount === 0 && nav.clearAppBadge) {
+    void nav.clearAppBadge().catch(() => undefined);
+  }
+}
+
+function updateFaviconBadge(unreadCount: number, originalHrefRef: MutableRefObject<string | null>) {
+  const link = getFaviconLink();
+  if (!originalHrefRef.current) {
+    originalHrefRef.current = link.href || "/logo.png";
+  }
+
+  if (unreadCount === 0) {
+    link.href = originalHrefRef.current;
+    return;
+  }
+
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.onload = () => {
+    context.clearRect(0, 0, size, size);
+    context.drawImage(image, 0, 0, size, size);
+    context.fillStyle = "#dc2626";
+    context.beginPath();
+    context.arc(47, 17, 14, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.font = "bold 18px sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(unreadCount > 9 ? "9+" : String(unreadCount), 47, 17);
+    link.href = canvas.toDataURL("image/png");
+  };
+  image.onerror = () => {
+    context.clearRect(0, 0, size, size);
+    context.fillStyle = "#FAF7F0";
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = "#dc2626";
+    context.beginPath();
+    context.arc(42, 22, 18, 0, Math.PI * 2);
+    context.fill();
+    link.href = canvas.toDataURL("image/png");
+  };
+  image.src = originalHrefRef.current || "/logo.png";
+}
+
 export function NotificationCenter({
   placement = "desktop",
 }: {
@@ -47,6 +129,7 @@ export function NotificationCenter({
 }) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
+  const originalFaviconHrefRef = useRef<string | null>(null);
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -127,6 +210,31 @@ export function NotificationCenter({
 
     return () => window.clearInterval(intervalId);
   }, [refreshUnreadCount]);
+
+  useEffect(() => {
+    if (placement !== "desktop") return;
+
+    function handleServiceWorkerMessage(event: MessageEvent) {
+      if (event.data?.type === "taskmanager:push-notification-received") {
+        void refreshUnreadCount();
+      }
+    }
+
+    navigator.serviceWorker?.addEventListener("message", handleServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker?.removeEventListener(
+        "message",
+        handleServiceWorkerMessage
+      );
+    };
+  }, [placement, refreshUnreadCount]);
+
+  useEffect(() => {
+    if (placement !== "desktop") return;
+    updateDocumentTitle(unreadCount);
+    updateFaviconBadge(unreadCount, originalFaviconHrefRef);
+    setAppBadgeCount(unreadCount);
+  }, [placement, unreadCount]);
 
   useEffect(() => {
     if (!open) return;

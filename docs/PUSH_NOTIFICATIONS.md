@@ -143,6 +143,38 @@ The service worker calls the Badging API when available. Badge updates are
 progressive enhancement only. Reading or clearing notifications does not yet
 perform full real-time badge synchronisation.
 
+## Browser Tab And Favicon Badges
+
+When unread notifications exist, the open TaskManager tab title is prefixed with
+the unread count:
+
+```text
+(3) TaskManager
+```
+
+The title is restored when the unread count returns to zero. The count updates
+when the notification center polls, when notifications are marked read, when
+notifications are cleared, and when the service worker receives a push while an
+active TaskManager tab is open.
+
+TaskManager also attempts to draw a small red unread badge over the favicon.
+This is implemented as a lightweight canvas-generated favicon. If a browser
+blocks canvas favicon updates or falls back to cached app icons, the title badge
+remains the primary unread indicator.
+
+Where supported, the app badge is updated from the same unread count. Installed
+app badge behavior varies by browser and operating system.
+
+## Active-Tab Suppression
+
+When a push arrives and a same-origin TaskManager window is currently focused and
+visible, the service worker does not show a duplicate browser notification. It
+messages the open page so the in-app notification center, tab title and favicon
+can update instead.
+
+Browser push notifications still appear when TaskManager is closed, backgrounded,
+hidden behind another tab, or when the browser is minimised.
+
 ## iPhone Home Screen Requirement
 
 On iPhone and iPad, browser notifications require TaskManager to be installed to
@@ -165,6 +197,9 @@ the Home Screen before enabling notifications.
 11. Confirm in-app notification behaviour follows its own preference and no Push appears.
 12. Test accept, decline, note, complete and close.
 13. Confirm multiple subscribed devices receive alerts.
+14. With TaskManager focused and visible, trigger a delegated notification and confirm no duplicate browser notification appears.
+15. Confirm the browser title shows the unread count and returns to `TaskManager` after clearing or marking notifications read.
+16. Confirm the favicon badge appears where the browser supports dynamic favicons.
 
 ## iPhone Manual Test
 
@@ -194,3 +229,5 @@ the Home Screen before enabling notifications.
 - VAPID misconfiguration: delivery is skipped with a server-side warning; delegated actions still complete.
 - Push received but click route fails: verify the payload URL is a same-origin path and the user is still authenticated.
 - Push absent while in-app appears: verify `notificationPushEnabled`, the per-type Push toggle, active subscriptions and VAPID environment variables.
+- Title badge not updating immediately: verify the notification center is mounted and `/api/notifications/unread-count` is reachable.
+- Favicon badge not visible: some installed-app or mobile browser contexts cache icons and ignore dynamic favicon updates.

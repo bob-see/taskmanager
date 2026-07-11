@@ -25,6 +25,21 @@ function applyBadgeCount(value) {
   return self.navigator.setAppBadge(value).catch(() => undefined);
 }
 
+function activeTaskManagerClient(clients) {
+  return clients.find((client) => {
+    try {
+      const clientUrl = new URL(client.url);
+      return (
+        clientUrl.origin === self.location.origin &&
+        client.visibilityState === "visible" &&
+        client.focused
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
 self.addEventListener("push", (event) => {
   const fallback = {
     title: "TaskManager",
@@ -62,7 +77,19 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     Promise.all([
       applyBadgeCount(badgeCount),
-      self.registration.showNotification(title, {
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }),
+    ]).then(([, clients]) => {
+      const activeClient = activeTaskManagerClient(clients);
+      if (activeClient) {
+        activeClient.postMessage({
+          type: "taskmanager:push-notification-received",
+          badgeCount,
+          notificationId: payload.notificationId ?? null,
+        });
+        return undefined;
+      }
+
+      return self.registration.showNotification(title, {
         body,
         tag,
         icon: "/logo.png",
@@ -72,8 +99,8 @@ self.addEventListener("push", (event) => {
           notificationId: payload.notificationId ?? null,
           type: payload.type ?? null,
         },
-      }),
-    ])
+      });
+    })
   );
 });
 
