@@ -29,6 +29,7 @@ model User {
   actedNotifications     Notification[]   @relation("NotificationActor")
   notificationPreferences NotificationPreference[]
   notificationPushEnabled Boolean          @default(false)
+  pushSubscriptions      PushSubscription[]
 
   @@index([email])
   @@map("user")
@@ -83,6 +84,25 @@ model NotificationPreference {
   @@unique([userId, notificationType])
   @@index([userId])
   @@map("notificationpreference")
+}
+
+model PushSubscription {
+  id           String    @id @default(cuid()) @db.VarChar(36)
+  userId       String    @db.VarChar(36)
+  endpoint     String    @db.Text
+  endpointHash String    @unique @db.VarChar(64)
+  p256dh       String    @db.VarChar(255)
+  auth         String    @db.VarChar(255)
+  userAgent    String?   @db.Text
+  deviceLabel  String?   @db.VarChar(191)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastUsedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("pushsubscription")
 }
 
 model Group {
