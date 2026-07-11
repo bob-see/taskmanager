@@ -1,6 +1,15 @@
 import type { NotificationType, Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 
+export const configurableNotificationTypes = [
+  "DELEGATED_TASK_RECEIVED",
+  "DELEGATED_TASK_ACCEPTED",
+  "DELEGATED_TASK_DECLINED",
+  "DELEGATED_TASK_NOTE_ADDED",
+  "DELEGATED_TASK_COMPLETED",
+  "DELEGATED_TASK_CLOSED",
+] as const satisfies readonly NotificationType[];
+
 const notificationSelect = {
   id: true,
   type: true,
@@ -9,6 +18,7 @@ const notificationSelect = {
   targetUrl: true,
   metadata: true,
   readAt: true,
+  clearedAt: true,
   createdAt: true,
   actor: {
     select: {
@@ -19,7 +29,10 @@ const notificationSelect = {
   },
 } as const;
 
-export type NotificationDatabase = Pick<PrismaClient, "notification">;
+export type NotificationDatabase = Pick<
+  PrismaClient,
+  "notification" | "notificationPreference" | "user"
+>;
 
 export type CreateNotificationInput = {
   recipientUserId: string;
@@ -38,6 +51,12 @@ export class InvalidNotificationCursorError extends Error {
     this.name = "InvalidNotificationCursorError";
   }
 }
+
+export type NotificationPreferenceValue = {
+  notificationType: NotificationType;
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+};
 
 function requireText(value: string, fieldName: string) {
   const normalized = value.trim();
@@ -63,22 +82,161 @@ export function createNotification(
   const eventKey = requireText(input.eventKey, "eventKey");
   const title = requireText(input.title, "title");
   const targetUrl = requireInternalTargetUrl(input.targetUrl);
+  const type = input.type ?? "GENERAL";
+
+  return createNotificationWithPreferences(
+    {
+      ...input,
+      recipientUserId,
+      eventKey,
+      title,
+      targetUrl,
+      type,
+    },
+    db
+  );
+}
+
+async function createNotificationWithPreferences(
+  input: Required<
+    Pick<
+      CreateNotificationInput,
+      "recipientUserId" | "type" | "title" | "targetUrl" | "eventKey"
+    >
+  > &
+    Omit<
+      CreateNotificationInput,
+      "recipientUserId" | "type" | "title" | "targetUrl" | "eventKey"
+    >,
+  db: NotificationDatabase
+) {
+  const [preference, user] = await Promise.all([
+    db.notificationPreference.findUnique({
+      where: {
+        userId_notificationType: {
+          userId: input.recipientUserId,
+          notificationType: input.type,
+        },
+      },
+      select: {
+        inAppEnabled: true,
+        pushEnabled: true,
+      },
+    }),
+    db.user.findUnique({
+      where: { id: input.recipientUserId },
+      select: { notificationPushEnabled: true },
+    }),
+  ]);
+
+  const inAppEnabled = preference?.inAppEnabled ?? true;
+  const pushEnabled = Boolean(user?.notificationPushEnabled && preference?.pushEnabled);
+  void pushEnabled;
+
+  if (!inAppEnabled) {
+    return null;
+  }
 
   return db.notification.upsert({
-    where: { eventKey },
+    where: { eventKey: input.eventKey },
     update: {},
     create: {
-      recipientUserId,
+      recipientUserId: input.recipientUserId,
       actorUserId: input.actorUserId?.trim() || null,
-      type: input.type ?? "GENERAL",
-      title,
+      type: input.type,
+      title: input.title,
       body: input.body?.trim() || null,
-      targetUrl,
+      targetUrl: input.targetUrl,
       ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-      eventKey,
+      eventKey: input.eventKey,
     },
     select: notificationSelect,
   });
+}
+
+export async function getNotificationPreferences(
+  userId: string,
+  db: NotificationDatabase = prisma
+) {
+  const [user, preferences] = await Promise.all([
+    db.user.findUnique({
+      where: { id: userId },
+      select: { notificationPushEnabled: true },
+    }),
+    db.notificationPreference.findMany({
+      where: {
+        userId,
+        notificationType: { in: [...configurableNotificationTypes] },
+      },
+      select: {
+        notificationType: true,
+        inAppEnabled: true,
+        pushEnabled: true,
+      },
+    }),
+  ]);
+
+  const preferencesByType = new Map(
+    preferences.map((preference) => [preference.notificationType, preference])
+  );
+
+  return {
+    notificationPushEnabled: user?.notificationPushEnabled ?? false,
+    preferences: configurableNotificationTypes.map((notificationType) => {
+      const preference = preferencesByType.get(notificationType);
+      return {
+        notificationType,
+        inAppEnabled: preference?.inAppEnabled ?? true,
+        pushEnabled: preference?.pushEnabled ?? false,
+      };
+    }),
+  };
+}
+
+export async function saveNotificationPreferences(
+  userId: string,
+  input: {
+    notificationPushEnabled: boolean;
+    preferences: NotificationPreferenceValue[];
+  },
+  db: NotificationDatabase = prisma
+) {
+  const allowedTypes = new Set<NotificationType>(configurableNotificationTypes);
+  const preferences = input.preferences.filter((preference) =>
+    allowedTypes.has(preference.notificationType)
+  );
+
+  await db.user.update({
+    where: { id: userId },
+    data: { notificationPushEnabled: input.notificationPushEnabled },
+    select: { id: true },
+  });
+
+  await Promise.all(
+    preferences.map((preference) =>
+      db.notificationPreference.upsert({
+        where: {
+          userId_notificationType: {
+            userId,
+            notificationType: preference.notificationType,
+          },
+        },
+        update: {
+          inAppEnabled: preference.inAppEnabled,
+          pushEnabled: preference.pushEnabled,
+        },
+        create: {
+          userId,
+          notificationType: preference.notificationType,
+          inAppEnabled: preference.inAppEnabled,
+          pushEnabled: preference.pushEnabled,
+        },
+        select: { id: true },
+      })
+    )
+  );
+
+  return getNotificationPreferences(userId, db);
 }
 
 export function getUnreadNotificationCount(
@@ -89,6 +247,7 @@ export function getUnreadNotificationCount(
     where: {
       recipientUserId,
       readAt: null,
+      clearedAt: null,
     },
   });
 }
@@ -116,7 +275,7 @@ export async function getNotificationsForUser(
   }
 
   const rows = await db.notification.findMany({
-    where: { recipientUserId },
+    where: { recipientUserId, clearedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -158,9 +317,48 @@ export function markAllNotificationsRead(
     where: {
       recipientUserId,
       readAt: null,
+      clearedAt: null,
     },
     data: {
       readAt: new Date(),
+    },
+  });
+}
+
+export async function clearNotification(
+  recipientUserId: string,
+  notificationId: string,
+  db: NotificationDatabase = prisma
+) {
+  const now = new Date();
+  const result = await db.notification.updateMany({
+    where: {
+      id: notificationId,
+      recipientUserId,
+      clearedAt: null,
+    },
+    data: {
+      clearedAt: now,
+      readAt: now,
+    },
+  });
+
+  return result.count === 1;
+}
+
+export function clearAllNotifications(
+  recipientUserId: string,
+  db: NotificationDatabase = prisma
+) {
+  const now = new Date();
+  return db.notification.updateMany({
+    where: {
+      recipientUserId,
+      clearedAt: null,
+    },
+    data: {
+      clearedAt: now,
+      readAt: now,
     },
   });
 }

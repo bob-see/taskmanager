@@ -121,6 +121,8 @@ export function AppSidebar({
           ? "Activity"
           : pathname === "/users"
             ? "Users"
+            : pathname === "/settings/notifications"
+              ? "Notifications"
             : pathname === "/lost"
               ? "Hatch Countdown"
               : pathname === "/reports" || pathname.startsWith("/reports/")
@@ -272,6 +274,21 @@ export function AppSidebar({
               </nav>
             </section>
           ) : null}
+
+          <section className="border-t border-[color:var(--tm-border)] pt-4">
+            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
+              Settings
+            </p>
+            <nav className="mt-2 flex flex-col gap-1">
+              <Link
+                href="/settings/notifications"
+                className={itemClassName(pathname === "/settings/notifications")}
+                onClick={onNavigate}
+              >
+                Notifications
+              </Link>
+            </nav>
+          </section>
         </div>
         <div className="mt-auto border-t border-[color:var(--tm-border)] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 md:pb-6">
           <div className="mb-3 px-3">

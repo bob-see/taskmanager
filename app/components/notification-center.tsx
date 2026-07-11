@@ -11,6 +11,7 @@ type NotificationItem = {
   targetUrl: string;
   metadata: unknown;
   readAt: string | null;
+  clearedAt: string | null;
   createdAt: string;
   actor: {
     id: string;
@@ -234,6 +235,61 @@ export function NotificationCenter({
     }
   }
 
+  async function clearOne(id: string) {
+    setError("");
+
+    const notification = notifications.find((item) => item.id === id);
+    const res = await fetch(`/api/notifications/${id}/clear`, {
+      method: "PATCH",
+    });
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      throw new Error(data?.error ?? "Could not clear notification");
+    }
+
+    setNotifications((current) => current.filter((item) => item.id !== id));
+    if (notification?.readAt === null) {
+      setUnreadCount((count) => Math.max(0, count - 1));
+    }
+  }
+
+  async function handleClearOne(id: string) {
+    try {
+      await clearOne(id);
+    } catch (clearError) {
+      setError(
+        clearError instanceof Error
+          ? clearError.message
+          : "Could not clear notification"
+      );
+    }
+  }
+
+  async function clearAll() {
+    setError("");
+
+    try {
+      const res = await fetch("/api/notifications/clear-all", {
+        method: "PATCH",
+      });
+      const data = !res.ok ? await res.json().catch(() => null) : null;
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Could not clear notifications");
+      }
+
+      setNotifications([]);
+      setUnreadCount(0);
+      setNextCursor(null);
+    } catch (clearError) {
+      setError(
+        clearError instanceof Error
+          ? clearError.message
+          : "Could not clear notifications"
+      );
+    }
+  }
+
   const buttonClass =
     placement === "mobile"
       ? "tm-button relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border"
@@ -295,6 +351,14 @@ export function NotificationCenter({
                 onClick={() => void markAllRead()}
               >
                 Mark all read
+              </button>
+              <button
+                type="button"
+                className="text-xs font-medium text-[color:var(--tm-muted)] underline-offset-4 hover:underline disabled:opacity-50"
+                disabled={notifications.length === 0}
+                onClick={() => void clearAll()}
+              >
+                Clear all
               </button>
               <button
                 type="button"
@@ -364,8 +428,8 @@ export function NotificationCenter({
                         </span>
                       </div>
                     </button>
-                    {!item.readAt ? (
-                      <div className="mt-2 text-right">
+                    <div className="mt-2 flex justify-end gap-3">
+                      {!item.readAt ? (
                         <button
                           type="button"
                           className="text-xs font-medium text-[color:var(--tm-muted)] underline-offset-4 hover:underline"
@@ -373,8 +437,15 @@ export function NotificationCenter({
                         >
                           Mark read
                         </button>
-                      </div>
-                    ) : null}
+                      ) : null}
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-[color:var(--tm-muted)] underline-offset-4 hover:underline"
+                        onClick={() => void handleClearOne(item.id)}
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </article>
                 ))}
                 {nextCursor ? (
