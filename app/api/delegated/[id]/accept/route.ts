@@ -205,7 +205,9 @@ export async function POST(req: Request, ctx: Ctx) {
             : []),
         ],
       });
+    }, DELEGATED_TRANSACTION_OPTIONS);
 
+    try {
       await createDelegatedTaskNotification(
         {
           event: "accepted",
@@ -214,9 +216,15 @@ export async function POST(req: Request, ctx: Ctx) {
           recipientUserId: delegatedTask.assignedByUserId,
           actor: currentUser,
         },
-        tx
+        prisma
       );
-    }, DELEGATED_TRANSACTION_OPTIONS);
+    } catch (error) {
+      console.error("Delegated task notification dispatch failed", {
+        event: "accepted",
+        delegatedTaskId: delegatedTask.id,
+        error,
+      });
+    }
 
     const result = await prisma.delegatedTask.findUniqueOrThrow({
       where: { id: delegatedTask.id },

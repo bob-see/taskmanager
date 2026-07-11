@@ -99,23 +99,32 @@ export async function POST(req: Request, ctx: Ctx) {
         },
       });
 
-      await createDelegatedTaskNotification(
-        {
-          event: "note-added",
-          delegatedTaskId: delegatedTask.id,
-          taskTitle: delegatedTask.task.title,
-          recipientUserId,
-          actor: currentUser,
-          taskNoteId,
-          targetUrl,
-        },
-        tx
-      );
-
       return taskNote;
     },
     DELEGATED_TRANSACTION_OPTIONS
   );
+
+  try {
+    await createDelegatedTaskNotification(
+      {
+        event: "note-added",
+        delegatedTaskId: delegatedTask.id,
+        taskTitle: delegatedTask.task.title,
+        recipientUserId,
+        actor: currentUser,
+        taskNoteId,
+        targetUrl,
+      },
+      prisma
+    );
+  } catch (error) {
+    console.error("Delegated task notification dispatch failed", {
+      event: "note-added",
+      delegatedTaskId: delegatedTask.id,
+      taskNoteId,
+      error,
+    });
+  }
 
   return Response.json(createdNote, { status: 201 });
 }

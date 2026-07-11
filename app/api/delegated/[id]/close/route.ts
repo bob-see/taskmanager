@@ -83,17 +83,6 @@ export async function POST(_req: Request, ctx: Ctx) {
       if (updateResult.count !== 1) {
         throw new Error("STALE_DELEGATED_TASK");
       }
-
-      await createDelegatedTaskNotification(
-        {
-          event: "closed",
-          delegatedTaskId: delegatedTask.id,
-          taskTitle: delegatedTask.task.title,
-          recipientUserId: delegatedTask.assignedToUserId,
-          actor: currentUser,
-        },
-        tx
-      );
     }, DELEGATED_TRANSACTION_OPTIONS);
 
     try {
@@ -108,6 +97,25 @@ export async function POST(_req: Request, ctx: Ctx) {
       console.error("Delegated task close note creation failed", {
         delegatedTaskId: delegatedTask.id,
         taskId: delegatedTask.taskId,
+        error,
+      });
+    }
+
+    try {
+      await createDelegatedTaskNotification(
+        {
+          event: "closed",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: delegatedTask.task.title,
+          recipientUserId: delegatedTask.assignedToUserId,
+          actor: currentUser,
+        },
+        prisma
+      );
+    } catch (error) {
+      console.error("Delegated task notification dispatch failed", {
+        event: "closed",
+        delegatedTaskId: delegatedTask.id,
         error,
       });
     }

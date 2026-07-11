@@ -87,18 +87,6 @@ export async function POST(req: Request, ctx: Ctx) {
       if (updateResult.count !== 1) {
         throw new Error("STALE_DELEGATED_TASK");
       }
-
-      await createDelegatedTaskNotification(
-        {
-          event: "declined",
-          delegatedTaskId: delegatedTask.id,
-          taskTitle: delegatedTask.task.title,
-          recipientUserId: delegatedTask.assignedByUserId,
-          actor: currentUser,
-          reason: reason.value,
-        },
-        tx
-      );
     }, DELEGATED_TRANSACTION_OPTIONS);
 
     try {
@@ -124,6 +112,26 @@ export async function POST(req: Request, ctx: Ctx) {
       console.error("Delegated task decline note creation failed", {
         delegatedTaskId: delegatedTask.id,
         taskId: delegatedTask.taskId,
+        error,
+      });
+    }
+
+    try {
+      await createDelegatedTaskNotification(
+        {
+          event: "declined",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: delegatedTask.task.title,
+          recipientUserId: delegatedTask.assignedByUserId,
+          actor: currentUser,
+          reason: reason.value,
+        },
+        prisma
+      );
+    } catch (error) {
+      console.error("Delegated task notification dispatch failed", {
+        event: "declined",
+        delegatedTaskId: delegatedTask.id,
         error,
       });
     }

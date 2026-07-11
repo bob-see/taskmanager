@@ -1,4 +1,5 @@
 import type { NotificationType, Prisma, PrismaClient } from "@prisma/client";
+import { deliverWebPushNotification } from "@/app/lib/push-delivery";
 import { prisma } from "@/app/lib/prisma";
 
 export const configurableNotificationTypes = [
@@ -110,48 +111,58 @@ async function createNotificationWithPreferences(
     >,
   db: NotificationDatabase
 ) {
-  const [preference, user] = await Promise.all([
-    db.notificationPreference.findUnique({
-      where: {
-        userId_notificationType: {
-          userId: input.recipientUserId,
-          notificationType: input.type,
-        },
+  const preference = await db.notificationPreference.findUnique({
+    where: {
+      userId_notificationType: {
+        userId: input.recipientUserId,
+        notificationType: input.type,
       },
-      select: {
-        inAppEnabled: true,
-        pushEnabled: true,
-      },
-    }),
-    db.user.findUnique({
-      where: { id: input.recipientUserId },
-      select: { notificationPushEnabled: true },
-    }),
-  ]);
+    },
+    select: {
+      inAppEnabled: true,
+    },
+  });
 
   const inAppEnabled = preference?.inAppEnabled ?? true;
-  const pushEnabled = Boolean(user?.notificationPushEnabled && preference?.pushEnabled);
-  void pushEnabled;
 
-  if (!inAppEnabled) {
-    return null;
-  }
+  const notification = inAppEnabled
+    ? await db.notification.upsert({
+        where: { eventKey: input.eventKey },
+        update: {},
+        create: {
+          recipientUserId: input.recipientUserId,
+          actorUserId: input.actorUserId?.trim() || null,
+          type: input.type,
+          title: input.title,
+          body: input.body?.trim() || null,
+          targetUrl: input.targetUrl,
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+          eventKey: input.eventKey,
+        },
+        select: notificationSelect,
+      })
+    : null;
 
-  return db.notification.upsert({
-    where: { eventKey: input.eventKey },
-    update: {},
-    create: {
+  try {
+    await deliverWebPushNotification({
       recipientUserId: input.recipientUserId,
-      actorUserId: input.actorUserId?.trim() || null,
       type: input.type,
       title: input.title,
-      body: input.body?.trim() || null,
+      body: input.body,
       targetUrl: input.targetUrl,
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      notificationId: notification?.id ?? null,
       eventKey: input.eventKey,
-    },
-    select: notificationSelect,
-  });
+    });
+  } catch (error) {
+    console.warn("[push] delivery failed after notification dispatch", {
+      recipientUserId: input.recipientUserId,
+      type: input.type,
+      eventKey: input.eventKey,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+
+  return notification;
 }
 
 export async function getNotificationPreferences(

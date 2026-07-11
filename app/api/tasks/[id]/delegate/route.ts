@@ -108,17 +108,6 @@ export async function POST(req: Request, ctx: Ctx) {
           },
         });
 
-        await createDelegatedTaskNotification(
-          {
-            event: "received",
-            delegatedTaskId,
-            taskTitle: task.title,
-            recipientUserId: receiverResult.receiver.id,
-            actor: currentUser,
-          },
-          tx
-        );
-
         return createdDelegatedTask;
       },
       DELEGATED_TRANSACTION_OPTIONS
@@ -130,6 +119,26 @@ export async function POST(req: Request, ctx: Ctx) {
       });
     } catch (error) {
       console.error("Existing delegated task note creation failed", {
+        taskId: task.id,
+        delegatedTaskId: delegatedTask.id,
+        error,
+      });
+    }
+
+    try {
+      await createDelegatedTaskNotification(
+        {
+          event: "received",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: task.title,
+          recipientUserId: receiverResult.receiver.id,
+          actor: currentUser,
+        },
+        prisma
+      );
+    } catch (error) {
+      console.error("Existing delegated task notification dispatch failed", {
+        event: "received",
         taskId: task.id,
         delegatedTaskId: delegatedTask.id,
         error,

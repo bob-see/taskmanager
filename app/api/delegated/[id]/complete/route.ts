@@ -83,17 +83,6 @@ export async function POST(_req: Request, ctx: Ctx) {
       if (updateResult.count !== 1) {
         throw new Error("STALE_DELEGATED_TASK");
       }
-
-      await createDelegatedTaskNotification(
-        {
-          event: "completed",
-          delegatedTaskId: delegatedTask.id,
-          taskTitle: delegatedTask.task.title,
-          recipientUserId: delegatedTask.assignedByUserId,
-          actor: currentUser,
-        },
-        tx
-      );
     }, DELEGATED_TRANSACTION_OPTIONS);
 
     try {
@@ -108,6 +97,25 @@ export async function POST(_req: Request, ctx: Ctx) {
       console.error("Delegated task complete note creation failed", {
         delegatedTaskId: delegatedTask.id,
         taskId: delegatedTask.taskId,
+        error,
+      });
+    }
+
+    try {
+      await createDelegatedTaskNotification(
+        {
+          event: "completed",
+          delegatedTaskId: delegatedTask.id,
+          taskTitle: delegatedTask.task.title,
+          recipientUserId: delegatedTask.assignedByUserId,
+          actor: currentUser,
+        },
+        prisma
+      );
+    } catch (error) {
+      console.error("Delegated task notification dispatch failed", {
+        event: "completed",
+        delegatedTaskId: delegatedTask.id,
         error,
       });
     }

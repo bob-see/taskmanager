@@ -16,6 +16,15 @@ function safeTaskManagerUrl(value) {
   }
 }
 
+function applyBadgeCount(value) {
+  if (!("setAppBadge" in self.navigator)) return Promise.resolve();
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return Promise.resolve();
+  }
+
+  return self.navigator.setAppBadge(value).catch(() => undefined);
+}
+
 self.addEventListener("push", (event) => {
   const fallback = {
     title: "TaskManager",
@@ -41,14 +50,30 @@ self.addEventListener("push", (event) => {
       ? payload.body.trim()
       : fallback.body;
   const url = safeTaskManagerUrl(payload.url);
+  const tag =
+    typeof payload.tag === "string" && payload.tag.trim()
+      ? payload.tag.trim()
+      : undefined;
+  const badgeCount =
+    typeof payload.badgeCount === "number" && Number.isFinite(payload.badgeCount)
+      ? payload.badgeCount
+      : null;
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: "/logo.png",
-      badge: "/logo.png",
-      data: { url },
-    })
+    Promise.all([
+      applyBadgeCount(badgeCount),
+      self.registration.showNotification(title, {
+        body,
+        tag,
+        icon: "/logo.png",
+        badge: "/logo.png",
+        data: {
+          url,
+          notificationId: payload.notificationId ?? null,
+          type: payload.type ?? null,
+        },
+      }),
+    ])
   );
 });
 
