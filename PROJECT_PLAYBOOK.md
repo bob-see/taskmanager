@@ -469,7 +469,7 @@ Contains accepted Architecture Decision Records. It records decision context, ra
 
 ## Subsystem Documents
 
-Examples include `docs/PUSH_NOTIFICATIONS.md`, migration documentation, and future focused security, testing or deployment documents.
+Examples include `docs/SECURITY.md`, `docs/TESTING.md`, `docs/PUSH_NOTIFICATIONS.md`, migration documentation, and future focused deployment documents.
 
 Each subsystem document explains one subsystem in operational or implementation detail.
 

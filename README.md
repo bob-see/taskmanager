@@ -214,6 +214,8 @@ Each major topic has one owning document. Other documents should link to that so
 |---|---|
 | [README.md](./README.md) | Project overview and repository entry point. |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Technical architecture, modules, data model overview, security model, deployment shape, and review register. |
+| [docs/SECURITY.md](./docs/SECURITY.md) | Authentication, authorisation, data isolation, collaboration boundaries, security invariants, and review areas. |
+| [docs/TESTING.md](./docs/TESTING.md) | Current automated coverage, change-based verification, manual workflows, and testing priorities. |
 | [docs/DECISIONS.md](./docs/DECISIONS.md) | Architecture Decision Records explaining why major decisions were made. |
 | [PROJECT_PLAYBOOK.md](./PROJECT_PLAYBOOK.md) | Development philosophy, workflow standards, documentation strategy, and Definition of Done. |
 | [HOW_TO_WORK_WITH_TASKMANAGER.md](./HOW_TO_WORK_WITH_TASKMANAGER.md) | Quick routing guide for AI coding assistants. |

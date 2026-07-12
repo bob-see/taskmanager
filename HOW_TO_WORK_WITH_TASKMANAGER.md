@@ -8,7 +8,7 @@ Before significant work, read in this order:
 
 1. [`README.md`](./README.md) for project orientation.
 2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for current system structure.
-3. Relevant subsystem documents, such as [`docs/PUSH_NOTIFICATIONS.md`](./docs/PUSH_NOTIFICATIONS.md) or migration documentation.
+3. Relevant subsystem documents. Security-sensitive work must include [`docs/SECURITY.md`](./docs/SECURITY.md), and testing or verification work must include [`docs/TESTING.md`](./docs/TESTING.md); also read focused documents such as [`docs/PUSH_NOTIFICATIONS.md`](./docs/PUSH_NOTIFICATIONS.md) or migration documentation when applicable.
 4. [`docs/DECISIONS.md`](./docs/DECISIONS.md) if the work changes architecture, security, data model, operations or significant UX.
 5. [`PROJECT_PLAYBOOK.md`](./PROJECT_PLAYBOOK.md) for product philosophy, development standards and Definition of Done.
 

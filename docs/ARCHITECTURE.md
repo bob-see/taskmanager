@@ -627,6 +627,8 @@ The Build Playbook PDF is a periodically generated snapshot derived from reposit
 ## Related Documents
 
 - [`README.md`](../README.md): Project introduction, setup, and contributor overview.
+- [`docs/SECURITY.md`](./SECURITY.md): Authentication, authorisation, data isolation, security invariants, and review areas.
+- [`docs/TESTING.md`](./TESTING.md): Current automated coverage, verification guidance, manual workflows, and testing priorities.
 - [`PROJECT_PLAYBOOK.md`](../PROJECT_PLAYBOOK.md): Product philosophy, build guidance, and long-term project manual.
 - [`docs/PUSH_NOTIFICATIONS.md`](./PUSH_NOTIFICATIONS.md): Push notification implementation, behavior, testing, and troubleshooting.
 - [`docs/DECISIONS.md`](./DECISIONS.md): Historical architecture and product decisions.
