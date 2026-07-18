@@ -9,6 +9,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
+import {
+  LostAudioController,
+  type LostSoundName,
+} from "@/app/lost/lost-audio-controller";
 
 export const INITIAL_SECONDS = 108 * 60;
 export const FINAL_WINDOW_SECONDS = 4 * 60;
@@ -21,43 +26,10 @@ export const LOST_GLYPH_IDS = [1, 2, 3, 4, 5] as const;
 
 const STORAGE_KEY = "tm-lost-countdown-state-v3";
 const SESSION_KEY = "tm-lost-countdown-browser-session-v3";
-const LOST_SOUND_BASE = "/sounds/lost";
 const FAILURE_AUDIO_THUD_DELAY_MS = 5200;
 const GLYPH_SPIN_INTERVAL_MS = 115;
 const GLYPH_LOCK_DELAYS_MS = [900, 1450, 2050, 2900, 3900] as const;
 
-type LostSoundName =
-  | "alarm"
-  | "beep"
-  | "discharge"
-  | "keypress"
-  | "reset"
-  | "spinup"
-  | "systemfailure"
-  | "thud"
-  | "tick"
-  | "timeout";
-
-const LOST_SOUND_FILES: Record<LostSoundName, string> = {
-  alarm: "alarm.mp3",
-  beep: "beep.mp3",
-  discharge: "discharge.mp3",
-  keypress: "keypress.mp3",
-  reset: "reset.mp3",
-  spinup: "spinup.mp3",
-  systemfailure: "systemfailure.mp3",
-  thud: "thud.mp3",
-  tick: "tick.mp3",
-  timeout: "timeout.mp3",
-};
-
-const LOST_SOUND_VOLUMES: Partial<Record<LostSoundName, number>> = {
-  alarm: 0.74,
-  beep: 0.55,
-  keypress: 0.45,
-  systemfailure: 0.78,
-  tick: 0.36,
-};
 
 export type LostTerminalState =
   | "failure"
@@ -115,54 +87,6 @@ type LostTimerContextValue = {
   rejectSequence: () => void;
   playKeypress: () => void;
 };
-
-class LostAudioController {
-  private sounds = new Map<LostSoundName, HTMLAudioElement>();
-
-  play(name: LostSoundName, options: { restart?: boolean } = {}) {
-    const audio = this.getSound(name);
-    if (!audio) return;
-
-    if (options.restart) {
-      audio.pause();
-      audio.currentTime = 0;
-    } else if (!audio.paused && !audio.ended) {
-      return;
-    }
-
-    void audio.play().catch(() => {
-      // Browsers can block playback until the user interacts with the page.
-    });
-  }
-
-  stop(name: LostSoundName) {
-    const audio = this.sounds.get(name);
-    if (!audio) return;
-
-    audio.pause();
-    audio.currentTime = 0;
-  }
-
-  stopAll() {
-    for (const audio of this.sounds.values()) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
-  }
-
-  private getSound(name: LostSoundName) {
-    if (typeof Audio === "undefined") return null;
-
-    const existing = this.sounds.get(name);
-    if (existing) return existing;
-
-    const audio = new Audio(`${LOST_SOUND_BASE}/${LOST_SOUND_FILES[name]}`);
-    audio.preload = "auto";
-    audio.volume = LOST_SOUND_VOLUMES[name] ?? 0.65;
-    this.sounds.set(name, audio);
-    return audio;
-  }
-}
 
 const LostTimerContext = createContext<LostTimerContextValue | null>(null);
 
@@ -279,6 +203,7 @@ function createGlyphSlots(locked = false): LostGlyphSlot[] {
 }
 
 export function LostTimerProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [endAt, setEndAt] = useState(() => Date.now() + INITIAL_SECONDS * 1000);
   const [secondsRemaining, setSecondsRemaining] = useState(INITIAL_SECONDS);
   const [status, setStatus] = useState(LOCKED_STATUS);
@@ -290,7 +215,7 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
   const [failureWhiteFlash, setFailureWhiteFlash] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
-  const [soundMuted, setSoundMuted] = useState(true);
+  const [soundMuted, setSoundMutedState] = useState(true);
   const expiredLoggedRef = useRef(false);
   const audioRef = useRef<LostAudioController | null>(null);
   const previousSoundSecondRef = useRef<number | null>(null);
@@ -328,7 +253,27 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
 
   function playSound(name: LostSoundName, options: { restart?: boolean } = {}) {
     if (soundMuted) return;
-    getAudio().play(name, options);
+    void getAudio().play(name, options).catch(() => {
+      // Browsers can block or fail playback until audio has been armed.
+    });
+  }
+
+  function setSoundMuted(muted: boolean) {
+    setSoundMutedState(muted);
+    if (muted) {
+      audioRef.current?.stopAll();
+      return;
+    }
+
+    void getAudio().unlock().catch(() => {
+      // A later in-page interaction can retry AudioContext activation.
+    });
+  }
+
+  function stopCountdownAudio() {
+    audioRef.current?.stop("tick");
+    audioRef.current?.stop("beep");
+    audioRef.current?.stop("alarm");
   }
 
   function stopFailureAudio() {
@@ -347,7 +292,11 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
       failureThudTimeoutRef.current = null;
     }
 
+    audioRef.current?.stop("timeout");
+    audioRef.current?.stop("spinup");
+    audioRef.current?.stop("discharge");
     audioRef.current?.stop("systemfailure");
+    audioRef.current?.stop("thud");
     failureAudioStartedRef.current = false;
     setFailureWhiteFlash(false);
   }
@@ -394,6 +343,8 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
   }
 
   function jumpTo(seconds: number, logMessage: string, nextStatus: string) {
+    stopFailureAudio();
+    stopCountdownAudio();
     const now = Date.now();
     updateStoredState((current) => ({
       ...current,
@@ -406,6 +357,8 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
   }
 
   function triggerFailure(message = "Failure triggered.") {
+    stopCountdownAudio();
+    stopFailureAudio();
     updateStoredState((current) => ({
       ...current,
       endAt: Date.now(),
@@ -418,6 +371,7 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
 
   function resetCountdownFromOverride() {
     stopFailureAudio();
+    stopCountdownAudio();
     persistState(resetStateWithLog("System reset."));
     setOverrideOpen(false);
   }
@@ -425,6 +379,7 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
   function resetSystem(message = "System reset successful.") {
     const now = Date.now();
     stopFailureAudio();
+    stopCountdownAudio();
     playSound("reset", { restart: true });
     persistState({
       endAt: now + INITIAL_SECONDS * 1000,
@@ -488,9 +443,19 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
     return () => {
       stopGlyphSequence();
       stopFailureAudio();
-      audioRef.current?.stopAll();
+      void audioRef.current?.dispose();
+      audioRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (pathname === "/lost") return;
+
+    setSoundMutedState(true);
+    stopFailureAudio();
+    stopCountdownAudio();
+    audioRef.current?.stopAll();
+  }, [pathname]);
 
   useEffect(() => {
     if (!initialized || failure) return;
@@ -553,6 +518,8 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
+
+    stopCountdownAudio();
 
     if (!timeoutSoundPlayedRef.current) {
       timeoutSoundPlayedRef.current = true;

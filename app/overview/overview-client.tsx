@@ -31,6 +31,10 @@ import {
   formatBrisbaneTimestamp,
   getBrisbaneDate,
 } from "@/app/lib/date-time";
+import {
+  isTaskOccurrenceInTodayBucket,
+  isTaskOccurrenceVisibleOnDate,
+} from "@/app/lib/recurrence-visibility";
 import { useBrisbaneBoundaryRefresh } from "@/app/lib/use-brisbane-boundary-refresh";
 
 type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
@@ -180,7 +184,6 @@ const REPEAT_PAUSE_PRESET_OPTIONS: Array<{
   { value: "indefinite", label: "Pause indefinitely" },
 ];
 const OVERVIEW_OPTIONS_STORAGE_KEY_PREFIX = "tm-overview-options-v1";
-const ALL_REPEAT_DAYS_MASK = 0b1111111;
 const DEFAULT_OVERVIEW_OPTIONS = {
   selectedFilter: "all-open" as OverviewTaskFilter,
   sortMode: "manual" as OverviewSortMode,
@@ -315,19 +318,6 @@ function parseDateOnly(value: string) {
   return new Date(year, month - 1, day);
 }
 
-function getWeekdayNumber(value: string) {
-  const weekday = parseDateOnly(value).getDay();
-  return weekday === 0 ? 7 : weekday;
-}
-
-function getDayOfMonth(value: string) {
-  return parseDateOnly(value).getDate();
-}
-
-function getRepeatDayBit(weekday: number) {
-  return 1 << (weekday - 1);
-}
-
 function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
@@ -365,29 +355,6 @@ function getRepeatPauseUntilForPreset(
   }
 
   return dateInputValue(addDays(parseDateOnly(baseDateValue), 7));
-}
-
-function matchesRepeatDays(dateValue: string, repeatDays: number | null | undefined) {
-  const mask = repeatDays ?? ALL_REPEAT_DAYS_MASK;
-  return (mask & getRepeatDayBit(getWeekdayNumber(dateValue))) !== 0;
-}
-
-function dayDifference(left: string, right: string) {
-  const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.floor(
-    (parseDateOnly(left).getTime() - parseDateOnly(right).getTime()) /
-      millisecondsPerDay
-  );
-}
-
-function monthDifference(left: string, right: string) {
-  const leftDate = parseDateOnly(left);
-  const rightDate = parseDateOnly(right);
-  return (
-    (leftDate.getFullYear() - rightDate.getFullYear()) * 12 +
-    leftDate.getMonth() -
-    rightDate.getMonth()
-  );
 }
 
 function createTempId(prefix: string) {
@@ -963,7 +930,15 @@ function matchesOverviewTaskFilter(
   const upcoming = startsInFuture || (dueInFuture && !activeOpen);
 
   if (filter === "today") {
-    return startsToday || dueToday;
+    return isTaskOccurrenceInTodayBucket(
+      {
+        startDate: task.startDate,
+        dueAt: task.dueAt,
+        completedOn: task.completedOn,
+        recurring: isRecurringOverviewTask(task),
+      },
+      today
+    );
   }
 
   if (filter === "overdue") {
@@ -986,46 +961,18 @@ function isOverviewRepeatPausedOnDate(task: OverviewTask, dateValue: string) {
   return !task.repeatPauseUntil || dateValue <= task.repeatPauseUntil;
 }
 
-function isRecurringOverviewTaskDueOnDate(task: OverviewTask, dateValue: string) {
-  if (!isRecurringOverviewTask(task)) return true;
-  if (isOverviewRepeatPausedOnDate(task, dateValue)) return false;
-  if (task.startDate > dateValue) return false;
-
-  if (task.repeatPattern === "daily") {
-    return (
-      dayDifference(dateValue, task.startDate) % Math.max(1, task.repeatInterval ?? 1) ===
-        0 && matchesRepeatDays(dateValue, task.repeatDays)
-    );
-  }
-
-  if (task.repeatPattern === "weekly") {
-    const repeatDays =
-      task.repeatDays ??
-      (task.repeatWeeklyDay ? getRepeatDayBit(task.repeatWeeklyDay) : null);
-    return (
-      Math.floor(dayDifference(dateValue, task.startDate) / 7) %
-        Math.max(1, task.repeatInterval ?? 1) ===
-        0 && matchesRepeatDays(dateValue, repeatDays)
-    );
-  }
-
-  if (task.repeatPattern === "monthly") {
-    return (
-      monthDifference(dateValue, task.startDate) %
-        Math.max(1, task.repeatInterval ?? 1) ===
-        0 &&
-      getDayOfMonth(dateValue) ===
-        (task.repeatMonthlyDay ?? getDayOfMonth(task.startDate))
-    );
-  }
-
-  return true;
-}
-
 function isOverviewTaskVisibleOnDate(task: OverviewTask, dateValue: string) {
-  return isRecurringOverviewTask(task)
-    ? isRecurringOverviewTaskDueOnDate(task, dateValue)
-    : task.startDate <= dateValue;
+  const recurring = isRecurringOverviewTask(task);
+
+  return isTaskOccurrenceVisibleOnDate(
+    {
+      startDate: task.startDate,
+      completedOn: task.completedOn,
+      recurring,
+      pausedOnDate: recurring && isOverviewRepeatPausedOnDate(task, dateValue),
+    },
+    dateValue
+  );
 }
 
 function getTaskCategoryLabel(task: OverviewTask) {
@@ -2024,30 +1971,8 @@ function ProfileCard({
     }
 
     return (await res.json()) as {
-      task?: {
-        id: string;
-        title: string;
-        startDate: string;
-        dueAt: string | null;
-        category: string | null;
-        notes: string | null;
-        noteHistory?: TaskNoteHistoryEntry[];
-        createdAt: string;
-        orderIndex: number | null;
-        projectId: string | null;
-        completedOn: string | null;
-        recurrenceSeriesId: string | null;
-        repeatEnabled: boolean;
-        repeatPattern: RepeatPattern | null;
-        repeatInterval: number;
-        repeatDays: number | null;
-        repeatWeeklyDay: number | null;
-        repeatMonthlyDay: number | null;
-        repeatPaused: boolean;
-        repeatPauseUntil: string | null;
-        repeatPauseNote: string | null;
-        isPriority: boolean;
-      };
+      task?: OverviewTask;
+      createdTask?: OverviewTask | null;
     };
   }
 
@@ -2307,17 +2232,36 @@ function ProfileCard({
     const actionDate = getBrisbaneDate(new Date());
 
     try {
-      await patchTask(task.id, {
+      const response = await patchTask(task.id, {
         completed,
         completedOn: completed ? actionDate : null,
       });
 
       await waitForMinimumPendingTime(pendingStartedAt);
       if (completed) {
-        setOpenTasks((prev) => prev.filter((item) => item.id !== task.id));
+        const createdTask = response.createdTask
+          ? normalizeOverviewTask({
+              ...response.createdTask,
+              startDate: toDateOnly(response.createdTask.startDate),
+              dueAt: toDateOnly(response.createdTask.dueAt),
+              completedOn: toDateOnly(response.createdTask.completedOn),
+              projectName: response.createdTask.projectId
+                ? projectNameById.get(response.createdTask.projectId) ?? null
+                : null,
+            })
+          : null;
+
+        setOpenTasks((prev) => {
+          const withoutCompleted = prev.filter((item) => item.id !== task.id);
+          if (!createdTask) return withoutCompleted;
+          return [
+            createdTask,
+            ...withoutCompleted.filter((item) => item.id !== createdTask.id),
+          ];
+        });
         setCounts((prev) => ({
           ...prev,
-          open: Math.max(0, prev.open - 1),
+          open: createdTask ? prev.open : Math.max(0, prev.open - 1),
           done: prev.done + 1,
           overdue: Math.max(
             0,

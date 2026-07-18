@@ -38,6 +38,11 @@ import {
   formatBrisbaneTimestamp,
   getBrisbaneDate,
 } from "@/app/lib/date-time";
+import {
+  isTaskOccurrenceInTodayBucket,
+  isTaskOccurrenceRelevantToRange,
+  isTaskOccurrenceVisibleOnDate,
+} from "@/app/lib/recurrence-visibility";
 import { useBrisbaneBoundaryRefresh } from "@/app/lib/use-brisbane-boundary-refresh";
 import {
   type AverageBasis,
@@ -47,7 +52,6 @@ import {
   getDayInsightMetrics,
   getMonthInsightMetrics,
   getWeekInsightMetrics,
-  inRangeInclusive,
   startOfMonth,
   startOfWeekMon,
 } from "@/app/p/[profileId]/tracker-insights";
@@ -684,9 +688,17 @@ function isRecurringTaskDueOnDate(task: Task, dateValue: string) {
 }
 
 function isTaskVisibleOnDate(task: Task, dateValue: string) {
-  return isRecurringTask(task)
-    ? isRecurringTaskDueOnDate(task, dateValue)
-    : isTaskActiveOnDate(task, dateValue);
+  const recurring = isRecurringTask(task);
+
+  return isTaskOccurrenceVisibleOnDate(
+    {
+      startDate: toDateOnly(task.startDate),
+      completedOn: toDateOnly(task.completedOn),
+      recurring,
+      pausedOnDate: recurring && isRepeatPausedOnDate(task, dateValue),
+    },
+    dateValue
+  );
 }
 
 function isTaskUpcomingAfterDate(task: Task, dateValue: string) {
@@ -708,13 +720,6 @@ function isOpenTaskNewOnDate(task: Task, dateValue: string) {
 
 function isOpenTaskDueOnDate(task: Task, dateValue: string) {
   return !isTaskCompleted(task) && toDateOnly(task.dueAt) === dateValue;
-}
-
-function isTaskRelevantToRange(task: Task, startValue: string, endValue: string) {
-  return (
-    inRangeInclusive(task.startDate, startValue, endValue) ||
-    inRangeInclusive(task.dueAt, startValue, endValue)
-  );
 }
 
 function getTaskSeriesKey(task: Task) {
@@ -1025,7 +1030,18 @@ function projectOpenTasksForView(
   const viewScopedTasks =
     viewMode === "day"
       ? openTasks
-      : openTasks.filter((task) => isTaskRelevantToRange(task, rangeStart, rangeEnd));
+      : openTasks.filter((task) =>
+          isTaskOccurrenceRelevantToRange(
+            {
+              startDate: toDateOnly(task.startDate),
+              dueAt: toDateOnly(task.dueAt),
+              completedOn: toDateOnly(task.completedOn),
+              recurring: isRecurringTask(task),
+            },
+            rangeStart,
+            rangeEnd
+          )
+        );
   const rangeProjectedTasks = projectTasksBySeries(
     viewScopedTasks.filter((task) =>
       viewMode === "day"
@@ -1042,11 +1058,17 @@ function projectOpenTasksForView(
   return {
     allOpen: viewScopedTasks,
     allActive: rangeProjectedTasks,
-    today: rangeProjectedTasks.filter((task) => {
-      const startDate = toDateOnly(task.startDate);
-      const dueDate = toDateOnly(task.dueAt);
-      return startDate === selectedDay || dueDate === selectedDay;
-    }),
+    today: rangeProjectedTasks.filter((task) =>
+      isTaskOccurrenceInTodayBucket(
+        {
+          startDate: toDateOnly(task.startDate),
+          dueAt: toDateOnly(task.dueAt),
+          completedOn: toDateOnly(task.completedOn),
+          recurring: isRecurringTask(task),
+        },
+        selectedDay
+      )
+    ),
     upcoming: upcomingTasks,
     overdue: rangeProjectedTasks.filter((task) => {
       const dueDate = toDateOnly(task.dueAt);
@@ -3551,7 +3573,7 @@ export function TrackerClient({
     ? tasks.filter((task) => isTaskInArchivedProject(task, projectById))
     : filterTasksByArchivedVisibility(tasks, projectById, false);
   const selectedDayVisibleTasks = visibleTasks.filter((task) =>
-    isRecurringTask(task) ? isRecurringTaskDueOnDate(task, selectedDay) : true
+    isRecurringTask(task) ? isTaskVisibleOnDate(task, selectedDay) : true
   );
   const dayInsights = getDayInsightMetrics(selectedDayVisibleTasks, selectedDay);
   const weekInsights = getWeekInsightMetrics(visibleTasks, selectedDay, true, averageBasis);

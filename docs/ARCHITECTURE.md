@@ -109,6 +109,8 @@ Relationships:
 
 Tasks are the core work item. They support due dates, start dates, completion, priority, category, notes, waiting-on metadata, ordering, recurrence, recurrence pauses, project grouping, and delegation.
 
+Recurring work is stored as individual task-occurrence rows rather than generated only in the browser. An open occurrence becomes active on its `startDate` and carries forward until it is completed. Completion marks only that row and atomically creates the next scheduled occurrence; the unique profile/series/start-date constraint prevents duplicate occurrence rows. The recurrence rule determines the next occurrence date, while active-task visibility must not reapply that rule to hide an already-outstanding occurrence.
+
 Responsibilities:
 
 - Represent actionable work.
@@ -485,6 +487,8 @@ Delegated task permissions are lifecycle-specific:
 ### Feature Restrictions
 
 Feature access is enforced server-side. The restricted Lost/Hatch feature is an example: access is gated by server-side email checks rather than client-side hiding alone.
+
+Lost countdown and system-failure effects use decoded Web Audio buffers rather than HTML media elements. The provider owns playback, transition, reset, navigation, and unmount cleanup; it deliberately does not register Media Session handlers, so LOST audio does not claim operating-system play/pause controls from normal media applications.
 
 ## Database Strategy
 
