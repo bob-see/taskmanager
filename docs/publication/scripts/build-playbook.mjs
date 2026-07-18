@@ -7,6 +7,13 @@ import { execFileSync } from "node:child_process";
 import MarkdownIt from "markdown-it";
 import puppeteer from "puppeteer-core";
 import { PDFDocument } from "pdf-lib";
+import {
+  escapeHtmlAttribute,
+  escapeHtmlText,
+  renderRepositoryLink,
+  renderToc,
+  slugHeading,
+} from "./playbook-html.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 const publicationDir = path.join(root, "docs/publication");
@@ -51,9 +58,9 @@ const transformed = transformManuscript(manuscript);
 const tocEntries = collectTocEntries(transformed);
 const toc = renderToc(tocEntries);
 const assembled = template
-  .replace("{{BRANCH}}", escapeHtml(branch))
-  .replace("{{COMMIT}}", escapeHtml(commit))
-  .replace("{{GENERATED_DATE}}", escapeHtml(generatedDate))
+  .replace("{{BRANCH}}", escapeHtmlText(branch))
+  .replace("{{COMMIT}}", escapeHtmlText(commit))
+  .replace("{{GENERATED_DATE}}", escapeHtmlText(generatedDate))
   .replace("{{TOC}}", toc)
   .replace("<!-- PLAYBOOK_MANUSCRIPT -->", transformed);
 await fs.writeFile(assembledPath, assembled);
@@ -86,7 +93,7 @@ const pageMap = await readOutlinePageMap(firstPdfPath, tocEntries);
 let numberedHtml = html;
 for (const entry of tocEntries) {
   const page = pageMap.get(entry.title);
-  if (page) numberedHtml = numberedHtml.replace(`data-toc-title="${escapeAttr(entry.title)}">?</span>`, `data-toc-title="${escapeAttr(entry.title)}">${page}</span>`);
+  if (page) numberedHtml = numberedHtml.replace(`data-toc-title="${escapeHtmlAttribute(entry.title)}">?</span>`, `data-toc-title="${escapeHtmlAttribute(entry.title)}">${page}</span>`);
 }
 await fs.writeFile(htmlPath, numberedHtml);
 await printPdf(htmlPath, renderedPdfPath);
@@ -110,15 +117,14 @@ function transformManuscript(source) {
   let text = source.slice(source.indexOf("# Foreword"));
   text = text.replace(/\[(`?)([^\]]+?)\1\]\((\.\.?\/[^)]+)\)/g, (_, tick, label, href) => {
     const repoPath = normaliseRepoPath(href);
-    const readable = label.replace(/^docs\//, "docs/");
-    return `<span class="repo-link" title="Repository path: ${escapeAttr(repoPath)}"><code>${escapeHtml(readable)}</code></span>`;
+    return renderRepositoryLink(label, repoPath);
   });
   text = text.replace(/```mermaid[\s\S]*?```/g, (_, offset) => {
     const before = text.slice(0, offset);
     const architecture = before.includes("# 6. Architecture Overview");
     const name = architecture ? "architecture-overview" : "documentation-hierarchy";
     const caption = architecture ? "Architecture overview and governance boundary" : "Documentation Hierarchy reading progression";
-    return `<figure class="diagram"><img src="assets/diagrams/${name}.svg" alt="${caption}"><figcaption>${caption}</figcaption></figure>`;
+    return `<figure class="diagram"><img src="${escapeHtmlAttribute(`assets/diagrams/${name}.svg`)}" alt="${escapeHtmlAttribute(caption)}"><figcaption>${escapeHtmlText(caption)}</figcaption></figure>`;
   });
 
   text = text.replace("Verification has distinct layers:\n", "Verification has distinct layers:\n\n<figure class=\"diagram\"><img src=\"assets/diagrams/verification-layers.svg\" alt=\"Verification layers from logic tests through deployment smoke tests\"><figcaption>Verification layers follow the boundary being tested.</figcaption></figure>\n");
@@ -145,12 +151,12 @@ function transformManuscript(source) {
 }
 
 function opener(title, number, intro, unnumbered) {
-  const id = slug(title);
-  return `<section class="chapter-opener${unnumbered ? " unnumbered-opener" : ""}"><div class="chapter-number">${number}</div><h1 id="${id}">${title}</h1><p class="chapter-intro">${intro}</p></section>`;
+  const id = slugHeading(title);
+  return `<section class="chapter-opener${unnumbered ? " unnumbered-opener" : ""}"><div class="chapter-number">${escapeHtmlText(number)}</div><h1 id="${escapeHtmlAttribute(id)}">${escapeHtmlText(title)}</h1><p class="chapter-intro">${intro}</p></section>`;
 }
 
 function partDivider(number, name, description) {
-  return `<section class="part-divider no-running"><div class="part-number">${number}</div><h1 id="${slug(`${number} ${name}`)}">${name}</h1><p>${description}</p></section>`;
+  return `<section class="part-divider no-running"><div class="part-number">${escapeHtmlText(number)}</div><h1 id="${escapeHtmlAttribute(slugHeading(`${number} ${name}`))}">${escapeHtmlText(name)}</h1><p>${escapeHtmlText(description)}</p></section>`;
 }
 
 function collectTocEntries(text) {
@@ -158,14 +164,10 @@ function collectTocEntries(text) {
   const re = /<section class="part-divider[^>]*>[\s\S]*?<div class="part-number">([^<]+)<\/div><h1[^>]*>([^<]+)<\/h1>|<section class="chapter-opener[^>]*>[\s\S]*?<h1[^>]*>([^<]+)<\/h1>/g;
   let match;
   while ((match = re.exec(text))) {
-    if (match[1]) entries.push({ title: `${match[1]} — ${match[2]}`, label: `${match[1]} — ${match[2]}`, type: "part", target: slug(`${match[1]} ${match[2]}`) });
-    else entries.push({ title: match[3], label: match[3], type: "chapter", target: slug(match[3]) });
+    if (match[1]) entries.push({ title: `${match[1]} — ${match[2]}`, label: `${match[1]} — ${match[2]}`, type: "part", target: slugHeading(`${match[1]} ${match[2]}`) });
+    else entries.push({ title: match[3], label: match[3], type: "chapter", target: slugHeading(match[3]) });
   }
   return entries;
-}
-
-function renderToc(entries) {
-  return `<ol class="toc-list">${entries.map((entry) => `<li class="${entry.type}"><a href="#${entry.target}">${escapeHtml(entry.label)}</a><span class="toc-dots"></span><span class="toc-page" data-toc-title="${escapeAttr(entry.title)}">?</span></li>`).join("\n")}</ol>`;
 }
 
 function styleCallouts(html) {
@@ -294,10 +296,7 @@ function workflowDiagram() {
   return svgFrame(`${nodes}<path class="arrow" d="M180 72H210M360 72H390M540 72H570M720 72H750M822 100V132H108V165H210M360 192H390M540 192H570M720 192H750"/><path class="arrow" stroke-dasharray="7 5" d="M822 220V270H108V105"/>`, 940, 300);
 }
 
-function uniqueSlug(value) { const base = slug(value); const n = slugCounts.get(base) || 0; slugCounts.set(base, n + 1); return n ? `${base}-${n + 1}` : base; }
-function slug(value) { return value.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+function uniqueSlug(value) { const base = slugHeading(value); const n = slugCounts.get(base) || 0; slugCounts.set(base, n + 1); return n ? `${base}-${n + 1}` : base; }
 function normaliseRepoPath(href) { return path.posix.normalize(path.posix.join("docs", href)).replace(/^\.\.\//, ""); }
 function normaliseTitle(value) { return value.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
-function escapeHtml(value) { return value.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]); }
-function escapeAttr(value) { return escapeHtml(value).replace(/"/g, "&quot;"); }
-function escapeXml(value) { return escapeHtml(value); }
+function escapeXml(value) { return escapeHtmlText(value); }
