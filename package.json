@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.8.0",
-    "@prisma/client": "^7.4.1",
+    "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
@@ -26,7 +26,7 @@
     "mysql2": "^3.22.2",
     "next": "16.2.10",
     "next-auth": "^4.24.14",
-    "prisma": "^7.4.1",
+    "prisma": "^7.8.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "web-push": "^3.6.7"

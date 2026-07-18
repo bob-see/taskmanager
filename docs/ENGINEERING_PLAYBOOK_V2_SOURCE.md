@@ -984,7 +984,8 @@ Playbook intentionally contains no personal data, row content, names, or IDs.
 
 1. **Framework security milestone completed and verified.** `next` and
    `eslint-config-next` were upgraded from 16.1.6 to 16.2.10. All direct Next.js
-   advisories from the baseline audit are cleared; remaining Prisma, PostCSS, and
+   advisories from the baseline audit are cleared. Prisma CLI, Client and MariaDB
+   adapter were subsequently aligned at 7.8.0; remaining Prisma CLI, PostCSS, and
    NextAuth transitive advisories stay in the dependency/toolchain register. Do not
    run `npm audit fix --force` blindly.
 2. **Profile reorder ownership completed and verified.** Reorder authenticates,
@@ -1025,6 +1026,17 @@ lint, Proxy redirect, public-route, PWA asset, and Node 22.13.0 checks passed. F
 lint remained at 47 errors and 17 warnings. Authenticated login and mutation smoke
 checks require the deployed environment because the repository has no disposable
 application database; they remain mandatory before release.
+
+The isolated Prisma dependency milestone aligned `prisma`, `@prisma/client`, and
+`@prisma/adapter-mariadb` at 7.8.0. The full audit moved from 21 package findings
+(10 high, 10 moderate, 1 low) to 12 (2 high, 9 moderate, 1 low); the production
+audit moved from 16 (8 high, 8 moderate) to 7 moderate and no high findings.
+Generation, validation, the unchanged 32-migration production status, tests,
+types, builds on Node 25 and the supported Node 22.13 baseline, and the read-only
+28-relation integrity audit passed. No schema, migration, Prisma initialisation or
+production-data change was required. A moderate repeated-slash advisory remains
+in Prisma CLI/development tooling through `@prisma/dev` and
+`@hono/node-server`; GitHub alert closure awaits recalculation after push.
 
 ## Active Planned Debt
 
