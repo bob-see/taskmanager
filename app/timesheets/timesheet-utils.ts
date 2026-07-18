@@ -1,3 +1,8 @@
+import {
+  formatAustralianDate,
+  parseDateOnly as parseCalendarDate,
+} from "@/app/lib/date-time";
+
 export const TIMESHEET_ROUNDING_MODES = [
   "exact",
   "nearest-15",
@@ -48,8 +53,7 @@ export function toDateOnly(value: Date) {
 }
 
 export function parseDateOnly(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
+  return parseCalendarDate(value);
 }
 
 export function getWeekDays(weekStart: string) {
@@ -58,8 +62,8 @@ export function getWeekDays(weekStart: string) {
     const date = addDays(start, index);
     return {
       key: toDateOnly(date),
-      label: date.toLocaleDateString(undefined, { weekday: "short" }),
-      shortDate: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      label: formatAustralianDate(date, { weekday: "short" }),
+      shortDate: formatAustralianDate(date, { month: "short", day: "numeric" }),
       date,
     };
   });

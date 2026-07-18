@@ -4,11 +4,12 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   getWeekRange,
-  parseWeekStartParam,
   serializeTimeEntry,
   timeEntrySelect,
 } from "@/app/api/timesheets/shared";
 import { TimesheetsClient } from "@/app/timesheets/timesheets-client";
+import { getBrisbaneDate, parseDateOnly } from "@/app/lib/date-time";
+import { startOfWeek, toDateOnly } from "@/app/timesheets/timesheet-utils";
 
 export default async function TimesheetsPage() {
   const session = await getServerSession(authOptions);
@@ -16,7 +17,8 @@ export default async function TimesheetsPage() {
   if (!session?.user?.email) return notFound();
 
   const email = session.user.email;
-  const weekStart = parseWeekStartParam(null);
+  const initialDate = getBrisbaneDate(new Date());
+  const weekStart = toDateOnly(startOfWeek(parseDateOnly(initialDate)));
   const { weekStartDate, weekEndDate } = getWeekRange(weekStart);
 
   const [profiles, entries, activeTimer] = await Promise.all([
@@ -68,6 +70,7 @@ export default async function TimesheetsPage() {
 
   return (
     <TimesheetsClient
+      initialDate={initialDate}
       initialWeekStart={weekStart}
       initialProfiles={profiles}
       initialEntries={entries.map(serializeTimeEntry)}

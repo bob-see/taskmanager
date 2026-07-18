@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   addDays,
   calculateLoggedMinutes,
@@ -8,12 +8,19 @@ import {
   formatHours,
   getWeekDays,
   parseDateOnly,
-  startOfWeek,
   toDateOnly,
   toTimeInputValue,
   type TimesheetRoundingMode,
   type TimesheetSource,
 } from "@/app/timesheets/timesheet-utils";
+import {
+  advanceDateIfCurrent,
+  formatAustralianDate,
+  formatBrisbaneTimestamp,
+  getBrisbaneDate,
+  getMondayWeekStart,
+} from "@/app/lib/date-time";
+import { useBrisbaneBoundaryRefresh } from "@/app/lib/use-brisbane-boundary-refresh";
 
 type TimesheetProfile = {
   id: string;
@@ -58,6 +65,7 @@ type TimerFormState = {
 };
 
 type TimesheetsClientProps = {
+  initialDate: string;
   initialWeekStart: string;
   initialProfiles: TimesheetProfile[];
   initialEntries: TimesheetEntry[];
@@ -125,7 +133,7 @@ function getActualDurationMinutes(entry: TimesheetEntry) {
 }
 
 function formatDateHeading(value: string) {
-  return parseDateOnly(value).toLocaleDateString(undefined, {
+  return formatAustralianDate(value, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -133,15 +141,15 @@ function formatDateHeading(value: string) {
 }
 
 function formatDateTime(value: string) {
-  return new Date(value).toLocaleTimeString(undefined, {
+  return formatBrisbaneTimestamp(value, {
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
   });
 }
 
 function formatTimerStarted(value: string) {
-  return new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Brisbane",
+  return formatBrisbaneTimestamp(value, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -149,7 +157,7 @@ function formatTimerStarted(value: string) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-  }).format(new Date(value));
+  });
 }
 
 function formatActivityRange(entry: TimesheetEntry) {
@@ -173,11 +181,13 @@ function getEntryDayKey(entry: TimesheetEntry) {
 }
 
 export function TimesheetsClient({
+  initialDate,
   initialWeekStart,
   initialProfiles,
   initialEntries,
   initialActiveTimer,
 }: TimesheetsClientProps) {
+  const [currentDateValue, setCurrentDateValue] = useState(initialDate);
   const [profiles, setProfiles] = useState(initialProfiles);
   const [entries, setEntries] = useState(initialEntries);
   const [activeTimer, setActiveTimer] = useState<TimesheetEntry | null>(initialActiveTimer);
@@ -197,6 +207,8 @@ export function TimesheetsClient({
   const [activityExpansionOverride, setActivityExpansionOverride] = useState<
     "expanded" | "collapsed" | null
   >(null);
+  const initialDateRefreshRef = useRef(true);
+  const currentDateValueRef = useRef(initialDate);
 
   const weekDays = useMemo(() => getWeekDays(selectedWeekStart), [selectedWeekStart]);
   const roundingOptions: Array<{ value: TimesheetRoundingMode; label: string }> = [
@@ -211,20 +223,35 @@ export function TimesheetsClient({
     if (storedRounding === "exact" || storedRounding === "nearest-15" || storedRounding === "up-15") {
       setRoundingMode(storedRounding);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const currentWeekStart = toDateOnly(startOfWeek(new Date()));
+  useBrisbaneBoundaryRefresh((now) => {
+    const clientDate = getBrisbaneDate(now);
+    const previousDate = currentDateValueRef.current;
+    currentDateValueRef.current = clientDate;
+    setCurrentDateValue(clientDate);
 
-    if (selectedWeekStart !== currentWeekStart) {
-      setDetailSelection(null);
-      void loadWeekData(currentWeekStart);
+    const currentWeekStart = getMondayWeekStart(clientDate);
+    if (initialDateRefreshRef.current) {
+      initialDateRefreshRef.current = false;
+      if (selectedWeekStart !== currentWeekStart) {
+        setDetailSelection(null);
+        void loadWeekData(currentWeekStart);
+      }
+      return;
     }
-  // Only reset to the active week on initial page load. Manual week navigation after
-  // load should remain under the user's control.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    const previousWeekStart = getMondayWeekStart(previousDate);
+    const nextSelectedWeek = advanceDateIfCurrent(
+      selectedWeekStart,
+      previousWeekStart,
+      currentWeekStart
+    );
+    if (nextSelectedWeek !== selectedWeekStart) {
+      setDetailSelection(null);
+      void loadWeekData(nextSelectedWeek);
+    }
+  });
 
   useEffect(() => {
     window.localStorage.setItem(ROUNDING_STORAGE_KEY, roundingMode);
@@ -395,10 +422,9 @@ export function TimesheetsClient({
       return detailSelection.dayKey;
     }
 
-    const todayKey = toDateOnly(new Date());
-    const selectedWeekHasToday = weekDays.some((day) => day.key === todayKey);
-    return selectedWeekHasToday ? todayKey : selectedWeekStart;
-  }, [detailSelection, selectedWeekStart, weekDays]);
+    const selectedWeekHasToday = weekDays.some((day) => day.key === currentDateValue);
+    return selectedWeekHasToday ? currentDateValue : selectedWeekStart;
+  }, [currentDateValue, detailSelection, selectedWeekStart, weekDays]);
 
   useEffect(() => {
     setActivityExpansionOverride(null);
@@ -493,6 +519,12 @@ export function TimesheetsClient({
     if (weekStart === selectedWeekStart) return;
     setDetailSelection(null);
     await loadWeekData(weekStart);
+  }
+
+  function goToCurrentWeek() {
+    const actionDate = getBrisbaneDate(new Date());
+    setCurrentDateValue(actionDate);
+    void goToWeek(getMondayWeekStart(actionDate));
   }
 
   async function handleStartTimer() {
@@ -649,7 +681,7 @@ export function TimesheetsClient({
             <button
               type="button"
               className={buttonClass}
-              onClick={() => void goToWeek(toDateOnly(startOfWeek(new Date())))}
+              onClick={goToCurrentWeek}
             >
               This week
             </button>

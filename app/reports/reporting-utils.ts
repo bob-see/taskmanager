@@ -1,10 +1,13 @@
 import {
   addDays,
   formatHours,
-  parseDateOnly,
   startOfWeek,
   toDateOnly,
 } from "@/app/timesheets/timesheet-utils";
+import {
+  formatAustralianDate,
+  parseDateOnly,
+} from "@/app/lib/date-time";
 import {
   getDayInsightMetrics,
   getMonthInsightMetrics,
@@ -59,9 +62,12 @@ export type TaskDetailReportItem = {
   activityDate: string;
 };
 
-export function normalizeSelectedDate(value: string | null | undefined) {
+export function normalizeSelectedDate(
+  value: string | null | undefined,
+  currentDateValue: string
+) {
   if (!value) {
-    return toDateOnly(new Date());
+    return currentDateValue;
   }
 
   return toDateOnly(parseDateOnly(value));
@@ -84,7 +90,7 @@ export function getRangeDays(selectedDate: string, period: ReportPeriod) {
 
 export function getPeriodLabel(selectedDate: string, period: ReportPeriod) {
   if (period === "day") {
-    return parseDateOnly(selectedDate).toLocaleDateString(undefined, {
+    return formatAustralianDate(selectedDate, {
       month: "long",
       day: "numeric",
       year: "numeric",
@@ -94,17 +100,17 @@ export function getPeriodLabel(selectedDate: string, period: ReportPeriod) {
   if (period === "week") {
     const weekStart = startOfWeek(parseDateOnly(selectedDate));
     const weekEnd = addDays(weekStart, 6);
-    return `${weekStart.toLocaleDateString(undefined, {
+    return `${formatAustralianDate(weekStart, {
       month: "short",
       day: "numeric",
-    })} to ${weekEnd.toLocaleDateString(undefined, {
+    })} to ${formatAustralianDate(weekEnd, {
       month: "short",
       day: "numeric",
       year: "numeric",
     })}`;
   }
 
-  return parseDateOnly(selectedDate).toLocaleDateString(undefined, {
+  return formatAustralianDate(selectedDate, {
     month: "long",
     year: "numeric",
   });
@@ -442,7 +448,7 @@ export function getProfileComparisons(
 
 export function formatBestPeriodLabel(key: string, period: ReportPeriod | "month-key") {
   if (period === "day") {
-    return parseDateOnly(key).toLocaleDateString(undefined, {
+    return formatAustralianDate(key, {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -452,10 +458,10 @@ export function formatBestPeriodLabel(key: string, period: ReportPeriod | "month
   if (period === "week") {
     const start = parseDateOnly(key);
     const end = addDays(start, 6);
-    return `${start.toLocaleDateString(undefined, {
+    return `${formatAustralianDate(start, {
       month: "short",
       day: "numeric",
-    })} to ${end.toLocaleDateString(undefined, {
+    })} to ${formatAustralianDate(end, {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -464,7 +470,7 @@ export function formatBestPeriodLabel(key: string, period: ReportPeriod | "month
 
   if (period === "month-key") {
     const [year, month] = key.split("-").map(Number);
-    return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+    return formatAustralianDate(new Date(year, month - 1, 1), {
       month: "long",
       year: "numeric",
     });

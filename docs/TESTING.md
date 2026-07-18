@@ -23,11 +23,11 @@
 
 ## Current Verification Tooling
 
-The repository has no CI configuration, coverage command, browser-automation framework, dedicated test script beyond Node's test runner, or declared staging/test database.
+The repository requires Node.js 22.13.0 or later and has no CI configuration, coverage command, browser-automation framework, dedicated test script beyond Node's test runner, or declared staging/test database.
 
 | Command | What it checks | What it does not check | Connectivity and safety |
 |---|---|---|---|
-| `npm test` | Runs `node --test tests/*.test.mjs`: the three current Node test files and 22 test cases. | Routes, browsers, a live database, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
+| `npm test` | Runs Node's test runner with TypeScript stripping enabled: the four current test files and 31 test cases. | Routes, browsers, a live database, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
 | `npm run lint` | Runs ESLint over the repository using the checked-in Next.js ESLint configuration. | Runtime behavior, authorisation, database integrity, and browser/device behavior. | No database connectivity expected; safe locally. |
 | `npm run build` | Runs the Next.js production build, including compilation and framework build-time checks. | Correct domain behavior, permissions, migrations, real browser behavior, or deployment configuration. | Intended to be safe locally, but requires installed dependencies and any build-time environment expected by imported code; it must not mutate shared data. |
 | `npx prisma validate` | Validates Prisma schema/config structure. | Whether migrations apply, live schema matches, data is preserved, or relations contain no orphans. | Reads configured environment; normally no database write. Safe only after confirming it targets the intended configuration. |
@@ -41,6 +41,7 @@ Do not use `prisma db push` or `prisma migrate reset` against shared Railway dat
 
 | Test file | Area | Level | What it verifies | Main exclusions |
 |---|---|---|---|---|
+| `tests/date-time.test.mjs` | Deterministic date/time rendering | Production-coupled utility tests | Calendar-date parsing, Australian July formatting, Brisbane timestamps, midnight/noon/evening boundaries, rollover scheduling, Monday week boundaries, selected-date preservation, action-time dates, explicit hour cycles, and greeting boundaries. | React hydration itself and browser event dispatch. |
 | `tests/recurrence-pause.test.mjs` | Recurrence and pause rules | Pure logic, duplicated test implementation | Finite pause boundary, indefinite pause, next occurrence after pause, daily and fortnightly intervals, routine due/off-days, default daily interval, paused-view filtering, and expired pauses. | Reimplements helpers inside the test instead of importing application code; no routes, persistence, UI, series deletion, timezone integration, or production recurrence-module coupling. |
 | `tests/push-subscriptions.test.mjs` | Push subscription validation and hashing | Pure logic, duplicated test implementation | Deterministic SHA-256 endpoint hash, accepted browser subscription shape, trimming, ignored client user ID, missing-key rejection, and rejection of a `javascript:` endpoint. | Reimplements hashing/validation instead of importing `app/lib/push-subscriptions.ts`; no authenticated route ownership, Prisma storage, length limits, HTTP edge cases, browser subscription API, or real provider. |
 | `tests/push-delivery.test.mjs` | Web Push delivery core and payload mapping | Service-level with mocks | Global and per-type preference handling, missing preference behavior, missing VAPID handling, no-subscription handling, multi-device attempts, isolated temporary failure, `404`/`410` cleanup, Push delivery without an in-app row, same-origin target sanitisation, unread badge payload, and concise payload mapping. | Database, logger, VAPID configuration, and Web Push transport are mocked; no dispatcher/route, real Prisma, provider encryption/delivery, service worker, browser permission, device receipt, or UI state. |

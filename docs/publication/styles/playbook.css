@@ -1,0 +1,246 @@
+:root {
+  --charcoal: #202833;
+  --ink: #303943;
+  --muted: #687481;
+  --blue: #174f78;
+  --blue-dark: #103b5b;
+  --blue-pale: #eaf2f7;
+  --grey-050: #f7f8f9;
+  --grey-100: #eef1f3;
+  --grey-200: #dce2e6;
+  --amber: #9a6508;
+  --amber-pale: #fff5dc;
+  --red: #a23838;
+  --red-pale: #fbecec;
+  --page-width: 210mm;
+  --page-height: 297mm;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 19mm 18mm 20mm 20mm;
+  @top-left { content: "TaskManager Engineering Playbook"; }
+  @top-right { content: string(chapter-title); }
+  @bottom-left { content: "Repository Edition · Version 2.0"; }
+  @bottom-right { content: counter(page); }
+}
+
+@page no-running {
+  size: A4 portrait;
+  margin: 19mm 18mm 20mm 20mm;
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+
+* { box-sizing: border-box; }
+
+html {
+  color: var(--ink);
+  font-family: Georgia, Cambria, "Times New Roman", serif;
+  font-size: 10.4pt;
+  line-height: 1.48;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+body { margin: 0; }
+
+h1, h2, h3, h4, h5, h6,
+.eyebrow, .cover-brand, .cover-edition, .cover-meta,
+table, .toc-list, .part-divider, .chapter-number {
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+}
+
+h1, h2, h3 { color: var(--charcoal); line-height: 1.13; }
+h1 { font-size: 25pt; margin: 0 0 7mm; string-set: chapter-title content(text); }
+h2 { font-size: 15.5pt; margin: 8mm 0 3mm; break-after: avoid-page; }
+h3 { font-size: 12.5pt; margin: 6mm 0 2mm; break-after: avoid-page; }
+p { margin: 0 0 3.4mm; orphans: 3; widows: 3; }
+a { color: var(--blue); text-decoration: none; }
+strong { color: var(--charcoal); }
+
+code, pre {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+code {
+  background: var(--grey-100);
+  border-radius: 2px;
+  padding: 0.05em 0.25em;
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  background: var(--grey-050);
+  border: 1px solid var(--grey-200);
+  border-left: 3px solid var(--blue);
+  border-radius: 3px;
+  padding: 4mm;
+  font-size: 8.2pt;
+  line-height: 1.38;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  break-inside: avoid-page;
+}
+
+pre code { background: transparent; padding: 0; }
+
+ul, ol { margin: 2mm 0 4mm 5.5mm; padding-left: 4.5mm; }
+li { margin: 0 0 1.2mm; }
+li::marker { color: var(--blue); }
+
+blockquote {
+  margin: 5mm 0;
+  padding: 4mm 5mm;
+  border-left: 3px solid var(--blue);
+  background: var(--blue-pale);
+  break-inside: avoid-page;
+}
+
+blockquote p:last-child { margin-bottom: 0; }
+
+.warning {
+  border-left-color: var(--red);
+  background: var(--red-pale);
+}
+
+.important {
+  border-left-color: var(--amber);
+  background: var(--amber-pale);
+}
+
+.repository-note {
+  margin: 7mm 0;
+  padding: 5mm;
+  border-left: 3px solid #7d8994;
+  background: var(--grey-100);
+  break-inside: avoid-page;
+}
+
+.repository-note p { margin: 1.5mm 0 0; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 6mm;
+  font-size: 8.1pt;
+  line-height: 1.3;
+}
+
+thead { display: table-header-group; }
+tr { break-inside: avoid-page; }
+th {
+  background: var(--blue-dark);
+  color: white;
+  text-align: left;
+  font-weight: 650;
+  padding: 2.4mm 2.5mm;
+  vertical-align: top;
+}
+td {
+  border-bottom: 0.3mm solid var(--grey-200);
+  padding: 2.2mm 2.5mm;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+tbody tr:nth-child(even) td { background: var(--grey-050); }
+
+hr { border: 0; border-top: 0.3mm solid var(--grey-200); margin: 8mm 0; }
+
+.publication-page, .part-divider {
+  break-before: page;
+  break-after: page;
+  min-height: 245mm;
+  position: relative;
+}
+
+.no-running { page: no-running; }
+
+.cover {
+  display: flex;
+  flex-direction: column;
+  padding-top: 13mm;
+}
+
+.cover-logo { width: 25mm; height: 25mm; object-fit: contain; margin-bottom: 20mm; }
+.cover-brand { color: var(--blue); font-size: 13pt; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
+.cover-title { font-size: 39pt; max-width: 145mm; margin: 6mm 0 4mm; letter-spacing: -0.025em; }
+.cover-edition { color: var(--muted); font-size: 16pt; }
+.cover-rule { width: 35mm; height: 1.2mm; background: var(--blue); margin: 18mm 0 12mm; }
+.cover-primary { font-family: Inter, "Helvetica Neue", Arial, sans-serif; color: var(--blue-dark); font-size: 18pt; margin: 0 0 3mm; }
+.cover-secondary { color: var(--muted); font-size: 14pt; }
+.cover-meta { display: flex; gap: 8mm; margin-top: auto; padding-bottom: 10mm; color: var(--muted); font-size: 9pt; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.eyebrow { color: var(--blue); font-size: 9pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5mm; }
+.principles { padding-top: 15mm; }
+.principles h1 { font-size: 28pt; }
+.principle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm 9mm; margin-top: 14mm; }
+.principle-grid div { border-top: 0.8mm solid var(--blue); padding-top: 3mm; }
+.principle-grid strong { display: block; font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 12pt; margin-bottom: 1.5mm; }
+.principle-grid span { color: var(--muted); font-size: 9.5pt; }
+.identity-statement { margin-top: 18mm; font-size: 15pt; line-height: 1.45; background: transparent; padding-left: 6mm; }
+
+.publication-info { padding-top: 10mm; }
+.publication-info h1 { font-size: 27pt; margin-bottom: 2mm; }
+.publication-edition { color: var(--blue); font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 13pt; }
+.publication-metadata { display: grid; grid-template-columns: 37mm 1fr; margin: 10mm 0; font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 9pt; }
+.publication-metadata dt, .publication-metadata dd { margin: 0; padding: 2mm 0; border-bottom: 0.3mm solid var(--grey-200); }
+.publication-metadata dt { color: var(--muted); }
+
+.toc { min-height: auto; padding-top: 7mm; }
+.toc-list { list-style: none; margin: 0; padding: 0; font-size: 8.5pt; }
+.toc-list li { display: flex; align-items: baseline; margin: 0; padding: 0.85mm 0; border-bottom: 0.2mm solid var(--grey-200); }
+.toc-list li.part { margin-top: 2mm; color: var(--blue); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom-color: var(--blue); }
+.toc-list li.level-2 { padding-left: 6mm; color: var(--muted); }
+.toc-list a { color: inherit; }
+.toc-dots { flex: 1; border-bottom: 0.25mm dotted #aeb7be; margin: 0 2mm 1.2mm; }
+.toc-page { min-width: 6mm; text-align: right; }
+
+.part-divider {
+  background: var(--blue-dark);
+  color: white;
+  margin: 0;
+  padding: 28mm 18mm;
+  min-height: 245mm;
+  break-inside: avoid-page;
+}
+.part-divider .part-number { font-size: 11pt; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.78; }
+.part-divider h1 { color: white; font-size: 35pt; max-width: 135mm; margin-top: 13mm; }
+.part-divider p { max-width: 115mm; font-size: 14pt; line-height: 1.5; color: #d9e8f2; }
+.part-divider::after { content: ""; position: absolute; left: 28mm; bottom: 42mm; width: 32mm; height: 1.2mm; background: white; opacity: 0.75; }
+
+.chapter-opener {
+  break-before: page;
+  padding-top: 13mm;
+  min-height: 68mm;
+  border-top: 1.3mm solid var(--blue);
+  margin-bottom: 5mm;
+}
+.chapter-number { color: var(--blue); font-size: 42pt; font-weight: 300; line-height: 1; margin-bottom: 5mm; }
+.chapter-opener h1 { font-size: 28pt; max-width: 150mm; margin-bottom: 5mm; }
+.chapter-intro { color: var(--muted); font-size: 12pt; line-height: 1.45; max-width: 148mm; }
+.unnumbered-opener .chapter-number { display: none; }
+
+.reference-page { break-inside: avoid-page; }
+.major-checklist { background: var(--grey-050); border: 0.3mm solid var(--grey-200); border-top: 1mm solid var(--blue); padding: 4mm 5mm; margin: 4mm 0 6mm; }
+.major-checklist li { break-inside: avoid; }
+.definition-of-done { break-before: page; }
+
+.diagram { text-align: center; margin: 7mm 0; break-inside: avoid-page; }
+.diagram img { max-width: 100%; max-height: 150mm; }
+.diagram figcaption { margin-top: 2mm; color: var(--muted); font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 8pt; }
+
+.repo-link { color: var(--ink); }
+.repo-path { color: var(--blue); font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.82em; }
+.task-list-item { list-style: none; margin-left: -5mm; }
+.task-box { display: inline-block; width: 3.3mm; height: 3.3mm; border: 0.35mm solid #65727d; border-radius: 0.4mm; margin: 0 2mm 0 -0.2mm; vertical-align: -0.4mm; background: white; }
+
+body[data-page-ready="true"] { visibility: visible; }
+
+@media screen {
+  body { max-width: 210mm; margin: 0 auto; padding: 16mm 18mm; background: white; box-shadow: 0 0 14px #ccd2d6; }
+  html { background: #e8ecef; }
+}

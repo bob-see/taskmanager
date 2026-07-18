@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { TrackerClient } from "@/app/p/[profileId]/tracker-client";
 import { getTrackerPageData } from "@/app/p/[profileId]/tracker-data";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBrisbaneDate } from "@/app/lib/date-time";
 
 type Props = {
   params: Promise<{ profileId: string }>;
@@ -19,6 +20,7 @@ export default async function ProfilePage({ params }: Props) {
     profileId,
     session.user.email
   );
+  const initialDate = getBrisbaneDate(new Date());
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 text-[color:var(--tm-text)] md:px-6 md:pb-8 md:pt-4">
@@ -28,6 +30,7 @@ export default async function ProfilePage({ params }: Props) {
         profileName={profile.name}
         routineSupportEnabled={profile.routineSupportEnabled}
         initialData={initialData}
+        initialDate={initialDate}
       />
     </main>
   );

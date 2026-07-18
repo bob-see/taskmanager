@@ -22,6 +22,7 @@
 
 # misc
 .DS_Store
+/docs/publication/.build/
 *.pem
 
 # debug

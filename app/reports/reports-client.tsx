@@ -12,6 +12,10 @@ import {
   type TaskDetailStatusScope,
   type TimeBreakdownItem,
 } from "@/app/reports/reporting-utils";
+import {
+  formatAustralianDate,
+  formatBrisbaneTimestamp,
+} from "@/app/lib/date-time";
 
 type ReportProfile = {
   id: string;
@@ -97,8 +101,7 @@ const taskDetailStatusOptions: Array<{ value: TaskDetailStatusScope; label: stri
 ];
 
 function formatDailyReportDate(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+  return formatAustralianDate(value, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -438,12 +441,13 @@ function TaskDetailCard({ task }: { task: TaskDetailReportItem }) {
           {task.status === "completed" ? "Completed" : "Updated"}{" "}
           <span className="font-medium text-[color:var(--tm-text)]">
             {task.status === "completed" && task.completedAt
-              ? new Date(task.completedAt).toLocaleString(undefined, {
+              ? formatBrisbaneTimestamp(task.completedAt, {
                   month: "short",
                   day: "numeric",
                   year: "numeric",
                   hour: "numeric",
                   minute: "2-digit",
+                  hour12: true,
                 })
               : task.activityDate}
           </span>

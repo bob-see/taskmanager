@@ -26,6 +26,12 @@ import {
 import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
 import { DoneTaskButton } from "@/app/components/done-task-button";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
+import {
+  formatAustralianDate,
+  formatBrisbaneTimestamp,
+  getBrisbaneDate,
+} from "@/app/lib/date-time";
+import { useBrisbaneBoundaryRefresh } from "@/app/lib/use-brisbane-boundary-refresh";
 
 type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
 type RepeatPausePreset = "tomorrow" | "next-week" | "custom" | "indefinite";
@@ -96,6 +102,7 @@ export type OverviewProfileData = {
 type OverviewClientProps = {
   profiles: OverviewProfileData[];
   userPreferenceKey: string;
+  initialDate: string;
 };
 
 type TaskPendingAction = "complete" | "update" | "delete";
@@ -296,11 +303,6 @@ function OverviewUtilityModal({
   );
 }
 
-function todayInputValue() {
-  const date = new Date();
-  return dateInputValue(date);
-}
-
 function dateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -415,16 +417,17 @@ function formatMobileTaskDate(value: string | null) {
   const [year, month, day] = dateOnly.split("-").map(Number);
   if (!year || !month || !day) return dateOnly;
 
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+  return formatAustralianDate(dateOnly, {
     day: "numeric",
     month: "short",
   });
 }
 
 function formatNoteTimestamp(value: string | Date) {
-  return new Date(value).toLocaleString(undefined, {
+  return formatBrisbaneTimestamp(value, {
     dateStyle: "medium",
     timeStyle: "short",
+    hour12: true,
   });
 }
 
@@ -554,8 +557,8 @@ function compareProjectsForManualSort(
   return left.id.localeCompare(right.id);
 }
 
-function createEmptyTaskDraftState(): TaskDraftState {
-  const startDate = todayInputValue();
+function createEmptyTaskDraftState(currentDateValue: string): TaskDraftState {
+  const startDate = currentDateValue;
 
   return {
     title: "",
@@ -569,12 +572,20 @@ function createEmptyTaskDraftState(): TaskDraftState {
   };
 }
 
-function createEmptyProjectDraftState(): ProjectDraftState {
-  return createProjectForm();
+function createEmptyProjectDraftState(currentDateValue: string): ProjectDraftState {
+  return {
+    name: "",
+    startDate: currentDateValue,
+    dueAt: "",
+    category: "",
+  };
 }
 
-function isTaskDraftDirty(draft: TaskDraftState) {
-  return JSON.stringify(draft) !== JSON.stringify(createEmptyTaskDraftState());
+function isTaskDraftDirty(draft: TaskDraftState, currentDateValue: string) {
+  return (
+    JSON.stringify(draft) !==
+    JSON.stringify(createEmptyTaskDraftState(currentDateValue))
+  );
 }
 
 function isEditTaskFormDirty(form: EditTaskFormState, baseline: EditTaskFormState) {
@@ -583,9 +594,9 @@ function isEditTaskFormDirty(form: EditTaskFormState, baseline: EditTaskFormStat
   return JSON.stringify(formValues) !== JSON.stringify(baselineValues);
 }
 
-function isTaskOverdue(dueAt: string) {
+function isTaskOverdue(dueAt: string, currentDateValue: string) {
   if (!dueAt) return false;
-  return dueAt < todayInputValue();
+  return dueAt < currentDateValue;
 }
 
 function TaskNotesIndicator({ notes }: { notes: string }) {
@@ -1127,6 +1138,7 @@ function applyOrderIndex<T extends { id: string; orderIndex: number | null }>(
 
 type ProfileCardProps = {
   profile: OverviewProfileData;
+  currentDateValue: string;
   selectedFilter: OverviewTaskFilter;
   sortMode: OverviewSortMode;
   groupingMode: OverviewGroupingMode;
@@ -1141,6 +1153,7 @@ type ProfileCardProps = {
 
 function ProfileCard({
   profile,
+  currentDateValue,
   selectedFilter,
   sortMode,
   groupingMode,
@@ -1158,8 +1171,12 @@ function ProfileCard({
   );
   const [projects, setProjects] = useState(profile.projects);
   const [counts, setCounts] = useState(profile.counts);
-  const [taskDraft, setTaskDraft] = useState<TaskDraftState>(createEmptyTaskDraftState);
-  const [projectDraft, setProjectDraft] = useState<ProjectDraftState>(createEmptyProjectDraftState);
+  const [taskDraft, setTaskDraft] = useState<TaskDraftState>(() =>
+    createEmptyTaskDraftState(currentDateValue)
+  );
+  const [projectDraft, setProjectDraft] = useState<ProjectDraftState>(() =>
+    createEmptyProjectDraftState(currentDateValue)
+  );
   const [saving, setSaving] = useState(false);
   const [projectSaving, setProjectSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1210,6 +1227,7 @@ function ProfileCard({
   );
   const taskSnapshotRef = useRef<OverviewTask[] | null>(null);
   const projectSnapshotRef = useRef<OverviewProject[] | null>(null);
+  const previousCurrentDateRef = useRef(currentDateValue);
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects]
@@ -1232,6 +1250,24 @@ function ProfileCard({
     setCounts(profile.counts);
     setCategorySuggestions(profile.categorySuggestions);
   }, [profile]);
+
+  useEffect(() => {
+    const previousDate = previousCurrentDateRef.current;
+    if (previousDate === currentDateValue) return;
+
+    previousCurrentDateRef.current = currentDateValue;
+    setTaskDraft((draft) =>
+      isTaskDraftDirty(draft, previousDate)
+        ? draft
+        : createEmptyTaskDraftState(currentDateValue)
+    );
+    setProjectDraft((draft) =>
+      JSON.stringify(draft) ===
+      JSON.stringify(createEmptyProjectDraftState(previousDate))
+        ? createEmptyProjectDraftState(currentDateValue)
+        : draft
+    );
+  }, [currentDateValue]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -1265,7 +1301,7 @@ function ProfileCard({
     () => [...projects].sort(compareProjectsForManualSort),
     [projects]
   );
-  const today = todayInputValue();
+  const today = currentDateValue;
   const overviewTaskPreviewLimit = Math.min(profile.initialTaskLimit, 3);
   const filteredOpenTasks = useMemo(
     () => openTasks.filter((task) => matchesOverviewTaskFilter(task, selectedFilter, today)),
@@ -1470,19 +1506,19 @@ function ProfileCard({
   function closeDialog() {
     if (saving) return;
 
-    if (isTaskDraftDirty(taskDraft)) {
+    if (isTaskDraftDirty(taskDraft, currentDateValue)) {
       setDiscardTarget("new-task");
       return;
     }
 
     setDialogOpen(false);
-    setTaskDraft(createEmptyTaskDraftState());
+    setTaskDraft(createEmptyTaskDraftState(currentDateValue));
   }
 
   function closeProjectDialog() {
     if (projectSaving) return;
     setProjectDialogOpen(false);
-    setProjectDraft(createEmptyProjectDraftState());
+    setProjectDraft(createEmptyProjectDraftState(currentDateValue));
   }
 
   function closeTaskEditor() {
@@ -1507,7 +1543,7 @@ function ProfileCard({
   function discardUnsavedChanges() {
     if (discardTarget === "new-task") {
       setDialogOpen(false);
-      setTaskDraft(createEmptyTaskDraftState());
+      setTaskDraft(createEmptyTaskDraftState(currentDateValue));
     }
 
     if (discardTarget === "edit-task") {
@@ -1524,11 +1560,22 @@ function ProfileCard({
     setEditProjectForm(null);
   }
 
+  function openTaskDialog() {
+    setTaskDraft(createEmptyTaskDraftState(getBrisbaneDate(new Date())));
+    setDialogOpen(true);
+  }
+
+  function openProjectDialog() {
+    setProjectDraft(createEmptyProjectDraftState(getBrisbaneDate(new Date())));
+    setProjectDialogOpen(true);
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const title = taskDraft.title.trim();
     if (!title || saving) return;
 
+    const actionDate = getBrisbaneDate(new Date());
     setSaving(true);
 
     try {
@@ -1539,7 +1586,7 @@ function ProfileCard({
           createTaskPayload({
             ...taskDraft,
             title,
-            startDate: taskDraft.startDate || todayInputValue(),
+            startDate: taskDraft.startDate || actionDate,
           })
         ),
       });
@@ -1613,7 +1660,8 @@ function ProfileCard({
       setCounts((prev) => ({
         ...prev,
         open: prev.open + 1,
-        overdue: prev.overdue + (isTaskOverdue(nextTask.dueAt) ? 1 : 0),
+        overdue:
+          prev.overdue + (isTaskOverdue(nextTask.dueAt, actionDate) ? 1 : 0),
       }));
 
       const newCategory = nextTask.category?.trim();
@@ -1631,7 +1679,7 @@ function ProfileCard({
       }
 
       setDialogOpen(false);
-      setTaskDraft(createEmptyTaskDraftState());
+      setTaskDraft(createEmptyTaskDraftState(actionDate));
       if (createdTask.noteSaveError) {
         setEditTaskId(nextTask.id);
         setEditTaskForm({
@@ -1656,6 +1704,7 @@ function ProfileCard({
     const name = projectDraft.name.trim();
     if (!name || projectSaving) return;
 
+    const actionDate = getBrisbaneDate(new Date());
     setProjectSaving(true);
 
     try {
@@ -1664,7 +1713,7 @@ function ProfileCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          startDate: projectDraft.startDate || todayInputValue(),
+          startDate: projectDraft.startDate || actionDate,
           dueAt: projectDraft.dueAt || null,
           category: projectDraft.category.trim() || null,
         }),
@@ -1680,7 +1729,7 @@ function ProfileCard({
         [...prev, createdProject].sort(compareProjectsForManualSort)
       );
       setProjectDialogOpen(false);
-      setProjectDraft(createEmptyProjectDraftState());
+      setProjectDraft(createEmptyProjectDraftState(actionDate));
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not create project");
     } finally {
@@ -2036,11 +2085,15 @@ function ProfileCard({
   }
 
   function removeTaskFromCard(task: OverviewTask) {
+    const actionDate = getBrisbaneDate(new Date());
     setOpenTasks((prev) => prev.filter((item) => item.id !== task.id));
     setCounts((prev) => ({
       ...prev,
       open: Math.max(0, prev.open - 1),
-      overdue: Math.max(0, prev.overdue - (isTaskOverdue(task.dueAt) ? 1 : 0)),
+      overdue: Math.max(
+        0,
+        prev.overdue - (isTaskOverdue(task.dueAt, actionDate) ? 1 : 0)
+      ),
     }));
   }
 
@@ -2177,8 +2230,9 @@ function ProfileCard({
         );
 
         if (previousTask) {
-          const previousOverdue = isTaskOverdue(previousTask.dueAt);
-          const nextOverdue = isTaskOverdue(nextDueAt);
+          const actionDate = getBrisbaneDate(new Date());
+          const previousOverdue = isTaskOverdue(previousTask.dueAt, actionDate);
+          const nextOverdue = isTaskOverdue(nextDueAt, actionDate);
 
           if (previousOverdue !== nextOverdue) {
             setCounts((prev) => ({
@@ -2250,10 +2304,12 @@ function ProfileCard({
     if (!startTaskPendingAction(task.id, completed ? "complete" : "update")) return;
     setBusyAction(true);
 
+    const actionDate = getBrisbaneDate(new Date());
+
     try {
       await patchTask(task.id, {
         completed,
-        completedOn: completed ? todayInputValue() : null,
+        completedOn: completed ? actionDate : null,
       });
 
       await waitForMinimumPendingTime(pendingStartedAt);
@@ -2263,7 +2319,10 @@ function ProfileCard({
           ...prev,
           open: Math.max(0, prev.open - 1),
           done: prev.done + 1,
-          overdue: Math.max(0, prev.overdue - (isTaskOverdue(task.dueAt) ? 1 : 0)),
+          overdue: Math.max(
+            0,
+            prev.overdue - (isTaskOverdue(task.dueAt, actionDate) ? 1 : 0)
+          ),
         }));
       }
     } catch (error) {
@@ -2371,14 +2430,17 @@ function ProfileCard({
     }
   }
 
-  function getTaskSnoozeBaseDateValue(task: OverviewTask) {
-    return task.startDate > todayInputValue() ? task.startDate : todayInputValue();
+  function getTaskSnoozeBaseDateValue(task: OverviewTask, actionDate: string) {
+    return task.startDate > actionDate ? task.startDate : actionDate;
   }
 
   function openSingleTaskSnoozeDate(task: OverviewTask) {
+    const actionDate = getBrisbaneDate(new Date());
     setContextMenu(null);
     setSingleSnoozeTask(task);
-    setSingleSnoozeDateValue(getSnoozeDateValue(getTaskSnoozeBaseDateValue(task), "tomorrow"));
+    setSingleSnoozeDateValue(
+      getSnoozeDateValue(getTaskSnoozeBaseDateValue(task, actionDate), "tomorrow")
+    );
   }
 
   function closeSingleTaskSnoozeModal() {
@@ -2427,8 +2489,9 @@ function ProfileCard({
   function requestToggleRepeatPause(task: OverviewTask) {
     setContextMenu(null);
     if (!isRecurringOverviewTask(task)) return;
+    const actionDate = getBrisbaneDate(new Date());
 
-    if (isOverviewRepeatPausedOnDate(task, todayInputValue())) {
+    if (isOverviewRepeatPausedOnDate(task, actionDate)) {
       const pendingStartedAt = Date.now();
       if (!startTaskPendingAction(task.id, "update")) return;
       void patchTask(task.id, {
@@ -2463,7 +2526,9 @@ function ProfileCard({
 
     setRepeatPauseTask(task);
     setRepeatPausePreset("tomorrow");
-    setRepeatPauseUntilValue(getRepeatPauseUntilForPreset(todayInputValue(), "tomorrow"));
+    setRepeatPauseUntilValue(
+      getRepeatPauseUntilForPreset(actionDate, "tomorrow")
+    );
     setRepeatPauseNoteValue(task.repeatPauseNote ?? "");
   }
 
@@ -2472,7 +2537,14 @@ function ProfileCard({
     if (!repeatPauseTask) return;
 
     const repeatPauseUntil =
-      repeatPausePreset === "indefinite" ? null : repeatPauseUntilValue || null;
+      repeatPausePreset === "tomorrow" || repeatPausePreset === "next-week"
+        ? getRepeatPauseUntilForPreset(
+            getBrisbaneDate(new Date()),
+            repeatPausePreset
+          )
+        : repeatPausePreset === "indefinite"
+          ? null
+          : repeatPauseUntilValue || null;
     const pendingStartedAt = Date.now();
     if (!startTaskPendingAction(repeatPauseTask.id, "update")) return;
     setRepeatPauseSaving(true);
@@ -2578,8 +2650,8 @@ function ProfileCard({
           </div>
           <ProfileCardActionsMenu
             collapsed={collapsed}
-            onAddTask={() => setDialogOpen(true)}
-            onAddProject={() => setProjectDialogOpen(true)}
+            onAddTask={openTaskDialog}
+            onAddProject={openProjectDialog}
             onToggleCollapsed={() => setCollapsed((prev) => !prev)}
           />
         </div>
@@ -2656,7 +2728,7 @@ function ProfileCard({
                               : pendingAction === "delete"
                                 ? "border-red-300 bg-red-50/90 text-red-800"
                                 : "border-slate-300 bg-slate-100/90 text-slate-800";
-                          const taskOverdue = isTaskOverdue(task.dueAt);
+                          const taskOverdue = isTaskOverdue(task.dueAt, currentDateValue);
 
                           return (
                           <article
@@ -2843,7 +2915,7 @@ function ProfileCard({
                                 : pendingAction === "delete"
                                   ? "border-red-300 bg-red-50/90 text-red-800"
                                   : "border-slate-300 bg-slate-100/90 text-slate-800";
-                            const taskOverdue = isTaskOverdue(task.dueAt);
+                            const taskOverdue = isTaskOverdue(task.dueAt, currentDateValue);
 
                             return (
                             <tr
@@ -3048,7 +3120,10 @@ function ProfileCard({
                       setRepeatPausePreset(option.value);
                       if (option.value === "tomorrow" || option.value === "next-week") {
                         setRepeatPauseUntilValue(
-                          getRepeatPauseUntilForPreset(todayInputValue(), option.value)
+                          getRepeatPauseUntilForPreset(
+                            getBrisbaneDate(new Date()),
+                            option.value
+                          )
                         );
                       }
                       if (option.value === "indefinite") {
@@ -3249,7 +3324,7 @@ function ProfileCard({
                   onClick={() => requestToggleRepeatPause(contextMenu.task)}
                   disabled={busyAction || taskPending}
                 >
-                  {isOverviewRepeatPausedOnDate(contextMenu.task, todayInputValue())
+                  {isOverviewRepeatPausedOnDate(contextMenu.task, currentDateValue)
                     ? "Resume Repeat"
                     : "Pause Repeat"}
                 </button>
@@ -3323,7 +3398,9 @@ function ProfileCard({
 export function OverviewClient({
   profiles,
   userPreferenceKey,
+  initialDate,
 }: OverviewClientProps) {
+  const [currentDateValue, setCurrentDateValue] = useState(initialDate);
   const [orderedProfiles, setOrderedProfiles] = useState(profiles);
   const [query, setQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<OverviewTaskFilter>(
@@ -3359,6 +3436,10 @@ export function OverviewClient({
   useEffect(() => {
     setOrderedProfiles(profiles);
   }, [profiles]);
+
+  useBrisbaneBoundaryRefresh((now) => {
+    setCurrentDateValue(getBrisbaneDate(now));
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -3538,6 +3619,7 @@ export function OverviewClient({
               <ProfileCard
                 key={profile.id}
                 profile={profile}
+                currentDateValue={currentDateValue}
                 selectedFilter={selectedFilter}
                 sortMode={sortMode}
                 groupingMode={groupingMode}

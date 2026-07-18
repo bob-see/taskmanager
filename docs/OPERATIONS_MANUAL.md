@@ -41,6 +41,8 @@ Owning documents:
 
 ## Local Operational Checks
 
+Use Node.js 22.13.0 or later. With nvm, run `nvm use` from the repository root before installing dependencies or running application and publication commands.
+
 Install dependencies:
 
 ```bash

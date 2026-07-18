@@ -33,6 +33,13 @@ import {
 } from "@/app/delegated/delegated-task-indicators";
 import type { DelegatedTaskStatus } from "@/app/delegated/delegated-status-badge";
 import {
+  advanceDateIfCurrent,
+  formatAustralianDate,
+  formatBrisbaneTimestamp,
+  getBrisbaneDate,
+} from "@/app/lib/date-time";
+import { useBrisbaneBoundaryRefresh } from "@/app/lib/use-brisbane-boundary-refresh";
+import {
   type AverageBasis,
   endOfMonth,
   endOfWeekSun,
@@ -111,6 +118,7 @@ type TrackerClientProps = {
   profileName: string;
   routineSupportEnabled?: boolean;
   initialData?: TrackerInitialData;
+  initialDate: string;
 };
 
 const ROUTINE_AFFIRMATIONS: Record<string, string> = {
@@ -344,10 +352,6 @@ function dateInputValue(date: Date) {
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function todayInputValue() {
-  return dateInputValue(new Date());
 }
 
 function createTempId(prefix: string) {
@@ -596,7 +600,7 @@ function getRepeatPauseUntilForPreset(
 }
 
 function formatLongDate(value: string) {
-  return parseDateOnly(value).toLocaleDateString(undefined, {
+  return formatAustralianDate(value, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -605,24 +609,29 @@ function formatLongDate(value: string) {
 }
 
 function formatShortDate(value: string) {
-  return parseDateOnly(value).toLocaleDateString(undefined, {
+  return formatAustralianDate(value, {
     month: "short",
     day: "numeric",
   });
 }
 
 function formatMonthTitle(date: Date) {
-  return date.toLocaleDateString(undefined, {
+  return formatAustralianDate(date, {
     month: "long",
     year: "numeric",
   });
 }
 
 function formatNoteTimestamp(value: string | Date) {
-  return new Date(value).toLocaleString(undefined, {
+  return formatBrisbaneTimestamp(value, {
     dateStyle: "medium",
     timeStyle: "short",
+    hour12: true,
   });
+}
+
+function formatWeekday(value: Date) {
+  return formatAustralianDate(value, { weekday: "short" });
 }
 
 function getStartOfMonthGrid(date: Date) {
@@ -1386,16 +1395,16 @@ function SnoozeMenu({
   );
 }
 
-function createEmptyProjectForm(): ProjectFormState {
+function createEmptyProjectForm(currentDateValue: string): ProjectFormState {
   return {
     name: "",
-    startDate: todayInputValue(),
+    startDate: currentDateValue,
     dueAt: "",
     category: "",
   };
 }
 
-function createEmptyTaskForm(dateValue = todayInputValue()): TaskFormState {
+function createEmptyTaskForm(dateValue: string): TaskFormState {
   return {
     title: "",
     startDate: dateValue,
@@ -1736,7 +1745,7 @@ function TaskActionMenu({
   onToggleRepeatPause,
   onDelegate,
   onDelete,
-  pauseReferenceDate = todayInputValue(),
+  pauseReferenceDate,
 }: {
   task: Task;
   completionPending?: boolean;
@@ -1751,7 +1760,7 @@ function TaskActionMenu({
   onToggleRepeatPause: (task: Task) => void;
   onDelegate: (task: Task) => void;
   onDelete: (task: Task) => void;
-  pauseReferenceDate?: string;
+  pauseReferenceDate: string;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -1898,7 +1907,7 @@ function TaskActionMenuItems({
   snoozeDisabled = false,
   showSnoozeAction = true,
   completedActionLabel,
-  pauseReferenceDate = todayInputValue(),
+  pauseReferenceDate,
   onClose,
   onPickSnoozeDate,
   onTogglePriority,
@@ -1914,7 +1923,7 @@ function TaskActionMenuItems({
   snoozeDisabled?: boolean;
   showSnoozeAction?: boolean;
   completedActionLabel?: string;
-  pauseReferenceDate?: string;
+  pauseReferenceDate: string;
   onClose: () => void;
   onPickSnoozeDate: (task: Task) => void;
   onTogglePriority: (task: Task) => void;
@@ -2522,7 +2531,7 @@ function TaskRow({
   selectMode?: boolean;
   selected?: boolean;
   visibleColumns: Record<VisibleTaskColumn, boolean>;
-  currentDateValue?: string;
+  currentDateValue: string;
   editingCategoryTaskId: string | null;
   editingCategoryValue: string;
   categorySuggestions: string[];
@@ -2550,7 +2559,7 @@ function TaskRow({
 }) {
   const isEditingCategory = editingCategoryTaskId === task.id;
   const repeatSummary = getRepeatSummary(task);
-  const repeatPauseBadge = getRepeatPauseBadge(task, currentDateValue ?? todayInputValue());
+  const repeatPauseBadge = getRepeatPauseBadge(task, currentDateValue);
   const pendingComplete = pendingAction === "complete";
   const pendingLabel =
     pendingAction === "complete"
@@ -2568,7 +2577,7 @@ function TaskRow({
         : "border-slate-300 bg-slate-100/90 text-slate-800";
   const dayTaskGridColumns = getDayTaskGridColumns(visibleColumns);
   const waitingOnValues = getLatestWaitingOnValues(task);
-  const taskOverdue = isTaskOverdue(task, currentDateValue ?? todayInputValue());
+  const taskOverdue = isTaskOverdue(task, currentDateValue);
 
   return (
     <>
@@ -2655,7 +2664,7 @@ function TaskRow({
               }
               onDelegate={onDelegate}
               onDelete={onDelete}
-              pauseReferenceDate={currentDateValue ?? todayInputValue()}
+              pauseReferenceDate={currentDateValue}
             />
           </div>
         </div>
@@ -2937,7 +2946,7 @@ function TaskRow({
             }
             onDelegate={onDelegate}
             onDelete={onDelete}
-            pauseReferenceDate={currentDateValue ?? todayInputValue()}
+            pauseReferenceDate={currentDateValue}
           />
         </div>
       </div>
@@ -3149,6 +3158,7 @@ export function TrackerClient({
   profileName,
   routineSupportEnabled = false,
   initialData,
+  initialDate,
 }: TrackerClientProps) {
   const router = useRouter();
   const completionPendingTaskIdsRef = useRef<Set<string>>(new Set());
@@ -3171,7 +3181,9 @@ export function TrackerClient({
   const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState(todayInputValue);
+  const [currentDateValue, setCurrentDateValue] = useState(initialDate);
+  const currentDateValueRef = useRef(initialDate);
+  const [selectedDay, setSelectedDay] = useState(initialDate);
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [taskView, setTaskView] = useState<TaskView>("active");
   const [doneRange, setDoneRange] = useState<DoneRange>("today");
@@ -3238,9 +3250,11 @@ export function TrackerClient({
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
   const [dragOverProjectPosition, setDragOverProjectPosition] =
     useState<DragPosition | null>(null);
-  const [form, setForm] = useState<TaskFormState>(createEmptyTaskForm);
-  const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(
-    createEmptyProjectForm
+  const [form, setForm] = useState<TaskFormState>(() =>
+    createEmptyTaskForm(initialDate)
+  );
+  const [newProjectForm, setNewProjectForm] = useState<ProjectFormState>(() =>
+    createEmptyProjectForm(initialDate)
   );
   const [editTaskForm, setEditTaskForm] = useState<EditTaskFormState | null>(null);
   const [discardTarget, setDiscardTarget] = useState<"new-task" | "edit-task" | null>(
@@ -3303,13 +3317,16 @@ export function TrackerClient({
   }, [initialData, profileId]);
 
   useEffect(() => {
-    setForm(createEmptyTaskForm());
-    setNewProjectForm(createEmptyProjectForm());
+    const clientDate = getBrisbaneDate(new Date());
+    currentDateValueRef.current = clientDate;
+    setCurrentDateValue(clientDate);
+    setForm(createEmptyTaskForm(clientDate));
+    setNewProjectForm(createEmptyProjectForm(clientDate));
     setEditTaskForm(null);
     setEditTaskId(null);
     setEditingCategoryTaskId(null);
     setEditingCategoryValue("");
-    setSelectedDay(todayInputValue());
+    setSelectedDay(clientDate);
     setTaskView("active");
     setDoneRange("today");
     setSortMode("manual");
@@ -3352,6 +3369,29 @@ export function TrackerClient({
     skipNextColumnPreferenceSaveRef.current = false;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
+
+  useBrisbaneBoundaryRefresh((now) => {
+    const nextDate = getBrisbaneDate(now);
+    const previousDate = currentDateValueRef.current;
+    if (nextDate === previousDate) return;
+
+    currentDateValueRef.current = nextDate;
+    setCurrentDateValue(nextDate);
+    setSelectedDay((value) =>
+      advanceDateIfCurrent(value, previousDate, nextDate)
+    );
+    setForm((value) =>
+      isTaskFormDirty(value, createEmptyTaskForm(previousDate))
+        ? value
+        : createEmptyTaskForm(nextDate)
+    );
+    setNewProjectForm((value) =>
+      JSON.stringify(value) ===
+      JSON.stringify(createEmptyProjectForm(previousDate))
+        ? createEmptyProjectForm(nextDate)
+        : value
+    );
+  });
 
   useEffect(() => {
     setVisibleColumns(loadVisibleTaskColumns(profileId));
@@ -4104,6 +4144,22 @@ export function TrackerClient({
     }
   }
 
+  function openNewTaskDialog() {
+    const actionDate = getBrisbaneDate(new Date());
+    const defaultDate = advanceDateIfCurrent(
+      selectedDay,
+      currentDateValueRef.current,
+      actionDate
+    );
+    setForm(createEmptyTaskForm(defaultDate));
+    setNewTaskOpen(true);
+  }
+
+  function openNewProjectDialog() {
+    setNewProjectForm(createEmptyProjectForm(getBrisbaneDate(new Date())));
+    setNewProjectOpen(true);
+  }
+
   async function submitQuickAdd() {
     if (quickAddSaving) return;
 
@@ -4170,7 +4226,7 @@ export function TrackerClient({
 
       const project = (await res.json()) as Project;
       setProjects((prev) => [project, ...prev]);
-      setNewProjectForm(createEmptyProjectForm());
+      setNewProjectForm(createEmptyProjectForm(getBrisbaneDate(new Date())));
       setNewProjectOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create project");
@@ -4257,9 +4313,10 @@ export function TrackerClient({
     );
 
     try {
+      const completedOn = completed ? getBrisbaneDate(new Date()) : null;
       await updateTask(taskId, {
         completed,
-        completedOn: completed ? selectedDay : null,
+        completedOn,
       }, { pendingStartedAt });
     } finally {
       await waitForMinimumPendingTime(pendingStartedAt);
@@ -4291,8 +4348,9 @@ export function TrackerClient({
 
   function requestToggleRepeatPause(task: Task) {
     if (!isRecurringTask(task)) return;
+    const actionDate = getBrisbaneDate(new Date());
 
-    if (isRepeatPausedOnDate(task, selectedDay)) {
+    if (isRepeatPausedOnDate(task, actionDate)) {
       const pendingStartedAt = Date.now();
       if (!startTaskPendingAction(task.id, "update")) return;
       void updateTask(task.id, {
@@ -4312,7 +4370,7 @@ export function TrackerClient({
 
     setRepeatPauseTask(task);
     setRepeatPausePreset("tomorrow");
-    setRepeatPauseUntilValue(getRepeatPauseUntilForPreset(selectedDay, "tomorrow"));
+    setRepeatPauseUntilValue(getRepeatPauseUntilForPreset(actionDate, "tomorrow"));
     setRepeatPauseNoteValue(task.repeatPauseNote ?? "");
   }
 
@@ -4320,7 +4378,14 @@ export function TrackerClient({
     if (!repeatPauseTask) return;
 
     const repeatPauseUntil =
-      repeatPausePreset === "indefinite" ? null : repeatPauseUntilValue || null;
+      repeatPausePreset === "tomorrow" || repeatPausePreset === "next-week"
+        ? getRepeatPauseUntilForPreset(
+            getBrisbaneDate(new Date()),
+            repeatPausePreset
+          )
+        : repeatPausePreset === "indefinite"
+          ? null
+          : repeatPauseUntilValue || null;
 
     await updateTask(repeatPauseTask.id, {
       repeatPaused: true,
@@ -4694,12 +4759,16 @@ export function TrackerClient({
     );
   }
 
-  function getTaskSnoozeBaseDateValue(task: Task) {
-    return maxDateValue(toDateOnly(task.startDate), selectedDay);
+  function getTaskSnoozeBaseDateValue(task: Task, actionDate: string) {
+    return maxDateValue(toDateOnly(task.startDate), actionDate);
   }
 
   function snoozeTask(task: Task, preset: SnoozePreset) {
-    const startDate = getSnoozeDateValue(getTaskSnoozeBaseDateValue(task), preset);
+    const actionDate = getBrisbaneDate(new Date());
+    const startDate = getSnoozeDateValue(
+      getTaskSnoozeBaseDateValue(task, actionDate),
+      preset
+    );
 
     void executeBulkAction({
       action: "set-start-date",
@@ -4712,8 +4781,14 @@ export function TrackerClient({
   }
 
   function openSingleTaskSnoozeDate(task: Task) {
+    const actionDate = getBrisbaneDate(new Date());
     setSingleSnoozeTask(task);
-    setSingleSnoozeDateValue(getSnoozeDateValue(getTaskSnoozeBaseDateValue(task), "tomorrow"));
+    setSingleSnoozeDateValue(
+      getSnoozeDateValue(
+        getTaskSnoozeBaseDateValue(task, actionDate),
+        "tomorrow"
+      )
+    );
   }
 
   function snoozeSelectedTasks(preset: SnoozePreset) {
@@ -4721,7 +4796,7 @@ export function TrackerClient({
 
     requestBulkAction({
       action: "set-start-date",
-      startDate: getSnoozeDateValue(selectedDay, preset),
+      startDate: getSnoozeDateValue(getBrisbaneDate(new Date()), preset),
     });
   }
 
@@ -5079,9 +5154,7 @@ export function TrackerClient({
                 <InsightMetric label="Avg / Day" value={weekInsights.avgPerDay.toFixed(1)} />
                 <InsightMetric
                   label="Best Day"
-                  value={`${weekInsights.bestDay.date.toLocaleDateString(undefined, {
-                    weekday: "short",
-                  })} (${weekInsights.bestDay.count})`}
+                  value={`${formatWeekday(weekInsights.bestDay.date)} (${weekInsights.bestDay.count})`}
                 />
                 <InsightMetric label="Backlog" value={weekInsights.backlogCount} />
               </div>
@@ -5114,13 +5187,7 @@ export function TrackerClient({
                 <InsightMetric label="Avg / Day" value={monthInsights.avgPerDay.toFixed(1)} />
                 <InsightMetric
                   label="Best Week"
-                  value={`${monthInsights.bestWeek.start.toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}-${monthInsights.bestWeek.end.toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })} (${monthInsights.bestWeek.count})`}
+                  value={`${formatShortDate(dateInputValue(monthInsights.bestWeek.start))}-${formatShortDate(dateInputValue(monthInsights.bestWeek.end))} (${monthInsights.bestWeek.count})`}
                 />
                 <InsightMetric
                   label="Backlog Snapshot"
@@ -5182,7 +5249,7 @@ export function TrackerClient({
             <button
               className={`${primaryButtonClass} w-full sm:w-auto`}
               type="button"
-              onClick={() => setNewTaskOpen(true)}
+              onClick={openNewTaskDialog}
             >
               + Task
             </button>
@@ -5293,9 +5360,7 @@ export function TrackerClient({
               />
               <InsightMetric
                 label="Best Day"
-                value={`${weekInsights.bestDay.date.toLocaleDateString(undefined, {
-                  weekday: "short",
-                })} (${weekInsights.bestDay.count})`}
+                value={`${formatWeekday(weekInsights.bestDay.date)} (${weekInsights.bestDay.count})`}
               />
               <InsightMetric label="Backlog" value={weekInsights.backlogCount} />
             </div>
@@ -5388,13 +5453,7 @@ export function TrackerClient({
               />
               <InsightMetric
                 label="Best Week"
-                value={`${monthInsights.bestWeek.start.toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}-${monthInsights.bestWeek.end.toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })} (${monthInsights.bestWeek.count})`}
+                value={`${formatShortDate(dateInputValue(monthInsights.bestWeek.start))}-${formatShortDate(dateInputValue(monthInsights.bestWeek.end))} (${monthInsights.bestWeek.count})`}
               />
               <InsightMetric
                 label="Backlog Snapshot"
@@ -5571,7 +5630,9 @@ export function TrackerClient({
                       disabled={bulkSaving}
                       label="Snooze selected"
                       onPickDate={() =>
-                        setBulkSnoozeDateValue(getSnoozeDateValue(selectedDay, "tomorrow"))
+                        setBulkSnoozeDateValue(
+                          getSnoozeDateValue(getBrisbaneDate(new Date()), "tomorrow")
+                        )
                       }
                       onSelectPreset={snoozeSelectedTasks}
                     />
@@ -5582,7 +5643,7 @@ export function TrackerClient({
                       onClick={() =>
                         requestBulkAction({
                           action: "mark-done",
-                          completedOn: selectedDay,
+                          completedOn: getBrisbaneDate(new Date()),
                         })
                       }
                     >
@@ -5830,7 +5891,7 @@ export function TrackerClient({
                     : null;
                 const routineStreak =
                   routineAffirmation && section.project
-                    ? getRoutineStreak(tasks, section.project.id, todayInputValue())
+                    ? getRoutineStreak(tasks, section.project.id, currentDateValue)
                     : null;
                 const noProjectSubtitle = "Tasks with no project";
                 const projectDragPosition =
@@ -6579,7 +6640,7 @@ export function TrackerClient({
         waitingOnSuggestions={waitingOnSuggestions}
         projectOptions={newTaskProjectOptions}
         topActionLabel="+ Project"
-        onTopAction={() => setNewProjectOpen(true)}
+        onTopAction={openNewProjectDialog}
         onClose={closeNewTaskDialog}
         onSubmit={createTask}
         onFormChange={(updater) => setForm((prev) => updater(prev))}
@@ -6741,7 +6802,10 @@ export function TrackerClient({
                       setRepeatPausePreset(option.value);
                       if (option.value === "tomorrow" || option.value === "next-week") {
                         setRepeatPauseUntilValue(
-                          getRepeatPauseUntilForPreset(selectedDay, option.value)
+                          getRepeatPauseUntilForPreset(
+                            getBrisbaneDate(new Date()),
+                            option.value
+                          )
                         );
                       }
                       if (option.value === "indefinite") {
@@ -6985,7 +7049,7 @@ export function TrackerClient({
         title="New Project"
         onClose={() => {
           setNewProjectOpen(false);
-          setNewProjectForm(createEmptyProjectForm());
+          setNewProjectForm(createEmptyProjectForm(getBrisbaneDate(new Date())));
         }}
       >
         <form className="space-y-3" onSubmit={createProject}>

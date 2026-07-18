@@ -135,7 +135,7 @@ Some administrative and specialised workflows are intentionally available only t
 
 ### Prerequisites
 
-- Node.js compatible with the current Next.js version.
+- Node.js 22.13.0 or later. Run `nvm use` to select the repository baseline from `.nvmrc`.
 - npm.
 - Access to a MariaDB-compatible database.
 - Required environment variables for database, authentication, and Push configuration.

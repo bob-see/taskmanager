@@ -19,6 +19,7 @@ import {
   type ReportTask,
   type ReportTimeEntry,
 } from "@/app/reports/reporting-utils";
+import { getBrisbaneDate } from "@/app/lib/date-time";
 
 type SearchParams = Promise<{
   scope?: string;
@@ -61,7 +62,10 @@ export default async function ReportsPage({
       ? resolvedSearchParams.scope
       : "overview";
   const selectedPeriod = normalizePeriod(resolvedSearchParams.period);
-  const selectedDate = normalizeSelectedDate(resolvedSearchParams.date);
+  const selectedDate = normalizeSelectedDate(
+    resolvedSearchParams.date,
+    getBrisbaneDate(new Date())
+  );
   const whereProfile =
     selectedScope === "overview"
       ? {

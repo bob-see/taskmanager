@@ -1,7 +1,7 @@
 # TaskManager Architecture
 
 **Status:** Living Document  
-**Last Updated:** 2026-07-11  
+**Last Updated:** 2026-07-18
 **Last Verified Against Commit:** `ad1649d`  
 **Repository Branch:** `main`  
 **Working Tree Note:** This document also reflects pending documentation changes that are not represented by the verification commit.  
@@ -65,6 +65,10 @@ Shared services are preferred when behavior crosses routes or UI surfaces. New w
 The codebase should evolve incrementally. Prefer focused migrations, small route/service changes, and compatibility-preserving UI improvements over large rewrites. Preserve backwards compatibility where practical, especially for existing data, notification preferences, delegated task state, and migration history.
 
 Simplicity comes before abstraction. Add an abstraction when it removes real complexity, centralises a rule that must stay consistent, or matches an established local pattern. Avoid introducing queues, background systems, generic configuration layers, or new module boundaries before the measured need exists.
+
+### Date and Time Rendering
+
+Initial server and client output must be deterministic. User-facing calendar dates use `en-AU`; timestamps representing an instant use `Australia/Brisbane` with an explicit hour cycle. Parse `YYYY-MM-DD` values as calendar dates rather than UTC timestamps, and supply the current time explicitly across server/client boundaries instead of reading it independently during both initial renders. Shared helpers for these rules live in `app/lib/date-time.ts`.
 
 Database evolution is migration-first. Shared Railway databases must not be changed with `prisma db push`, reset operations, or undocumented migration-ledger edits. Documentation evolves with the codebase: significant architectural changes require this document to be reviewed, even when the result is "reviewed, no update required."
 
