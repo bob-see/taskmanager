@@ -651,18 +651,45 @@ public assets/routes and unauthenticated redirects; authenticated mutation check
 remain a deployment smoke-test responsibility because the repository has no
 disposable application database.
 
+### Milestone 2 Status — Profile and Timer Ownership
+
+Completed and verified on 18 July 2026. Profile reorder now authenticates locally,
+validates the complete submitted ID set against the authenticated owner's profiles,
+and performs validation, scoped updates, and the scoped response read atomically.
+Unknown, inaccessible, mixed-owner, duplicate, or incomplete sets cannot partially
+change order values.
+
+Timesheet active reads, start, and stop are scoped to the authenticated user's
+profiles. One active timer is allowed per user, while separate users may run timers
+simultaneously. Start and stop take a per-user database row lock; stop also uses a
+conditional active-row update, so repeated or concurrent stops cannot finalise the
+same timer twice. Timer completion persists the calendar date derived from the stop
+instant in `Australia/Brisbane`, stored deterministically at UTC midnight, while
+elapsed duration continues to use the real start and stop instants.
+
+The suite now has 42 passing tests, including production-core regressions for
+unauthenticated boundaries, owner/wrong-user cases, atomic reorder validation,
+separate-user and same-user timer behavior, concurrent stop attempts, UTC-process
+execution, and Brisbane midnight boundaries. These service-level tests use
+transactional in-memory adapters; the repository still lacks a disposable MariaDB
+route-test target, so direct route/Prisma integration and two-account browser checks
+remain manual. Type checking, changed-file lint, Prisma validation, the production
+build, and Node 22.13.0 tests/type checking passed. Full lint is now 38 errors and
+17 warnings; the nine-error reduction comes only from removing affected-route
+`any` usage in this milestone.
+
 ### Active Register
 
 | Item | Status | Priority | Category | Evidence / audit date | Recommended action | Blocks feature work? |
 |---|---|---|---|---|---|---|
 | Next.js/framework security update | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: `next` and `eslint-config-next` upgraded from 16.1.6 to 16.2.10; all direct Next.js advisories cleared; required checks passed and full lint remained 47 errors/17 warnings. | Perform the outstanding authenticated deployment smoke checks before release. Track remaining transitive advisories under dependency/toolchain alignment. | No |
-| Global profile reorder ownership | Confirmed defect | P1 | Security gap | `app/api/profiles/reorder/route.ts` has no route-local session/owner check and reads, updates, and returns profiles without user scope. | Scope candidate IDs, updates, and response rows to the authenticated owner; add correct-user and wrong-user tests. | Yes |
-| Timer start/stop ownership | Confirmed defect | P1 | Security gap | Timer start accepts any existing profile and performs a global active-timer check; timer stop selects the latest active timer globally. | Authenticate locally, enforce profile/timer ownership, define simultaneous-user behavior, and add two-user regressions. | Yes |
-| Timer Brisbane calendar date | Confirmed defect | P1 | Data correctness | Timer start/stop derive `entryDate` through server-local `Date` fields. A UTC runtime can assign Brisbane activity before 10:00 am to the previous day. | Derive the Brisbane calendar date from the action instant and test both sides of Brisbane midnight. | Yes |
-| Ownership and timezone regression coverage | Missing | P1 | Test coverage gap | No current test calls a route handler with unauthenticated, owner, and wrong-user sessions; timer persistence is also untested. | Establish the smallest route/service test seam needed for profile reorder and timer start/stop, including simultaneous users and midnight boundaries. | Blocks completion of the P1 fixes |
+| Global profile reorder ownership | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: local authentication, full owned-set validation, scoped atomic mutation/response, and production-core owner/wrong-user/rollback tests added. | Retain two-account negative smoke checks and add direct route/Prisma coverage when a safe database harness exists. | No |
+| Timer start/stop ownership | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: active reads/start/stop scope by authenticated owner; per-user locking and conditional completion prevent same-user races while allowing separate-user timers. | Manually smoke with two accounts; retain the one-active-timer-per-user rule. | No |
+| Timer Brisbane calendar date | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: completion derives `entryDate` from the stop instant with named Brisbane timezone logic; UTC and midnight regressions pass. | No historical migration; monitor only if a persistence/reporting discrepancy is observed. | No |
+| Ownership and timezone regression coverage | Focused service coverage added; route/database harness still missing | P2 | Test coverage gap | `tests/ownership-regressions.test.mjs` exercises production cores with transactional in-memory adapters; date tests run under UTC. Real Prisma/MariaDB handlers are type/build verified, not database-integrated. | Add direct route/Prisma tests when a disposable MariaDB target exists; keep two-account manual checks meanwhile. | No |
 | Orphaned production records | Confirmed current data defect | P1 | Data integrity | Read-only relationship counts on 18 July 2026 found real orphans; aggregate evidence is recorded below. | Investigate origin, approve treatment, back up, repair through a reviewed preferably idempotent process, and add repeatable integrity checks. | Yes |
 | Push subscription endpoint hardening | Credible risk; environment controls unverified | P2 | Security gap | Subscription validation accepts arbitrary HTTP/HTTPS hosts and `web-push` later constructs an outbound HTTPS request to the stored host. | Require HTTPS and review private, loopback, link-local, unsafe-host, and egress protections; add malicious-host tests. | No |
-| Repository-wide lint debt | Active | P2 | Maintainability debt | 47 errors and 17 warnings on 18 July 2026: 42 explicit `any` errors, 3 React effect/state errors, 2 JSX escaping errors, 13 unused warnings, and 4 hook-dependency warnings. | Address hook correctness first, then API transaction types, then dead code/style. | No |
+| Repository-wide lint debt | Active | P2 | Maintainability debt | After Milestone 2 on 18 July 2026: 38 errors and 17 warnings—33 explicit `any` errors, 3 React effect/state errors, 2 JSX escaping errors, 13 unused warnings, and 4 hook-dependency warnings. The audit baseline was 47/17. | Address hook correctness first, then remaining API transaction types, then dead code/style. | No |
 | Delegation, Spaces, notification, and Push route coverage | Missing/incomplete | P2 | Test coverage gap | Current tests do not exercise participant, member/owner/non-member, recipient, cursor, preference, or subscription ownership at route level. | Add focused role/ownership matrices before expanding those subsystems. | Before affected feature expansion |
 | Copied production logic in tests | Active drift risk | P2 | Test coverage gap | Recurrence-pause and Push-subscription tests reimplement logic; date-time and Push-delivery tests import production modules. | Import small production helpers where practical; label any retained copies as specification examples. | No |
 | CI | Missing | P2 | Test coverage gap | No repository CI configuration exists. | Add type, test, build, and lint gates after the P1 work and a deliberate lint transition. | No |
@@ -713,8 +740,10 @@ Production orphan data must not be mutated without:
    packages were upgraded alone and automated plus safe local route checks passed.
    Complete authenticated login, Server Action, and mutation smoke checks in the
    deployed environment before release.
-2. **Ownership and timer correctness:** add focused regressions, fix global profile
-   reorder, isolate timer start/stop by user, and persist the Brisbane action date.
+2. **Ownership and timer correctness — completed:** focused production-core
+   regressions cover scoped profile reorder, per-user timer isolation, atomic stop,
+   and Brisbane stop-date persistence. Direct database/route coverage awaits a safe
+   disposable MariaDB target.
 3. **Production integrity:** back up, investigate, approve, and safely repair or
    retain the orphan classes; add repeatable count-only checks.
 4. **Verification baseline:** reduce lint debt, add CI, and extend high-risk route
@@ -753,11 +782,10 @@ investigation item.
    limiting and security-header policy?
 3. Is `scripts/create-admin-user.js` still required, and has its known temporary
    password ever been used against a live environment?
-4. Are separate users explicitly intended to have simultaneous active timers?
-5. Is delegated acceptance copy/move behavior the intended long-term origin model?
-6. Is task-title, actor, and decline-reason notification content acceptable on
+4. Is delegated acceptance copy/move behavior the intended long-term origin model?
+5. Is task-title, actor, and decline-reason notification content acceptable on
    locked or shared devices?
-7. Should LOST access remain tied to one named owner or eventually move to a role
+6. Should LOST access remain tied to one named owner or eventually move to a role
    or configuration policy?
 
 ### Resolved Or Retired From The Previous Register
@@ -797,10 +825,10 @@ The Build Playbook PDF is a periodically generated snapshot derived from reposit
 |---|---|---|---|
 | Notifications | Implemented: in-app, preferences, browser push, active-tab suppression | After P1 work or before next notification feature | Review Push endpoint hardening; otherwise monitor badge sync and delivery observability. |
 | Delegated Tasks | Implemented core lifecycle and notification events | Before adding reopen/cancel/detail pages | Preserve participant-only permissions. |
-| Permissions | Distributed; profile reorder and timer routes have confirmed gaps | P1 before further feature work | Fix the confirmed routes with regressions, then consider narrow shared ownership helpers. |
+| Permissions | Distributed; profile reorder and timer ownership gaps are fixed with focused production-core regressions | Before adding similar routes | Prefer narrow, visible ownership helpers and add direct route/Prisma coverage when a safe harness exists. |
 | Database Migrations | Ledger reconciled; production integrity defects confirmed | P1 integrity investigation and every schema change | Follow the approved orphan-safety conditions and Prisma workflow; never use `db push` on Railway. |
 | Collaborative Spaces | Implemented with member/owner helpers | Before major spaces expansion | Review tests and permission coverage. |
-| Timesheets | Manual entries are owner-scoped; timer ownership and Brisbane persistence have confirmed defects | P1 before further feature work | Define simultaneous-user behavior and add owner/timezone regressions with the fixes. |
+| Timesheets | Manual entries and timer operations are owner-scoped; one active timer per user; Brisbane stop-date persistence verified | Before expanding timer behavior | Retain two-user and midnight regressions; add real database route coverage when practical. |
 | Sunday Check-ins / Routine Support | Specialised Evie routine-support workflow | Before making check-ins available to general users | Do not treat the current Sunday-specific workflow as a general configurable check-in system. |
 | PWA / Push | Implemented delivery for delegated notifications | After production push soak | Monitor expired subscriptions and platform badge limitations. |
 | Documentation | Architecture document established | Each major commit | Keep README concise and Playbook operational. |

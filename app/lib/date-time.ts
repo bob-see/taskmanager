@@ -94,6 +94,19 @@ export function getBrisbaneDate(value: DateInput) {
   return getBrisbaneSnapshot(value).date;
 }
 
+/** Store a date-only value at UTC midnight without runtime-timezone shifting. */
+export function dateOnlyToUtcDate(value: string) {
+  const date = parseDateOnly(value);
+  return new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+}
+
+/** Derive a persistable calendar date from an instant in Brisbane. */
+export function getBrisbaneCalendarDate(value: DateInput) {
+  return dateOnlyToUtcDate(getBrisbaneDate(value));
+}
+
 export function addDateOnlyDays(value: string, amount: number) {
   const date = parseDateOnly(value);
   date.setDate(date.getDate() + amount);

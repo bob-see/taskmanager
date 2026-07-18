@@ -1,76 +1,53 @@
 import { prisma } from "@/app/lib/prisma";
-import { createActivityLog } from "@/app/lib/activity-log";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
-  ensureTimesheetProfile,
   parseOptionalNotes,
   serializeTimeEntry,
-  timeEntrySelect,
 } from "@/app/api/timesheets/shared";
-import { toLocalDayStart } from "@/app/timesheets/timesheet-utils";
+import { getBrisbaneCalendarDate } from "@/app/lib/date-time";
+import {
+  requireAuthenticatedTimesheetUser,
+  startOwnedTimer,
+  TimerOperationError,
+} from "@/app/lib/timesheet-timer-core";
+import { prismaTimerStore } from "@/app/api/timesheets/timer/store";
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  const profileId = await ensureTimesheetProfile(body?.profileId);
-  if (profileId.error) return profileId.error;
-
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId.value },
-    select: { userId: true },
+  const currentUser = await requireAuthenticatedTimesheetUser(async () => {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return null;
+    return prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
   });
+  if (currentUser.error) return currentUser.error;
+
+  const body = await req.json().catch(() => ({}));
+  const profileId =
+    typeof body?.profileId === "string" ? body.profileId.trim() : "";
+  if (!profileId) {
+    return Response.json({ error: "profileId is required" }, { status: 400 });
+  }
 
   const notes = parseOptionalNotes(body?.notes);
   if (notes.error) return notes.error;
 
-  const activeTimer = await prisma.timeEntry.findFirst({
-    where: {
-      endTime: null,
-    },
-    select: {
-      id: true,
-      profile: {
-        select: {
-          name: true,
-        },
-      },
-    },
-  });
-
-  if (activeTimer) {
-    return Response.json(
-      { error: `Timer already running for ${activeTimer.profile.name}` },
-      { status: 409 }
-    );
-  }
-
   const now = new Date();
-  const entry = await prisma.$transaction(async (tx: any) => {
-    const createdEntry = await tx.timeEntry.create({
-      data: {
-        profileId: profileId.value,
-        entryDate: toLocalDayStart(now),
-        startTime: now,
-        endTime: null,
-        durationMinutes: null,
-        loggedMinutes: null,
-        roundingMode: null,
-        notes: notes.value,
-        source: "timer",
-      },
-      select: timeEntrySelect,
+  try {
+    const entry = await startOwnedTimer(prismaTimerStore, {
+      userId: currentUser.user.id,
+      profileId,
+      entryDate: getBrisbaneCalendarDate(now),
+      startTime: now,
+      notes: notes.value,
     });
-
-    if (profile?.userId) {
-      await createActivityLog(tx as any, {
-        userId: profile.userId,
-        profileId: profileId.value,
-        timeEntryId: createdEntry.id,
-        type: "time_entry.create",
-        description: "Started timer",
-      });
+    return Response.json(serializeTimeEntry(entry), { status: 201 });
+  } catch (error) {
+    if (error instanceof TimerOperationError) {
+      return Response.json({ error: error.message }, { status: error.status });
     }
-
-    return createdEntry;
-  });
-
-  return Response.json(serializeTimeEntry(entry), { status: 201 });
+    throw error;
+  }
 }

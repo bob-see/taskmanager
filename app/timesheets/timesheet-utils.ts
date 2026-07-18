@@ -2,24 +2,18 @@ import {
   formatAustralianDate,
   parseDateOnly as parseCalendarDate,
 } from "@/app/lib/date-time";
-
-export const TIMESHEET_ROUNDING_MODES = [
-  "exact",
-  "nearest-15",
-  "up-15",
-] as const;
+export {
+  TIMESHEET_ROUNDING_MODES,
+  calculateLoggedMinutes,
+  diffMinutes,
+  isTimesheetRoundingMode,
+  roundMinutes,
+  type TimesheetRoundingMode,
+} from "@/app/lib/timesheet-duration";
 
 export const TIMESHEET_SOURCES = ["manual", "timer"] as const;
 
-export type TimesheetRoundingMode = (typeof TIMESHEET_ROUNDING_MODES)[number];
 export type TimesheetSource = (typeof TIMESHEET_SOURCES)[number];
-
-export function isTimesheetRoundingMode(value: unknown): value is TimesheetRoundingMode {
-  return (
-    typeof value === "string" &&
-    TIMESHEET_ROUNDING_MODES.includes(value as TimesheetRoundingMode)
-  );
-}
 
 export function isTimesheetSource(value: unknown): value is TimesheetSource {
   return typeof value === "string" && TIMESHEET_SOURCES.includes(value as TimesheetSource);
@@ -79,38 +73,6 @@ export function toTimeInputValue(value: Date) {
   const hours = `${value.getHours()}`.padStart(2, "0");
   const minutes = `${value.getMinutes()}`.padStart(2, "0");
   return `${hours}:${minutes}`;
-}
-
-export function diffMinutes(startTime: Date, endTime: Date) {
-  return Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000));
-}
-
-export function roundMinutes(
-  minutes: number,
-  roundingMode: TimesheetRoundingMode
-) {
-  if (roundingMode === "exact") {
-    return minutes;
-  }
-
-  if (roundingMode === "nearest-15") {
-    return Math.round(minutes / 15) * 15;
-  }
-
-  return Math.ceil(minutes / 15) * 15;
-}
-
-export function calculateLoggedMinutes(
-  startTime: Date,
-  endTime: Date,
-  roundingMode: TimesheetRoundingMode
-) {
-  const durationMinutes = diffMinutes(startTime, endTime);
-
-  return {
-    durationMinutes,
-    loggedMinutes: roundMinutes(durationMinutes, roundingMode),
-  };
 }
 
 export function formatDuration(minutes: number) {

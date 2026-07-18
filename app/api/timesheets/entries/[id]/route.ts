@@ -1,4 +1,5 @@
 import { prisma } from "@/app/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { createActivityLog } from "@/app/lib/activity-log";
@@ -104,7 +105,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const rangeError = validateTimeRange(startDateTime, endDateTime);
   if (rangeError) return rangeError;
 
-  const updated = await prisma.$transaction(async (tx: any) => {
+  const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const updatedEntry = await tx.timeEntry.update({
       where: { id },
       data: buildCompletedTimeEntryData({
@@ -120,7 +121,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     });
 
     if (profile.userId) {
-      await createActivityLog(tx as any, {
+      await createActivityLog(tx, {
         userId: profile.userId,
         profileId: profileId.value,
         timeEntryId: updatedEntry.id,
@@ -155,6 +156,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     },
     select: {
       id: true,
+      endTime: true,
       profileId: true,
       profile: {
         select: {
@@ -168,13 +170,20 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return Response.json({ error: "Time entry not found" }, { status: 404 });
   }
 
-  await prisma.$transaction(async (tx: any) => {
+  if (!existing.endTime) {
+    return Response.json(
+      { error: "Active timer entries cannot be deleted here" },
+      { status: 400 }
+    );
+  }
+
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.timeEntry.delete({
       where: { id },
     });
 
     if (existing.profile.userId) {
-      await createActivityLog(tx as any, {
+      await createActivityLog(tx, {
         userId: existing.profile.userId,
         profileId: existing.profileId,
         timeEntryId: existing.id,

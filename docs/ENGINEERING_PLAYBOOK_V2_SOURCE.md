@@ -128,7 +128,7 @@ TaskManager is a private multi-user work-management application designed for pra
 
 **Browser Push and PWA behavior** deliver eligible notifications to subscribed browsers and installed apps, provide safe notification-click navigation, and update supported badges. Detailed delivery mechanics belong in the Architecture and Push documentation.
 
-**Timesheets** provide manual entries and timers, week navigation, duration and rounding calculations, and reporting inputs. Current timer ownership is a known security defect, not a guaranteed boundary.
+**Timesheets** provide manual entries and timers, week navigation, duration and rounding calculations, and reporting inputs. Timer reads and mutations are profile-owner scoped, with one active timer per user and simultaneous timers allowed for separate users.
 
 **Reports and Activity Log** summarise tasks, time, efficiency, completion, and user activity. Standard users see their own activity; administrators have cross-user activity and routine-report access where explicitly implemented.
 
@@ -643,12 +643,13 @@ With `relationMode = "prisma"`, modeled relations are not proof of physical data
 11. [ ] Keep notification/Push navigation same-origin.
 12. [ ] Follow migration-first database evolution and review integrity explicitly.
 
-Two verified gaps are tracked development tasks:
-
-1. **Profile reorder ownership:** the current reorder handler has no session/owner scope, operates over all profiles, and can return basic cross-user profile metadata.
-2. **Timer start/stop ownership:** current handlers do not establish the current user or restrict active timers/profiles to that owner.
-
-When fixed, both require direct route regression tests using at least two users. Remove these documented gaps only after the implementation and corresponding regression tests are complete, and the owning Security and Testing documents are current. See [`docs/SECURITY.md`](./SECURITY.md).
+The former profile reorder and timer ownership gaps are fixed. Reorder validates and
+updates only the authenticated owner's complete profile set. Timer reads/start/stop
+scope through owned profiles, serialise same-user operations, allow separate-user
+timers, and finalise the Brisbane stop date atomically. Production-core regressions
+cover owner/wrong-user, rollback, concurrency, and timezone behavior. Direct
+NextAuth/Prisma route tests still require a safe disposable MariaDB target. See
+[`docs/SECURITY.md`](./SECURITY.md).
 
 ## Security Review Method
 
@@ -986,12 +987,15 @@ Playbook intentionally contains no personal data, row content, names, or IDs.
    advisories from the baseline audit are cleared; remaining Prisma, PostCSS, and
    NextAuth transitive advisories stay in the dependency/toolchain register. Do not
    run `npm audit fix --force` blindly.
-2. Fix global profile-reorder cross-user authorisation and add owner/wrong-user
-   regressions.
-3. Fix timer start/stop ownership, explicitly decide simultaneous-user timer
-   behavior, and add two-user regressions.
-4. Persist timer entry dates using the Brisbane calendar day at action time and
-   test Brisbane midnight boundaries.
+2. **Profile reorder ownership completed and verified.** Reorder authenticates,
+   validates the owner's complete profile set, and mutates/returns only owned rows
+   in one transaction.
+3. **Timer ownership completed and verified.** Active reads, start, and stop scope
+   by authenticated owner. One timer is allowed per user, separate users may run
+   timers simultaneously, and per-user locking plus conditional completion handles
+   repeated/concurrent stops.
+4. **Timer Brisbane date completed and verified.** The stop instant determines the
+   named-timezone Brisbane calendar date; elapsed duration remains instant-based.
 5. Investigate the confirmed production orphans and agree a treatment plan.
 
 Production orphan data must not be mutated without a verified backup, likely-origin
@@ -1010,11 +1014,12 @@ application database; they remain mandatory before release.
 
 ## Active Planned Debt
 
-- **Testing:** no route-authorisation harness; missing delegated lifecycle,
-  Collaborative Spaces, notification, Push-subscription, timesheet, and reporting
-  route coverage; recurrence and Push-subscription tests still copy production
-  logic; no CI or disposable MariaDB migration/integrity target.
-- **Lint and maintainability:** 47 errors and 17 warnings remain; permission and
+- **Testing:** production-core profile reorder/timer ownership and Brisbane-date
+  regressions now exist, but no direct Prisma route-authorisation harness remains;
+  delegated lifecycle, Collaborative Spaces, notification, Push-subscription,
+  broader timesheet, and reporting route coverage is missing; no CI or disposable
+  MariaDB migration/integrity target exists.
+- **Lint and maintainability:** 38 errors and 17 warnings remain; permission and
   task-action logic is distributed; selected Home, Overview, and Reports queries
   load broad or unbounded datasets.
 - **Security and operations:** Push endpoint host validation needs review; the
@@ -1044,11 +1049,10 @@ active investigation.
 2. Confirm public reachability and Vercel/WAF rate-limit and security-header policy.
 3. Confirm whether `scripts/create-admin-user.js` is required or has used its known
    temporary password against a live environment.
-4. Confirm whether different users should have simultaneous active timers.
-5. Confirm long-term delegated acceptance copy/move origin semantics.
-6. Confirm whether task-title, actor, and decline-reason Push content is acceptable
+4. Confirm long-term delegated acceptance copy/move origin semantics.
+5. Confirm whether task-title, actor, and decline-reason Push content is acceptable
    on locked or shared devices.
-7. Confirm whether LOST access should remain owner-specific or move to role/config.
+6. Confirm whether LOST access should remain owner-specific or move to role/config.
 
 ## Resolved And Retired
 
@@ -1085,7 +1089,7 @@ This chapter records the practical judgement developed while building and docume
 | Test security through direct access. | A hidden link, disabled action, or filtered picker is presentation. Call the page or API as the wrong user and verify the predicate, response, and unchanged data. |
 | Generated documents must not compete with living sources. | A PDF is useful because it is portable, not authoritative. It needs a source commit/date, and corrections begin in repository Markdown. |
 | Documentation should become clearer, not endlessly larger. | Maturity means stronger ownership, fewer contradictions, better summaries, and removal of obsolete material. Restraint is part of documentation architecture. |
-| Real defects should create regression tests. | When profile reorder and timer ownership are fixed, wrong-user cases should fail before the fix and pass after it so the repository retains the lesson. |
+| Real defects should create regression tests. | Profile reorder and timer ownership now retain production-core wrong-user, rollback, concurrency, and timezone regressions; direct database route coverage remains the next test-harness step. |
 | Understand before optimising. | Repository inspection and architectural understanding produce better decisions than immediate refactoring based on symptoms or memory. Investigate before concluding. |
 | Prefer reversible decisions where practical. | Focused commits, additive changes, incremental migrations, and explicit review triggers reduce recovery cost when evidence changes. |
 | Engineering quality compounds. | Small improvements to names, boundaries, tests, and documentation accumulate, just as small shortcuts do. Each accepted change should leave the system at least as coherent as before. |

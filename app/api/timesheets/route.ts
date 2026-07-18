@@ -7,13 +7,18 @@ import {
   serializeTimeEntry,
   timeEntrySelect,
 } from "@/app/api/timesheets/shared";
+import { requireAuthenticatedTimesheetUser } from "@/app/lib/timesheet-timer-core";
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const currentUser = await requireAuthenticatedTimesheetUser(async () => {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return null;
+    return prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, email: true },
+    });
+  });
+  if (currentUser.error) return currentUser.error;
 
   const { searchParams } = new URL(req.url);
   const weekStart = parseWeekStartParam(searchParams.get("weekStart"));
@@ -22,9 +27,7 @@ export async function GET(req: Request) {
   const [profiles, entries, activeTimer] = await Promise.all([
     prisma.profile.findMany({
       where: {
-        user: {
-          email: session.user.email,
-        },
+        userId: currentUser.user.id,
       },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: {
@@ -35,9 +38,7 @@ export async function GET(req: Request) {
     prisma.timeEntry.findMany({
       where: {
         profile: {
-          user: {
-            email: session.user.email,
-          },
+          userId: currentUser.user.id,
         },
         entryDate: {
           gte: weekStartDate,
@@ -53,9 +54,7 @@ export async function GET(req: Request) {
     prisma.timeEntry.findFirst({
       where: {
         profile: {
-          user: {
-            email: session.user.email,
-          },
+          userId: currentUser.user.id,
         },
         endTime: null,
       },

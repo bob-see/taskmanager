@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   addDateOnlyDays,
   advanceDateIfCurrent,
+  dateOnlyToUtcDate,
   formatAustralianDate,
   formatBrisbaneTimestamp,
+  getBrisbaneCalendarDate,
   getBrisbaneDate,
   getBrisbaneSnapshot,
   getGreetingForHour,
@@ -69,6 +71,21 @@ test("Brisbane snapshots respect the UTC day boundary", () => {
     date: "2026-07-18",
     hour: 0,
   });
+});
+
+test("Brisbane calendar dates persist at deterministic UTC midnight", () => {
+  assert.equal(
+    getBrisbaneCalendarDate("2026-07-17T13:59:59.000Z").toISOString(),
+    "2026-07-17T00:00:00.000Z"
+  );
+  assert.equal(
+    getBrisbaneCalendarDate("2026-07-17T14:00:00.000Z").toISOString(),
+    "2026-07-18T00:00:00.000Z"
+  );
+  assert.equal(
+    dateOnlyToUtcDate("2026-07-18").toISOString(),
+    "2026-07-18T00:00:00.000Z"
+  );
 });
 
 test("long-lived clients can schedule and apply Brisbane midnight rollover", () => {

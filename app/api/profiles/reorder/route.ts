@@ -1,4 +1,13 @@
 import { prisma } from "@/app/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import {
+  ProfileReorderError,
+  requireAuthenticatedProfileUser,
+  reorderOwnedProfiles,
+  type OwnedProfileReorderStore,
+} from "@/app/lib/profile-reorder-core";
 
 const profileSelect = {
   id: true,
@@ -10,62 +19,63 @@ const profileSelect = {
   updatedAt: true,
 } as const;
 
+type ReorderedProfile = Prisma.ProfileGetPayload<{
+  select: typeof profileSelect;
+}>;
+
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  const orderedIds = body?.orderedIds;
-
-  if (
-    !Array.isArray(orderedIds) ||
-    orderedIds.length === 0 ||
-    orderedIds.some((id) => typeof id !== "string")
-  ) {
-    return Response.json(
-      { error: "orderedIds must be a non-empty string array" },
-      { status: 400 }
-    );
-  }
-
-  if (new Set(orderedIds).size !== orderedIds.length) {
-    return Response.json(
-      { error: "orderedIds must not contain duplicates" },
-      { status: 400 }
-    );
-  }
-
-  const profiles = await prisma.profile.findMany({
-    select: { id: true },
-  });
-
-  if (profiles.length !== orderedIds.length) {
-    return Response.json(
-      { error: "orderedIds must include every profile exactly once" },
-      { status: 400 }
-    );
-  }
-
-  const existingIds = new Set(profiles.map((profile: { id: string }) => profile.id));
-  if (orderedIds.some((id) => !existingIds.has(id))) {
-    return Response.json(
-      { error: "orderedIds must only contain valid profile ids" },
-      { status: 400 }
-    );
-  }
-
-  const reorderedProfiles = await prisma.$transaction(async (tx: any) => {
-    await Promise.all(
-      orderedIds.map((id, index) =>
-        tx.profile.update({
-          where: { id },
-          data: { order: index },
-        })
-      )
-    );
-
-    return tx.profile.findMany({
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: profileSelect,
+  const currentUser = await requireAuthenticatedProfileUser(async () => {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return null;
+    return prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
     });
   });
+  if (currentUser.error) return currentUser.error;
 
-  return Response.json(reorderedProfiles);
+  const body = await req.json().catch(() => ({}));
+
+  const store: OwnedProfileReorderStore<ReorderedProfile> = {
+    transaction(operation) {
+      return prisma.$transaction((tx) =>
+        operation({
+          listOwnedProfiles(userId) {
+            return tx.profile.findMany({
+              where: { userId },
+              select: { id: true },
+            });
+          },
+          async updateOwnedProfileOrder(userId, profileId, order) {
+            const result = await tx.profile.updateMany({
+              where: { id: profileId, userId },
+              data: { order },
+            });
+            return result.count === 1;
+          },
+          listReorderedProfiles(userId) {
+            return tx.profile.findMany({
+              where: { userId },
+              orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+              select: profileSelect,
+            });
+          },
+        })
+      );
+    },
+  };
+
+  try {
+    const reorderedProfiles = await reorderOwnedProfiles(
+      store,
+      currentUser.user.id,
+      body?.orderedIds
+    );
+    return Response.json(reorderedProfiles);
+  } catch (error) {
+    if (error instanceof ProfileReorderError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
 }

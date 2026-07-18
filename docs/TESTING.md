@@ -32,9 +32,17 @@ validation, migration status, the dependency-tree check, and `git diff --check`
 passed. Full lint failed with 47 errors and 17 warnings. The test run emitted two
 non-fatal Node module-type reparsing warnings for imported TypeScript modules.
 
+After the 18 July 2026 profile/timer ownership milestone, the current suite has
+five test files and 42 passing cases. Type checking, changed-file lint, Prisma
+validation, the production build, and Node 22.13.0 tests/type checking pass. Full
+lint is 38 errors and 17 warnings; the nine-error reduction is confined to the
+affected routes.
+The expanded suite emits three non-fatal module-type reparsing warnings for
+production TypeScript modules loaded directly by Node's test runner.
+
 | Command | What it checks | What it does not check | Connectivity and safety |
 |---|---|---|---|
-| `npm test` | Runs Node's test runner with TypeScript stripping enabled: the four current test files and 31 test cases. | Routes, browsers, a live database, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
+| `npm test` | Runs Node's test runner with TypeScript stripping enabled: five test files and 42 test cases. | Real Prisma route/database integration, browsers, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
 | `npm run lint` | Runs ESLint over the repository using the checked-in Next.js ESLint configuration. | Runtime behavior, authorisation, database integrity, and browser/device behavior. | No database connectivity expected; safe locally. |
 | `npm run build` | Runs the Next.js production build, including compilation and framework build-time checks. | Correct domain behavior, permissions, migrations, real browser behavior, or deployment configuration. | Intended to be safe locally, but requires installed dependencies and any build-time environment expected by imported code; it must not mutate shared data. |
 | `npx prisma validate` | Validates Prisma schema/config structure. | Whether migrations apply, live schema matches, data is preserved, or relations contain no orphans. | Reads configured environment; normally no database write. Safe only after confirming it targets the intended configuration. |
@@ -49,25 +57,29 @@ Do not use `prisma db push` or `prisma migrate reset` against shared Railway dat
 | Test file | Area | Level | What it verifies | Main exclusions |
 |---|---|---|---|---|
 | `tests/date-time.test.mjs` | Deterministic date/time rendering | Production-coupled utility tests | Calendar-date parsing, Australian July formatting, Brisbane timestamps, midnight/noon/evening boundaries, rollover scheduling, Monday week boundaries, selected-date preservation, action-time dates, explicit hour cycles, and greeting boundaries. | React hydration itself and browser event dispatch. |
+| `tests/ownership-regressions.test.mjs` | Profile reorder and timesheet timer ownership | Production-core service tests with transactional in-memory adapters | Unauthenticated boundaries, complete owned-profile reorder, mixed-owner/unknown rollback, separate-user timers, same-user conflict, wrong-profile start, wrong-user read/stop, Brisbane stop date, real elapsed duration, and concurrent/repeated stop finalisation. | NextAuth and real Prisma/MariaDB route integration; manual two-account verification remains required. |
 | `tests/recurrence-pause.test.mjs` | Recurrence and pause rules | Pure logic, duplicated test implementation | Finite pause boundary, indefinite pause, next occurrence after pause, daily and fortnightly intervals, routine due/off-days, default daily interval, paused-view filtering, and expired pauses. | Reimplements helpers inside the test instead of importing application code; no routes, persistence, UI, series deletion, timezone integration, or production recurrence-module coupling. |
 | `tests/push-subscriptions.test.mjs` | Push subscription validation and hashing | Pure logic, duplicated test implementation | Deterministic SHA-256 endpoint hash, accepted browser subscription shape, trimming, ignored client user ID, missing-key rejection, and rejection of a `javascript:` endpoint. | Reimplements hashing/validation instead of importing `app/lib/push-subscriptions.ts`; no authenticated route ownership, Prisma storage, length limits, HTTP edge cases, browser subscription API, or real provider. |
 | `tests/push-delivery.test.mjs` | Web Push delivery core and payload mapping | Service-level with mocks | Global and per-type preference handling, missing preference behavior, missing VAPID handling, no-subscription handling, multi-device attempts, isolated temporary failure, `404`/`410` cleanup, Push delivery without an in-app row, same-origin target sanitisation, unread badge payload, and concise payload mapping. | Database, logger, VAPID configuration, and Web Push transport are mocked; no dispatcher/route, real Prisma, provider encryption/delivery, service worker, browser permission, device receipt, or UI state. |
 
-`date-time.test.mjs` and `push-delivery.test.mjs` import their production implementations (`app/lib/date-time.ts` and `app/lib/push-delivery-core.ts`). `recurrence-pause.test.mjs` and `push-subscriptions.test.mjs` copy production logic and can drift independently from it. None of the current files are route-level, database-integration, browser/UI, or end-to-end tests.
+`date-time.test.mjs`, `ownership-regressions.test.mjs`, and
+`push-delivery.test.mjs` import production implementations.
+`recurrence-pause.test.mjs` and `push-subscriptions.test.mjs` copy production logic
+and can drift independently from it. The ownership tests exercise the production
+service/authentication seams but use in-memory adapters; none of the current files
+is a real Prisma database-integration, browser/UI, or end-to-end test.
 
 ## Current Coverage Boundaries
 
 The current automated suite does not prove:
 
-- route-level authentication or profile/task/project/time-entry ownership;
+- general route-level authentication or profile/task/project/time-entry ownership beyond the focused profile-reorder/timer production-core tests;
 - Group-scoped user discovery or same-group/out-of-group behavior;
 - delegated participant permissions, lifecycle transitions, shared notes, or notification recipients;
-- profile reorder ownership—the current handler has a confirmed cross-user gap;
-- timer start/stop ownership—the current handlers have confirmed cross-user gaps;
 - notification creation, duplicate-event persistence, recipient-scoped list/read/clear operations, or preference-route ownership;
 - Push subscription route ownership, database persistence, device removal, or real provider delivery;
 - Collaborative Space membership, owner-only controls, member mutations, child-resource scoping, or destructive deletion constraints;
-- manual timesheet workflows, timer isolation, rounding/reporting integration, reports, or activity access;
+- manual timesheet workflows, real-database timer isolation, rounding/reporting integration, reports, or activity access;
 - Sunday Check-ins, Routine Support, Brisbane Sunday logic, or reporting summaries;
 - React UI behavior, responsive layout, accessibility, title/favicon badges, PWA installation, or real service-worker behavior;
 - desktop notification permission/delivery, iPhone Home Screen delivery, lock-screen content, or notification-click authentication redirects;
@@ -136,12 +148,11 @@ After deployment, minimally verify login, Overview, one profile task list, task 
 
 Use [TaskManager Security](./SECURITY.md) for the authoritative invariants and full security checklist. At minimum, call APIs directly; test unauthenticated and authenticated wrong-user access; test wrong-Group discovery and role differences; verify every mutation includes its intended owner, recipient, participant, or membership scope; inspect responses for cross-user data; request restricted routes server-side; and review logs for secrets or unnecessary personal data.
 
-Two confirmed defects need regression tests when fixed:
-
-- profile reorder must authenticate, restrict IDs and returned rows to the current owner, and reject/cannot affect another user's profiles;
-- timer start and stop must authenticate and isolate the active timer/profile to the current owner, including simultaneous different-user cases.
-
-This documentation task does not change either implementation.
+The former profile-reorder and timer ownership defects now have production-core
+regressions for unauthenticated, owner, wrong-user, atomicity, concurrency, and
+timezone behavior. Direct NextAuth/Prisma route tests remain unavailable until the
+repository has a safe disposable MariaDB target, so post-deployment two-account
+negative checks remain mandatory.
 
 ## Delegated Task Test Matrix
 
@@ -175,7 +186,12 @@ The profile/timesheet interfaces use local `Date` operations and Monday-start we
 
 Manual and future automated checks should cover current-week default selection, previous/next week navigation, manual create/update/delete under the owning profile, invalid time ranges, notes/source validation, active versus completed entries, and report totals. Verify exact, nearest-15, and up-15 duration rounding at below/above-half and exact-quarter boundaries.
 
-For timers, test start, stop, no-active-timer response, duplicate/global active-timer behavior, notes, duration, selected rounding, activity logging, and reporting impact. Use two authenticated users with distinct profiles to verify one user's active timer cannot be discovered, blocked, started, or stopped by the other. Those ownership/isolation cases are mandatory regression coverage when the known timer defect is fixed.
+For timers, test start, stop, no-active-timer response, same-user duplicate start,
+separate-user simultaneous timers, notes, duration, selected rounding, activity
+logging, and reporting impact. Use two authenticated users with distinct profiles
+to verify one user's active timer cannot be discovered, blocked, started, or
+stopped by the other. Production-core regressions now cover these ownership and
+concurrency rules; real route/database and browser checks remain manual.
 
 ## Collaborative Spaces Testing
 
@@ -230,8 +246,8 @@ A confirmed defect should normally produce a reproducible case, a failing automa
 | Area | Current state | Risk | Recommended next step | Priority |
 |---|---|---|---|---|
 | Route authorisation | No route-level suite | Cross-user data or mutation regressions across a multi-user app | Establish a small route-test harness around session/database seams and highest-risk endpoints. | High |
-| Profile reorder | Confirmed cross-user defect; no test | Profile metadata exposure and global reorder | Add owner/wrong-owner regression tests with the fix. | High |
-| Timer ownership | Confirmed cross-user start/stop defects; no test | One user can affect another's timer | Add simultaneous two-user route regression tests with the fix. | High |
+| Profile reorder | Fixed; production-core owner/wrong-owner/rollback tests pass | Real route/Prisma wiring is not database-integrated | Add direct route tests when a disposable MariaDB target exists; retain two-account smoke checks. | Medium |
+| Timer ownership | Fixed; production-core per-user/concurrency/timezone tests pass | Real route/Prisma wiring is not database-integrated | Add direct route tests when a disposable MariaDB target exists; retain two-account smoke checks. | Medium |
 | Delegated lifecycle | Manual/code inspection only | Participant or state-transition regression | Cover every current transition, stale state, notes, and recipients at route/service level. | High |
 | Notification/Push ownership | Push core tested; routes and dispatcher ownership untested | Wrong recipient/subscription mutation or data leak | Add recipient-scoped notification and authenticated subscription route tests. | High |
 | Group and Space permissions | No automated permission coverage | Discovery leaks or non-member/role bypass | Add Group visibility and owner/member/non-member route cases. | High |
