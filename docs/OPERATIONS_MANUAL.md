@@ -142,6 +142,53 @@ If a migration fails, or if `prisma migrate deploy` reports duplicate columns, e
 
 Do not duplicate drift-recovery steps here; the migration workflow document owns that process.
 
+## Orphan-Data Remediation (Not Authorised)
+
+The 18 July 2026 Milestone 3 investigation reproduced seven orphan classes in
+production and added the read-only `npm run db:integrity:audit` command. Every run
+uses one `REPEATABLE READ`, read-only consistent snapshot for all relationship,
+impact and migration-ledger queries, then rolls the transaction back. Exact
+aggregate evidence and proposed per-class treatments are in
+[Architecture: Production Data-Integrity Evidence](./ARCHITECTURE.md#production-data-integrity-evidence).
+Investigation is complete; no production treatment has been approved.
+
+The eventual repair should be a reviewed one-off operational runbook backed by a
+small Node/Prisma script, not a schema migration or ad hoc console command. It
+should default to dry-run, omit personal data from logs, and require an explicit
+apply flag plus approved count assertions. Parameterised raw SQL may be used only
+inside that reviewed, transaction-bound script where Prisma cannot safely address
+an orphan row.
+
+Required sequence:
+
+1. Create and verify a restorable Railway backup; record the restore procedure and
+   responsible operator.
+2. Run `npm run db:integrity:audit` immediately before treatment and compare all 28
+   relation counts with the approved baseline.
+3. Obtain written approval per class: archive/delete for profile/task/project and
+   Space subgraphs, delete for notes whose tasks were deliberately deleted, and a
+   specific retention decision for historical time entries.
+4. Run the future repair script in dry-run mode. Report aggregate intended effects
+   only, including downstream cells, status options and notes.
+5. Require exact count assertions for every affected class. Abort if any count,
+   overlap or active-timer check differs; do not silently adopt a new baseline.
+6. Treat each logical subgraph in dependency order inside a transaction where
+   practical. Treat Space rows and columns once per missing Space.
+7. Make treatment idempotent: an already-treated class produces zero intended
+   changes; a partially changed non-zero class aborts.
+8. Stop on any unexpected relation, constraint, transaction or count result.
+9. Rerun all 28 checks and require the approved classes to be clean while every
+   unrelated zero count remains zero.
+10. Smoke-test Home, Tracker, Overview, Timesheets, Reports, Delegated Tasks,
+    Collaborative Spaces, Notifications, Settings and user-activity history.
+11. If checks fail, stop application writes if necessary and use the verified
+    restore plan; do not improvise reverse SQL from incomplete logs.
+12. Record decisions, before/after aggregate counts, operator, timestamp, backup
+    reference, smoke results and any retained/archive location.
+
+Do not add mutation support to the current audit script. Treatment belongs in a
+separately reviewed milestone after the required human decisions.
+
 ## Deployment Preparation
 
 Before deploying:

@@ -667,7 +667,7 @@ same timer twice. Timer completion persists the calendar date derived from the s
 instant in `Australia/Brisbane`, stored deterministically at UTC midnight, while
 elapsed duration continues to use the real start and stop instants.
 
-The suite now has 42 passing tests, including production-core regressions for
+The suite now has 47 passing tests, including production-core regressions for
 unauthenticated boundaries, owner/wrong-user cases, atomic reorder validation,
 separate-user and same-user timer behavior, concurrent stop attempts, UTC-process
 execution, and Brisbane midnight boundaries. These service-level tests use
@@ -687,13 +687,13 @@ build, and Node 22.13.0 tests/type checking passed. Full lint is now 38 errors a
 | Timer start/stop ownership | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: active reads/start/stop scope by authenticated owner; per-user locking and conditional completion prevent same-user races while allowing separate-user timers. | Manually smoke with two accounts; retain the one-active-timer-per-user rule. | No |
 | Timer Brisbane calendar date | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: completion derives `entryDate` from the stop instant with named Brisbane timezone logic; UTC and midnight regressions pass. | No historical migration; monitor only if a persistence/reporting discrepancy is observed. | No |
 | Ownership and timezone regression coverage | Focused service coverage added; route/database harness still missing | P2 | Test coverage gap | `tests/ownership-regressions.test.mjs` exercises production cores with transactional in-memory adapters; date tests run under UTC. Real Prisma/MariaDB handlers are type/build verified, not database-integrated. | Add direct route/Prisma tests when a disposable MariaDB target exists; keep two-account manual checks meanwhile. | No |
-| Orphaned production records | Confirmed current data defect | P1 | Data integrity | Read-only relationship counts on 18 July 2026 found real orphans; aggregate evidence is recorded below. | Investigate origin, approve treatment, back up, repair through a reviewed preferably idempotent process, and add repeatable integrity checks. | Yes |
+| Orphaned production records | Investigated; remediation not authorised | P2 | Data integrity | The 18 July 2026 Milestone 3 audit reproduced all seven orphan classes and found no count change, active timer, active owner/membership path, or current cross-user exposure. It also confirmed downstream Space data and historical delete evidence. | Obtain per-class human approval, back up, dry-run an assertion-gated repair, then add destructive-route integration coverage. | Before schema/relation work; not ordinary feature work |
 | Push subscription endpoint hardening | Credible risk; environment controls unverified | P2 | Security gap | Subscription validation accepts arbitrary HTTP/HTTPS hosts and `web-push` later constructs an outbound HTTPS request to the stored host. | Require HTTPS and review private, loopback, link-local, unsafe-host, and egress protections; add malicious-host tests. | No |
 | Repository-wide lint debt | Active | P2 | Maintainability debt | After Milestone 2 on 18 July 2026: 38 errors and 17 warnings—33 explicit `any` errors, 3 React effect/state errors, 2 JSX escaping errors, 13 unused warnings, and 4 hook-dependency warnings. The audit baseline was 47/17. | Address hook correctness first, then remaining API transaction types, then dead code/style. | No |
 | Delegation, Spaces, notification, and Push route coverage | Missing/incomplete | P2 | Test coverage gap | Current tests do not exercise participant, member/owner/non-member, recipient, cursor, preference, or subscription ownership at route level. | Add focused role/ownership matrices before expanding those subsystems. | Before affected feature expansion |
 | Copied production logic in tests | Active drift risk | P2 | Test coverage gap | Recurrence-pause and Push-subscription tests reimplement logic; date-time and Push-delivery tests import production modules. | Import small production helpers where practical; label any retained copies as specification examples. | No |
 | CI | Missing | P2 | Test coverage gap | No repository CI configuration exists. | Add type, test, build, and lint gates after the P1 work and a deliberate lint transition. | No |
-| Disposable MariaDB migration/integrity target | Missing | P2 | Operational limitation | `relationMode = "prisma"` has no physical foreign-key safety; there is no repeatable non-production migration target or automated orphan suite. | Define a safe disposable target and count-only integrity checks before further relation/destructive work. | Before schema/destructive work |
+| Disposable MariaDB migration/integrity target | Missing | P2 | Operational limitation | `relationMode = "prisma"` has no physical foreign-key safety. A repeatable production count-only audit now exists, but there is no disposable migration/destructive-route target. | Define a safe disposable target and exercise cascade/set-null behavior before further relation/destructive work. | Before schema/destructive work |
 | Distributed permission and task-action logic | Active | P2 | Maintainability debt | Ownership checks are repeated across profile/task/project routes, while Tracker and Overview duplicate significant task-action behavior. | Consolidate narrow domain helpers without introducing a broad generic permission framework. | Before adding similar routes/actions |
 | Query and payload scaling | Evidence-based risk; no current incident | P2 | Operational limitation | Home performs one task request per profile; Overview loads all open tasks and note histories; Reports loads all historical tasks/time entries before in-memory filtering. | Add scoped summary queries, database period filtering, and pagination only where data growth or measured latency warrants it. | No |
 | Legacy admin bootstrap script | Requires investigation | P2 | Security gap | `scripts/create-admin-user.js` contains a known temporary password, can reset an administrator hash, and prints the credential. | Confirm whether it is still needed or has been used live; remove it or require explicit safe inputs and target confirmation. | No |
@@ -708,24 +708,83 @@ build, and Node 22.13.0 tests/type checking passed. Full lint is now 38 errors a
 
 ### Production Data-Integrity Evidence
 
-The audit ran read-only `LEFT JOIN ... COUNT(*)` checks across 28 modelled
-relationships. It returned aggregate counts only; no personal data, row content,
-names, or identifiers were read into the audit record.
+Milestone 3 reran a fixed, read-only audit against Railway production at
+2026-07-18T02:29Z. The database was at all 32 committed migrations and had zero
+physical foreign keys. The audit returned aggregate counts and metadata only; it
+did not retrieve names, email addresses, task/Space content, notes, descriptions,
+messages, row IDs, or parent IDs. Counts matched the earlier 18 July baseline.
 
-| Orphan relationship/class | Count | Additional safe aggregate context |
-|---|---:|---|
-| Tasks referencing missing profiles | 6 | Across 2 missing parents; 4 tasks are open |
-| Tasks referencing missing projects | 1 | The task is open |
-| Task notes referencing missing tasks | 5 | Across 3 missing tasks |
-| Projects referencing missing profiles | 2 | Both are not archived |
-| Time entries referencing missing profiles | 4 | None is an active timer |
-| Matrix columns referencing missing Spaces | 32 | Across 7 missing Spaces; all are unarchived |
-| Matrix rows referencing missing Spaces | 80 | Across 9 missing Spaces; 79 are not done |
+| Child relation | Parent | Schema action | Orphans |
+|---|---|---|---:|
+| `notification.recipientUserId` | `user` | Required; Cascade | 0 |
+| `notification.actorUserId` | `user` | Optional; SetNull | 0 |
+| `notificationpreference.userId` | `user` | Required; Cascade | 0 |
+| `pushsubscription.userId` | `user` | Required; Cascade | 0 |
+| `usergroupmember.userId` | `user` | Required; Cascade | 0 |
+| `usergroupmember.groupId` | `usergroup` | Required; Cascade | 0 |
+| `task.profileId` | `profile` | Optional; Cascade | 6 |
+| `task.projectId` | `project` | Optional; SetNull | 1 |
+| `delegatedtask.taskId` | `task` | Required; Cascade | 0 |
+| `delegatedtask.assignedByUserId` | `user` | Optional; SetNull | 0 |
+| `delegatedtask.assignedToUserId` | `user` | Optional; SetNull | 0 |
+| `tasknote.taskId` | `task` | Required; Cascade | 5 |
+| `tasknote.userId` | `user` | Optional; SetNull | 0 |
+| `profile.userId` | `user` | Optional; Cascade | 0 |
+| `sundaycheckin.profileId` | `profile` | Required; Cascade | 0 |
+| `project.profileId` | `profile` | Required; Cascade | 2 |
+| `timeentry.profileId` | `profile` | Required; Cascade | 4 |
+| `spacemember.spaceId` | `collaborativespace` | Required; Cascade | 0 |
+| `spacemember.userId` | `user` | Required; Cascade | 0 |
+| `matrixrow.spaceId` | `collaborativespace` | Required; Cascade | 80 |
+| `matrixcolumn.spaceId` | `collaborativespace` | Required; Cascade | 32 |
+| `columnstatusoption.columnId` | `matrixcolumn` | Required; Cascade | 0 |
+| `matrixcell.rowId` | `matrixrow` | Required; Cascade | 0 |
+| `matrixcell.columnId` | `matrixcolumn` | Required; Cascade | 0 |
+| `matrixcell.statusOptionId` | `columnstatusoption` | Optional; SetNull | 0 |
+| `matrixcell.userIdValue` | `user` | Optional; SetNull | 0 |
+| `matrixcellnote.cellId` | `matrixcell` | Required; Cascade | 0 |
+| `matrixcellnote.userId` | `user` | Required; Cascade | 0 |
 
-All other checked immediate relationships returned zero orphans. Clean immediate
-cell-to-row/column counts do not prove that the inaccessible orphaned Space
-subgraphs contain no child cells or notes; that belongs in the dedicated integrity
-investigation.
+#### Confirmed classes, impact and proposed treatment
+
+| Class | Aggregate evidence | Likely cause and confidence | Current impact | Proposed treatment (not authorised) |
+|---|---|---|---|---|
+| Tasks → missing profiles | 6 tasks across 2 missing profiles; 4 open; created 25 April 2026 15:37–18:38 UTC; updated 15:39–18:38 UTC; no delegated-task or note children; 2 activity references | Two of the 3 missing profile IDs found across all profile-child classes have recorded `profile.delete` events on 5–10 May. Historical deletion ran while production had no physical FK protection. **High confidence** for those parents; the third missing profile is plausibly import/early-deletion residue. | Excluded from Home, Tracker, Overview, Delegated and Reports because the owner profile no longer exists. Small storage/privacy residue; could obstruct future FK work. | Archive aggregate-approved subgraphs if business history is required, then delete children in a reviewed repair. Do not reattach automatically or recreate profiles without owner/name/order evidence. |
+| Task → missing project | 1 open task; created/updated 25 April; its profile is also missing; no project-specific activity record | Historical project deletion without an enforced `SetNull`, or imported inconsistency. **Plausible**; no matching project activity was found. | Not independently user-visible because the task's profile is also missing. | Treat with its missing-profile subgraph. If that task is retained or archived, set its project relation to null in the future repair rather than reconstructing an unknown project. |
+| Task notes → missing tasks | 5 notes across 3 missing tasks; created 4 June 02:00–02:17 UTC. All 3 missing tasks have `task.create` and later `task.delete` activity; deletes occurred 4 June 13:42 UTC. | Parent tasks were deliberately deleted before Prisma relation emulation was enabled and without a physical task-note FK. **Confirmed.** | Not returned by active task, delegated or note queries. Retains potentially sensitive deleted-task content. | Delete after backup and count approval; do not reattach notes to unrelated tasks. |
+| Projects → missing profiles | 2 projects across 2 missing profiles; both unarchived; created 25 April 16:03–17:15 UTC; updated through 18:00 UTC; 3 task references | Same missing-profile deletion history. **High confidence** for parent deletion; exact per-project path is not recoverable without content inspection. | Excluded from profile/project/report queries. Referenced tasks are within the inaccessible subgraphs. | Archive with the parent subgraph if required, then delete in dependency order. No automatic reattachment. |
+| Time entries → missing profiles | 4 entries across 3 missing profiles; created 20–25 April; none active; no activity references | Two parents have recorded profile deletion; the oldest entry predates the MariaDB cut-over and supports legacy/import residue for the third. **High confidence/plausible mixed cause.** | Excluded from Timesheets and Reports and cannot affect active timers. May still be a business/audit record. | **Human decision:** retain outside the live relational graph or archive before deletion if timesheet history has business value; otherwise delete with the profile subgraph. |
+| Matrix columns → missing Spaces | 32 columns across 7 missing Spaces; all unarchived. All 32 IDs are CUIDs, implying creation 20 May 23:53–25 May 17:57 UTC; 35 status options, 17 cells and 2 cell notes remain downstream. | Parent Spaces were removed without child cleanup. No matching Space activity exists, so deletion most likely predated activity logging or bypassed that route. **High confidence parent deletion; unknown mechanism.** | No membership references remain, so the data is not reachable through Spaces. It may contain meaningful historical content and could block future FK work. | **Human decision:** archive the complete inaccessible Space subgraphs, then delete notes/cells/options/columns/rows atomically. Do not reconstruct ownerless Spaces automatically. |
+| Matrix rows → missing Spaces | 80 rows across 9 missing Spaces; 79 not done. All 80 IDs are CUIDs, implying creation 20 May 23:52–25 May 17:54 UTC; the same 17 cells and 2 notes are downstream. Seven missing Spaces overlap the column class; two have rows only. | Same as missing columns. **High confidence parent deletion; unknown mechanism.** | Same as missing columns; historical residue rather than an active UI failure. | Treat once per missing-Space subgraph, not as an independent delete, to avoid double counting and preserve dry-run assertions. |
+
+The Space tables do not store row/column creation timestamps. The dates above are
+an explicit inference from the timestamp component of CUID-formatted IDs; all 112
+affected child IDs matched the expected CUID shape. No content or identifiers were
+reported. Activity logs are deliberately unmodelled historical records and may
+retain descriptions of deleted entities; they are not included as orphans and
+should not be removed as part of this treatment without a separate retention
+decision.
+
+No confirmed class currently creates cross-user access, changes active counts,
+affects Push/notifications, or appears in active Home, Tracker, Overview,
+Timesheets, Delegated, Spaces, Reports or Settings relation queries. Priority is
+therefore **P2**, not an active P1 incident. It blocks future schema/relation or
+destructive-work milestones until treated or explicitly accepted, but not ordinary
+unrelated feature work.
+
+#### Prevention and remediation status
+
+Current Prisma Client writes use `relationMode = "prisma"`, which emulates declared
+delete actions, but production has no physical foreign keys and Prisma does not
+emulate parent-existence constraints on create. Raw SQL and incomplete routes can
+still create orphans. Immediate prevention is to add disposable-MariaDB integration
+tests for profile, project, task and Space deletion—including bulk/series task
+deletes—and keep parent validation inside transactions. Add the count-only audit
+to release/schema runbooks. Converting the whole schema to physical foreign keys is
+not justified by this evidence and remains a separate architecture decision.
+
+Remediation remains **investigated; not authorised**. The proposed operational
+runbook is in [Operations Manual: Orphan-data remediation](./OPERATIONS_MANUAL.md#orphan-data-remediation-not-authorised).
 
 Production orphan data must not be mutated without:
 
@@ -744,14 +803,17 @@ Production orphan data must not be mutated without:
    regressions cover scoped profile reorder, per-user timer isolation, atomic stop,
    and Brisbane stop-date persistence. Direct database/route coverage awaits a safe
    disposable MariaDB target.
-3. **Production integrity:** back up, investigate, approve, and safely repair or
-   retain the orphan classes; add repeatable count-only checks.
+3. **Production integrity — investigation completed:** exact counts, likely causes,
+   impact and proposed treatments are recorded. Obtain human treatment approval,
+   then run the backup/dry-run/assertion-gated repair milestone; no remediation is
+   currently authorised.
 4. **Verification baseline:** reduce lint debt, add CI, and extend high-risk route
    coverage.
 5. **Planned cleanup:** address dependency alignment, selected query scaling,
    shared domain helpers, and other P2 work as affected areas are revisited.
 
-Milestones 1–3 are the recommended work before further TaskManager feature work.
+Milestones 1 and 2 are complete. Milestone 3 investigation is complete; remediation
+blocks schema/relation or destructive work, not ordinary unrelated feature work.
 
 ### Safe To Leave Unchanged For Now
 
@@ -776,8 +838,9 @@ investigation item.
 
 ### Outstanding Human Decisions
 
-1. Should orphaned historical production data be deleted, retained for audit,
-   archived, or reattached where possible?
+1. Approve archive/delete treatment for inaccessible task/project/note/Space
+   subgraphs, and decide whether orphaned time entries must be retained as business
+   records. Automatic reattachment is not recommended on current evidence.
 2. Is TaskManager publicly internet-reachable without additional Vercel/WAF rate
    limiting and security-header policy?
 3. Is `scripts/create-admin-user.js` still required, and has its known temporary
@@ -826,7 +889,7 @@ The Build Playbook PDF is a periodically generated snapshot derived from reposit
 | Notifications | Implemented: in-app, preferences, browser push, active-tab suppression | After P1 work or before next notification feature | Review Push endpoint hardening; otherwise monitor badge sync and delivery observability. |
 | Delegated Tasks | Implemented core lifecycle and notification events | Before adding reopen/cancel/detail pages | Preserve participant-only permissions. |
 | Permissions | Distributed; profile reorder and timer ownership gaps are fixed with focused production-core regressions | Before adding similar routes | Prefer narrow, visible ownership helpers and add direct route/Prisma coverage when a safe harness exists. |
-| Database Migrations | Ledger reconciled; production integrity defects confirmed | P1 integrity investigation and every schema change | Follow the approved orphan-safety conditions and Prisma workflow; never use `db push` on Railway. |
+| Database Migrations | Ledger reconciled; orphan investigation complete, remediation not authorised | Before orphan treatment and every schema/relation change | Follow the assertion-gated runbook and Prisma workflow; never use `db push` on Railway. |
 | Collaborative Spaces | Implemented with member/owner helpers | Before major spaces expansion | Review tests and permission coverage. |
 | Timesheets | Manual entries and timer operations are owner-scoped; one active timer per user; Brisbane stop-date persistence verified | Before expanding timer behavior | Retain two-user and midnight regressions; add real database route coverage when practical. |
 | Sunday Check-ins / Routine Support | Specialised Evie routine-support workflow | Before making check-ins available to general users | Do not treat the current Sunday-specific workflow as a general configurable check-in system. |

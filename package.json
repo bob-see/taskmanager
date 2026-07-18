@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "db:integrity:audit": "node scripts/audit-orphan-integrity.mjs",
     "docs:playbook": "node docs/publication/scripts/build-playbook.mjs",
     "docs:playbook:qa": "node docs/publication/scripts/render-pdf-pages.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",

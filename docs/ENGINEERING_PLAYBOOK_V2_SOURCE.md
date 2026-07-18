@@ -996,11 +996,25 @@ Playbook intentionally contains no personal data, row content, names, or IDs.
    repeated/concurrent stops.
 4. **Timer Brisbane date completed and verified.** The stop instant determines the
    named-timezone Brisbane calendar date; elapsed duration remains instant-based.
-5. Investigate the confirmed production orphans and agree a treatment plan.
+5. **Production-integrity investigation completed.** The repeatable read-only audit
+   reproduced the baseline without count changes: 6 task/profile, 1 task/project,
+   5 note/task, 2 project/profile, 4 time-entry/profile, 32 column/Space and
+   80 row/Space orphans. No active owner/membership path or cross-user exposure was
+   found. Remediation is P2 and not authorised; it remains a gate before
+   schema/relation or destructive work, not ordinary unrelated feature work.
 
 Production orphan data must not be mutated without a verified backup, likely-origin
 investigation, human approval of delete/retain/archive/reattach treatment, and a
 reviewed preferably idempotent repair process with before/after counts.
+
+The likely history is now documented: two missing profiles have recorded profile
+deletes; all three missing tasks behind orphan notes have recorded task deletes;
+and the ownerless Space subgraphs have no matching activity, so their deletion
+predated logging or bypassed that route. Production has zero physical foreign keys.
+The proposed repair is an assertion-gated dry-run-first
+Node/Prisma operational script, followed by a complete post-audit and application
+smoke test. Time-entry retention and archive/delete treatment of inaccessible
+profile and Space subgraphs still require human approval.
 
 After a framework upgrade, run `npm audit`, type checking, tests, production build,
 login smoke testing, Server Action testing, Proxy redirect testing, and direct
@@ -1018,7 +1032,8 @@ application database; they remain mandatory before release.
   regressions now exist, but no direct Prisma route-authorisation harness remains;
   delegated lifecycle, Collaborative Spaces, notification, Push-subscription,
   broader timesheet, and reporting route coverage is missing; no CI or disposable
-  MariaDB migration/integrity target exists.
+  MariaDB migration/integrity target exists. A fixed production count-only audit
+  now covers all 28 modelled relations but is not a destructive-route test target.
 - **Lint and maintainability:** 38 errors and 17 warnings remain; permission and
   task-action logic is distributed; selected Home, Overview, and Reports queries
   load broad or unbounded datasets.
@@ -1045,7 +1060,9 @@ active investigation.
 
 ## Human Decisions Still Required
 
-1. Delete, retain for audit, archive, or reattach orphaned historical data.
+1. Approve archive/delete treatment for inaccessible profile and Space subgraphs,
+   and decide whether historical orphaned time entries must be retained as business
+   records. Automatic reattachment is not recommended on current evidence.
 2. Confirm public reachability and Vercel/WAF rate-limit and security-header policy.
 3. Confirm whether `scripts/create-admin-user.js` is required or has used its known
    temporary password against a live environment.

@@ -32,8 +32,8 @@ validation, migration status, the dependency-tree check, and `git diff --check`
 passed. Full lint failed with 47 errors and 17 warnings. The test run emitted two
 non-fatal Node module-type reparsing warnings for imported TypeScript modules.
 
-After the 18 July 2026 profile/timer ownership milestone, the current suite has
-five test files and 42 passing cases. Type checking, changed-file lint, Prisma
+After the 18 July 2026 integrity-investigation milestone, the current suite has
+six test files and 47 passing cases. Type checking, changed-file lint, Prisma
 validation, the production build, and Node 22.13.0 tests/type checking pass. Full
 lint is 38 errors and 17 warnings; the nine-error reduction is confined to the
 affected routes.
@@ -42,12 +42,13 @@ production TypeScript modules loaded directly by Node's test runner.
 
 | Command | What it checks | What it does not check | Connectivity and safety |
 |---|---|---|---|
-| `npm test` | Runs Node's test runner with TypeScript stripping enabled: five test files and 42 test cases. | Real Prisma route/database integration, browsers, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
+| `npm test` | Runs Node's test runner with TypeScript stripping enabled: six test files and 47 test cases. | Real Prisma route/database integration, browsers, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
 | `npm run lint` | Runs ESLint over the repository using the checked-in Next.js ESLint configuration. | Runtime behavior, authorisation, database integrity, and browser/device behavior. | No database connectivity expected; safe locally. |
 | `npm run build` | Runs the Next.js production build, including compilation and framework build-time checks. | Correct domain behavior, permissions, migrations, real browser behavior, or deployment configuration. | Intended to be safe locally, but requires installed dependencies and any build-time environment expected by imported code; it must not mutate shared data. |
 | `npx prisma validate` | Validates Prisma schema/config structure. | Whether migrations apply, live schema matches, data is preserved, or relations contain no orphans. | Reads configured environment; normally no database write. Safe only after confirming it targets the intended configuration. |
 | `npx prisma generate` | Regenerates the Prisma client from the schema. | Live database state, migration status, application behavior, or data integrity. | Does not require live database access, but writes generated client artifacts under installed dependencies; normal local development operation. |
 | `npx prisma migrate status` | Compares committed migrations with the configured database migration ledger. | Application behavior, data correctness, and every form of schema drift or orphaned relationship. | Requires database connectivity and is read-only, but may inspect shared Railway if `DATABASE_URL` points there. Confirm the target first. |
+| `npm run db:integrity:audit` | Runs fixed aggregate `SELECT`/CTE checks for all 28 Prisma relations plus non-sensitive impact metadata in one read-only consistent snapshot, then rolls back. | Content correctness or whether remediation is approved. It has no mutation mode. | Requires database connectivity and may inspect production. Confirm the target; output contains counts/timestamps only. |
 | `npm run dev` | Starts the local Next.js server for manual workflow checks. | Provides no verification by itself. | May connect to the configured database and therefore can affect shared data through manual actions. Confirm the environment first. |
 
 Do not use `prisma db push` or `prisma migrate reset` against shared Railway data. They are schema-changing/destructive operations, not verification commands. Follow [Prisma Migration Workflow](./PRISMA_MIGRATION_WORKFLOW.md).
@@ -61,8 +62,10 @@ Do not use `prisma db push` or `prisma migrate reset` against shared Railway dat
 | `tests/recurrence-pause.test.mjs` | Recurrence and pause rules | Pure logic, duplicated test implementation | Finite pause boundary, indefinite pause, next occurrence after pause, daily and fortnightly intervals, routine due/off-days, default daily interval, paused-view filtering, and expired pauses. | Reimplements helpers inside the test instead of importing application code; no routes, persistence, UI, series deletion, timezone integration, or production recurrence-module coupling. |
 | `tests/push-subscriptions.test.mjs` | Push subscription validation and hashing | Pure logic, duplicated test implementation | Deterministic SHA-256 endpoint hash, accepted browser subscription shape, trimming, ignored client user ID, missing-key rejection, and rejection of a `javascript:` endpoint. | Reimplements hashing/validation instead of importing `app/lib/push-subscriptions.ts`; no authenticated route ownership, Prisma storage, length limits, HTTP edge cases, browser subscription API, or real provider. |
 | `tests/push-delivery.test.mjs` | Web Push delivery core and payload mapping | Service-level with mocks | Global and per-type preference handling, missing preference behavior, missing VAPID handling, no-subscription handling, multi-device attempts, isolated temporary failure, `404`/`410` cleanup, Push delivery without an in-app row, same-origin target sanitisation, unread badge payload, and concise payload mapping. | Database, logger, VAPID configuration, and Web Push transport are mocked; no dispatcher/route, real Prisma, provider encryption/delivery, service worker, browser permission, device receipt, or UI state. |
+| `tests/orphan-integrity-audit.test.mjs` | Production integrity audit guardrails | Production-coupled query/lifecycle tests | Exactly 28 relation definitions, single read-only aggregate statements, mutation-SQL rejection, consistent-snapshot setup, and rollback after success or query failure. | Does not connect to a test database, prove query-plan performance, or authorise/treat production data. |
 
-`date-time.test.mjs`, `ownership-regressions.test.mjs`, and
+`date-time.test.mjs`, `ownership-regressions.test.mjs`,
+`orphan-integrity-audit.test.mjs`, and
 `push-delivery.test.mjs` import production implementations.
 `recurrence-pause.test.mjs` and `push-subscriptions.test.mjs` copy production logic
 and can drift independently from it. The ownership tests exercise the production
@@ -83,7 +86,7 @@ The current automated suite does not prove:
 - Sunday Check-ins, Routine Support, Brisbane Sunday logic, or reporting summaries;
 - React UI behavior, responsive layout, accessibility, title/favicon badges, PWA installation, or real service-worker behavior;
 - desktop notification permission/delivery, iPhone Home Screen delivery, lock-screen content, or notification-click authentication redirects;
-- migration application against a real MariaDB test database, preservation of existing rows, or automated orphan detection under `relationMode = "prisma"`. The 18 July audit used ad hoc read-only counts and confirmed production orphans; it did not add a repeatable harness.
+- migration application against a disposable MariaDB test database or preservation of existing rows. The fixed read-only audit now detects production orphans repeatably, but destructive-route and remediation integration still lack a safe database harness.
 
 These gaps are not equally urgent. Cross-user route authorisation and the two known ownership defects are the highest priorities. Browser automation and broader reporting coverage are useful later, while real-device Push checks remain inherently manual even if browser automation grows.
 
@@ -254,7 +257,7 @@ A confirmed defect should normally produce a reproducible case, a failing automa
 | Recurrence tests | Useful cases, but copied logic | Tests can pass while production diverges | Move/add tests that import production recurrence/date helpers and add route persistence boundaries. | Medium |
 | Push subscription tests | Copied validation/hash logic | Production validation can drift silently | Import production helpers and add authenticated persistence cases. | Medium |
 | Timesheet/report calculations | No automated coverage | Incorrect rounding, week totals, or reporting | Add pure utility tests first, then owned-entry route cases. | Medium |
-| MariaDB migration/integrity | No disposable test DB or repeatable orphan checks; the 18 July read-only audit confirmed production orphans | Existing integrity defects can persist and destructive workflows can create more | Define a safe non-production MariaDB workflow and repeatable count-only orphan checks before repair or relation changes. | High |
+| MariaDB migration/integrity | Repeatable count-only production audit exists; no disposable test DB or destructive-route/remediation integration | Existing defects can recur or a repair can behave differently from its dry-run | Define a safe non-production MariaDB workflow and exercise cascade/set-null plus repair assertions before treatment or relation changes. | High |
 | Browser/service worker automation | Manual only | UI/PWA regressions detected late | Add focused browser automation only after stable high-value scenarios are identified; retain device checks. | Medium |
 | Reports, Routine Support, Sunday Check-ins | Manual/code inspection only | Calculation/date regressions | Add deterministic summary/date tests around known business cases. | Low to Medium |
 
