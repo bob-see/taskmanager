@@ -696,10 +696,10 @@ build, and Node 22.13.0 tests/type checking passed. Full lint is now 38 errors a
 | Disposable MariaDB migration/integrity target | Missing | P2 | Operational limitation | `relationMode = "prisma"` has no physical foreign-key safety. A repeatable production count-only audit now exists, but there is no disposable migration/destructive-route target. | Define a safe disposable target and exercise cascade/set-null behavior before further relation/destructive work. | Before schema/destructive work |
 | Distributed permission and task-action logic | Active | P2 | Maintainability debt | Ownership checks are repeated across profile/task/project routes, while Tracker and Overview duplicate significant task-action behavior. | Consolidate narrow domain helpers without introducing a broad generic permission framework. | Before adding similar routes/actions |
 | Query and payload scaling | Evidence-based risk; no current incident | P2 | Operational limitation | Home performs one task request per profile; Overview loads all open tasks and note histories; Reports loads all historical tasks/time entries before in-memory filtering. | Add scoped summary queries, database period filtering, and pagination only where data growth or measured latency warrants it. | No |
-| Legacy admin bootstrap script | Requires investigation | P2 | Security gap | `scripts/create-admin-user.js` contains a known temporary password, can reset an administrator hash, and prints the credential. | Confirm whether it is still needed or has been used live; remove it or require explicit safe inputs and target confirmation. | No |
+| Unsafe admin bootstrap exposure | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: investigation confirmed a production administrator hash matched the predictable password committed in the bootstrap script. The password was manually rotated, and the obsolete bootstrap and fixed-identity email-update scripts were removed without rewriting Git history or changing production data in this milestone. Resolution covers the known password and unsafe tooling, not JWTs issued before rotation. | Never reuse the exposed credential. Track possible pre-rotation sessions under the separate lifecycle item below; design a reviewed first-admin/recovery tool only if clean-install support becomes a product requirement. | No |
 | Dependency/toolchain alignment | Active | P2 | Maintainability debt | Installed Prisma adapter and Client/CLI minor versions differ; Node types target 20 while runtime minimum is 22; several audit findings are Prisma/tooling transitives. | Align versions in a controlled dependency milestone and reassess production versus development dependencies. | No |
 | Delegated task origin semantics | Undecided | P2 | Product review trigger | Acceptance/copy behavior and older “origin should not move” philosophy are not fully aligned. | Decide the intended long-term copy/move/ownership model before adding reassignment, reopen, or expanded lifecycle features. | Before delegated lifecycle expansion |
-| Account/session lifecycle and login controls | Known limitation | P3 | Security gap | JWT sessions have no application revocation/version mechanism; password reset does not explicitly revoke tokens; no application lockout/attempt audit exists. | Review with exposure, offboarding, compromise-response, or self-service account requirements. | No |
+| Account/session lifecycle and login controls | Known limitation | P3 | Security gap | JWT sessions have no per-user revocation/version mechanism; password reset does not explicitly revoke tokens, including any issued before the 18 July bootstrap-password rotation; forced and self-service password changes and application lockout/attempt audit do not exist. | Decide separately whether global invalidation is warranted for the bootstrap incident; review per-user revocation with offboarding, compromise-response, temporary-password, or self-service requirements. | No |
 | Security headers and hosting controls | Needs environment confirmation | P3 | Security review trigger | No application-specific headers are declared; Vercel/WAF rate limiting and header policy were not verified by the repository audit. | Confirm deployment controls before changing repository policy. | No |
 | Logging, privacy, and retention | Known limitation | P3 | Operational limitation | Logs can include internal IDs and error detail; notifications/activity records have no documented retention process. No secrets or full Push endpoints were found in application logs. | Define access and retention before external observability or material user growth. | No |
 | Push-device lifecycle | Known limitation | P3 | Operational limitation | Multi-device storage and expired-provider cleanup exist; retention windows, device labels, and remove-all-device controls do not. | Revisit with device churn, shared devices, or formal offboarding. | No |
@@ -832,9 +832,7 @@ The audit found no evidence that the following require implementation now:
   remains private.
 
 These are review triggers, not defects. Reconsider them only with measured
-performance, reliability, security, product, device, or ownership evidence. The
-legacy administrator bootstrap script is separate and remains an active P2
-investigation item.
+performance, reliability, security, product, device, or ownership evidence.
 
 ### Outstanding Human Decisions
 
@@ -843,8 +841,8 @@ investigation item.
    records. Automatic reattachment is not recommended on current evidence.
 2. Is TaskManager publicly internet-reachable without additional Vercel/WAF rate
    limiting and security-header policy?
-3. Is `scripts/create-admin-user.js` still required, and has its known temporary
-   password ever been used against a live environment?
+3. Should sessions issued before the 18 July bootstrap-password rotation be
+   invalidated globally, accepting that all current users would be signed out?
 4. Is delegated acceptance copy/move behavior the intended long-term origin model?
 5. Is task-title, actor, and decline-reason notification content acceptable on
    locked or shared devices?
@@ -868,6 +866,12 @@ investigation item.
 - Node runtime support is explicitly Node.js 22.13.0 or later.
 - Disposable publication build output is ignored while intended generated
   deliverables remain retained.
+- The predictable administrator bootstrap credential was confirmed against a
+  production administrator and manually rotated on 18 July 2026. The obsolete
+  bootstrap and related fixed-identity email-update scripts are retired from the
+  current tree. Git history was not rewritten; the credential must never be reused.
+  This resolves the known password and tooling, not any JWT issued before rotation;
+  session revocation and password-lifecycle limitations remain active debt above.
 
 Automated testing has improved to 31 cases, including production-coupled date-time
 and Push-delivery tests, but broader route/database/browser coverage remains active

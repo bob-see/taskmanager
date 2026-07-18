@@ -74,6 +74,16 @@ npx prisma migrate status
 
 Use the checks relevant to the changed area. For documentation-only changes, Markdown link verification and `git diff --check` are usually sufficient.
 
+## Administrator Provisioning
+
+Routine user administration is performed through the admin-only Users interface,
+which supports user creation, administrator roles and password resets. The legacy
+bootstrap and fixed-identity email-update scripts were retired on 18 July 2026.
+TaskManager does not currently document or support routine installation into an
+empty database with no administrator. If clean-install or account-recovery support
+is required later, design a separate reviewed process; do not restore or reuse the
+retired scripts or their historically exposed credential.
+
 ## Environment Checks
 
 Required local and deployment configuration includes:

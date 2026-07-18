@@ -1037,10 +1037,9 @@ application database; they remain mandatory before release.
 - **Lint and maintainability:** 38 errors and 17 warnings remain; permission and
   task-action logic is distributed; selected Home, Overview, and Reports queries
   load broad or unbounded datasets.
-- **Security and operations:** Push endpoint host validation needs review; the
-  administrator bootstrap script contains a known temporary password; account
-  revocation/login controls, headers, logging/privacy, retention, and device
-  lifecycle remain limited.
+- **Security and operations:** Push endpoint host validation needs review; account
+  revocation/password lifecycle and login controls, headers, logging/privacy,
+  retention, and device lifecycle remain limited.
 - **Product:** delegated acceptance copy/move behavior needs an explicit long-term
   origin decision before lifecycle expansion.
 
@@ -1055,8 +1054,7 @@ or the specialised Sunday Check-in model. Do not add general real-time transport
 a broad generic permission framework, or a comprehensive browser suite merely for
 architectural completeness. Keep the elevated delegated-task timeout unless logs
 show contention. Hard-coded LOST owner access may remain while the owner is stable
-and the feature private; the legacy administrator bootstrap script is a separate
-active investigation.
+and the feature private.
 
 ## Human Decisions Still Required
 
@@ -1064,8 +1062,8 @@ active investigation.
    and decide whether historical orphaned time entries must be retained as business
    records. Automatic reattachment is not recommended on current evidence.
 2. Confirm public reachability and Vercel/WAF rate-limit and security-header policy.
-3. Confirm whether `scripts/create-admin-user.js` is required or has used its known
-   temporary password against a live environment.
+3. Decide whether sessions issued before the 18 July bootstrap-password rotation
+   should be invalidated globally, accepting an all-user sign-out.
 4. Confirm long-term delegated acceptance copy/move origin semantics.
 5. Confirm whether task-title, actor, and decline-reason Push content is acceptable
    on locked or shared devices.
@@ -1079,6 +1077,18 @@ and disposable-publication-output items. Initial hydration/date-time instability
 also resolved for the confirmed initial-render surfaces through deterministic
 formatting, stable snapshots, and Brisbane boundary refreshes. The timer persistence
 defect is separate from hydration.
+
+The unsafe administrator bootstrap investigation is also resolved. On 18 July
+2026, a production administrator hash was confirmed to match the predictable
+password committed in the bootstrap script; the password was manually rotated,
+and both the bootstrap and related fixed-identity email-update scripts were removed
+without a Git-history rewrite or production mutation by the repository milestone.
+The exposed credential must never be reused. Initial-administrator bootstrap is not
+a supported routine workflow; any future clean-install or recovery tool requires a
+separate design and security review. Resolution applies to the known password and
+unsafe tooling, not any JWT issued before rotation. Global or per-user session
+revocation, forced password change, and self-service password change remain active
+lifecycle debt.
 
 Testing is broader than the older “narrow tests” description but remains incomplete.
 The former 47-error/18-warning lint snapshot is superseded by 47 errors and
