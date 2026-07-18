@@ -394,6 +394,42 @@ Pending → Accepted → In Progress → Completed → Closed
 
 ---
 
+# Engineering Workflow
+
+TaskManager uses six high-level stages for meaningful engineering work. They make the intended outcome, evidence, and stopping points visible without turning small changes into ceremony.
+
+## 1. Investigate
+
+Inspect the repository, working tree, current behaviour, relevant documentation, tests, configuration, schema and migrations, and any data or operational implications. Establish facts before recommending or changing anything.
+
+## 2. Design
+
+Clarify the desired behaviour, architecture, scope, ownership and permission rules, constraints, migration implications, acceptance criteria, and decisions that require human judgement. Resolve material ambiguity before implementation.
+
+## 3. Implement
+
+Make the smallest complete and coherent change that satisfies the agreed design. Preserve existing data and behaviour where required, reuse established systems, and avoid unrelated cleanup.
+
+## 4. Verify
+
+Gather evidence appropriate to the risk. This may include focused and full automated checks, direct-access and wrong-user security cases, migration or integrity validation, manual workflows, browser/device checks, and deployment smoke tests. A passing build alone is not proof of correct behaviour.
+
+## 5. Document
+
+Review the documents that own the affected topics. Update them when behaviour, architecture, security, testing, operations, or public setup changed; otherwise deliberately record that no documentation update is required.
+
+## 6. Commit
+
+Inspect the complete final diff, confirm that the scope is coherent, and create one accurately described commit when authorised. A commit is intentional and is not assumed merely because implementation is complete.
+
+The workflow is iterative rather than rigidly linear. New evidence found during implementation, review, or verification may return the work to Investigation or Design.
+
+The Engineering Playbook manuscript contains a more detailed ten-step **Development Workflow**. That sequence is the practical execution detail inside this lifecycle: repository inspection begins Investigation; clarification, prompt scoping, and assumption review support Design; implementation follows the confirmed design; diff, automated, manual, security, and migration review form Verify; documentation review is Document; and its final step is Commit. The two models are complementary, not competing checklists.
+
+Genuinely small, low-risk tasks may abbreviate the amount of work in each stage. Material security, data, migration, browser/device, or workflow risk must not be hidden by silently skipping a stage.
+
+---
+
 # Codex Prompt Standard
 
 Include:
@@ -407,8 +443,9 @@ Include:
 
 # Git Workflow
 
-Commit often.
-Prefer small, meaningful commits.
+Prefer small, meaningful commits that contain one coherent change.
+
+Review the final diff before committing. Do not assume authority to commit, and do not bundle unrelated cleanup merely to make the working tree tidy.
 
 ---
 
@@ -473,6 +510,8 @@ Examples include `docs/SECURITY.md`, `docs/TESTING.md`, `docs/PUSH_NOTIFICATIONS
 
 Each subsystem document explains one subsystem in operational or implementation detail.
 
+Use `docs/OPERATIONS_MANUAL.md` for operational procedure, `docs/PRISMA_MIGRATION_WORKFLOW.md` for migration discipline, `docs/MIGRATION_HISTORY.md` for reconciled history, and `docs/publication/README.md` for the publication pipeline.
+
 ## `PROJECT_PLAYBOOK.md`
 
 Purpose: "How should TaskManager continue to be built?"
@@ -486,11 +525,13 @@ Contains:
 - Coding expectations
 - Long-term direction
 
+`HOW_TO_WORK_WITH_TASKMANAGER.md` is the brief AI-session routing guide. It points assistants into this hierarchy and the six-stage workflow; it does not replace the Playbook or subsystem owners.
+
 ## Generated Build Playbook PDF
 
 Purpose: professional snapshot generated from repository documentation.
 
-The generated PDF is not the living source. Repository Markdown files remain authoritative.
+The generated PDF is not the living source. Repository Markdown files remain authoritative. Publication procedure and retained editions are owned by `docs/publication/README.md` and `docs/publication/generated/`.
 
 ---
 

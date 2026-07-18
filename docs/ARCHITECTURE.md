@@ -2,9 +2,7 @@
 
 **Status:** Living Document  
 **Last Updated:** 2026-07-18
-**Last Verified Against Commit:** `7049fbc`
 **Repository Branch:** `main`  
-**Working Tree Note:** This document also reflects pending documentation changes that are not represented by the verification commit.  
 **Purpose:** Authoritative technical architecture reference for TaskManager. This document explains how the application is currently structured, how its major modules interact, and why key architectural decisions exist. It is intended for maintainers and future AI-assisted development sessions before significant technical changes are made.
 
 **Audience:**
@@ -12,6 +10,8 @@
 - Future maintainers
 - AI coding assistants
 - Contributors
+
+This document owns how TaskManager is built. [`PROJECT_PLAYBOOK.md`](../PROJECT_PLAYBOOK.md#engineering-workflow) owns how engineering work is investigated, designed, implemented, verified, documented, and committed.
 
 ## System Overview
 
@@ -671,7 +671,7 @@ same timer twice. Timer completion persists the calendar date derived from the s
 instant in `Australia/Brisbane`, stored deterministically at UTC midnight, while
 elapsed duration continues to use the real start and stop instants.
 
-The suite now has 47 passing tests, including production-core regressions for
+At that milestone, the suite had 47 passing tests, including production-core regressions for
 unauthenticated boundaries, owner/wrong-user cases, atomic reorder validation,
 separate-user and same-user timer behavior, concurrent stop attempts, UTC-process
 execution, and Brisbane midnight boundaries. These service-level tests use
@@ -701,8 +701,8 @@ build, and Node 22.13.0 tests/type checking passed. Full lint is now 38 errors a
 | Distributed permission and task-action logic | Active | P2 | Maintainability debt | Ownership checks are repeated across profile/task/project routes, while Tracker and Overview duplicate significant task-action behavior. | Consolidate narrow domain helpers without introducing a broad generic permission framework. | Before adding similar routes/actions |
 | Query and payload scaling | Evidence-based risk; no current incident | P2 | Operational limitation | Home performs one task request per profile; Overview loads all open tasks and note histories; Reports loads all historical tasks/time entries before in-memory filtering. | Add scoped summary queries, database period filtering, and pagination only where data growth or measured latency warrants it. | No |
 | Unsafe admin bootstrap exposure | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: investigation confirmed a production administrator hash matched the predictable password committed in the bootstrap script. The password was manually rotated, and the obsolete bootstrap and fixed-identity email-update scripts were removed without rewriting Git history or changing production data in this milestone. Resolution covers the known password and unsafe tooling, not JWTs issued before rotation. | Never reuse the exposed credential. Track possible pre-rotation sessions under the separate lifecycle item below; design a reviewed first-admin/recovery tool only if clean-install support becomes a product requirement. | No |
-| Prisma dependency alignment | Completed and verified; GitHub recalculation pending | Resolved | Resolved / retire from register | 18 July 2026: `prisma` and `@prisma/client` moved from 7.4.1 to 7.8.0, matching `@prisma/adapter-mariadb` 7.8.0. Full audit fell from 21 package findings (10 high, 10 moderate, 1 low) to 12 (2 high, 9 moderate, 1 low); the production audit fell from 16 (8 high, 8 moderate) to 7 moderate and no high findings. Tests, types, builds, generation, validation, the 32-migration status check, and the read-only 28-relation audit passed. | Let GitHub recalculate after push. Track the remaining moderate `@hono/node-server` advisory as Prisma CLI/development tooling; do not downgrade Prisma or add an override. | No |
-| Remaining dependency/toolchain maintenance | Partially remediated; GitHub recalculation pending | P2 | Maintainability debt | 18 July 2026: a range-compatible lockfile refresh patched the four development alerts for `flatted` 3.4.2, `picomatch` 4.0.5, `js-yaml` 4.3.0, and `@babel/core` 7.29.7 without overrides. Full audit fell from 12 findings (2 high, 9 moderate, 1 low) to 8 moderate; production audit remained 7 moderate because npm also counts affected parent packages. Three GitHub package alerts remain upstream-pinned: Prisma CLI's `@hono/node-server` 1.19.11, Next.js's PostCSS 8.4.31, and NextAuth's UUID 8.3.2. | Let GitHub recalculate after push. Adopt supported parent-package patches when available; do not downgrade Prisma/NextAuth or override Next's exact PostCSS pin. Node types still target 20 while the supported runtime minimum is 22.13.0. | No |
+| Prisma dependency alignment | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: `prisma` and `@prisma/client` moved from 7.4.1 to 7.8.0, matching `@prisma/adapter-mariadb` 7.8.0. Full audit fell from 21 package findings (10 high, 10 moderate, 1 low) to 12 (2 high, 9 moderate, 1 low); the production audit fell from 16 (8 high, 8 moderate) to 7 moderate and no high findings. Tests, types, builds, generation, validation, the 32-migration status check, and the read-only 28-relation audit passed. | Verify GitHub's current alert state separately. Track the remaining moderate `@hono/node-server` advisory as Prisma CLI/development tooling; do not downgrade Prisma or add an override. | No |
+| Remaining dependency/toolchain maintenance | Partially remediated; upstream-pinned advisories remain | P2 | Maintainability debt | 18 July 2026: a range-compatible lockfile refresh patched the four development alerts for `flatted` 3.4.2, `picomatch` 4.0.5, `js-yaml` 4.3.0, and `@babel/core` 7.29.7 without overrides. Full audit fell from 12 findings (2 high, 9 moderate, 1 low) to 8 moderate; production audit remained 7 moderate because npm also counts affected parent packages. Three GitHub package alerts remained upstream-pinned at the review: Prisma CLI's `@hono/node-server` 1.19.11, Next.js's PostCSS 8.4.31, and NextAuth's UUID 8.3.2. | Verify GitHub's current alert state separately. Adopt supported parent-package patches when available; do not downgrade Prisma/NextAuth or override Next's exact PostCSS pin. Node types still target 20 while the supported runtime minimum is 22.13.0. | No |
 | Delegated task origin semantics | Undecided | P2 | Product review trigger | Acceptance/copy behavior and older “origin should not move” philosophy are not fully aligned. | Decide the intended long-term copy/move/ownership model before adding reassignment, reopen, or expanded lifecycle features. | Before delegated lifecycle expansion |
 | Account/session lifecycle and login controls | Known limitation | P3 | Security gap | JWT sessions have no per-user revocation/version mechanism; password reset does not explicitly revoke tokens, including any issued before the 18 July bootstrap-password rotation; forced and self-service password changes and application lockout/attempt audit do not exist. | Decide separately whether global invalidation is warranted for the bootstrap incident; review per-user revocation with offboarding, compromise-response, temporary-password, or self-service requirements. | No |
 | Security headers and hosting controls | Needs environment confirmation | P3 | Security review trigger | No application-specific headers are declared; Vercel/WAF rate limiting and header policy were not verified by the repository audit. | Confirm deployment controls before changing repository policy. | No |
@@ -882,16 +882,18 @@ performance, reliability, security, product, device, or ownership evidence.
   This resolves the known password and tooling, not any JWT issued before rotation;
   session revocation and password-lifecycle limitations remain active debt above.
 
-Automated testing has improved to 31 cases, including production-coupled date-time
-and Push-delivery tests, but broader route/database/browser coverage remains active
-debt. The older 47-error/18-warning lint snapshot is superseded, not retired, by
-the authoritative 18 July baseline of 47 errors and 17 warnings.
+Automated testing has improved to 67 cases across nine files, including
+production-coupled date-time, ownership, recurrence carry-forward, LOST audio,
+publication escaping, integrity-audit, and Push-delivery coverage. Broader
+route/database/browser coverage remains active debt. The older 47-error/18-warning
+lint snapshot is superseded, not retired, by the authoritative 18 July baseline
+of 47 errors and 17 warnings and the later 38-error/17-warning milestone result.
 
 ## Maintaining This Document
 
 This document is a living source, not a historical snapshot. Significant architectural changes require `docs/ARCHITECTURE.md` to be reviewed before the work is considered complete.
 
-Factual descriptions must be verified against the current repository. Detailed historical reasoning belongs in `docs/DECISIONS.md`; user-facing introduction and setup belong in `README.md`; operational detail belongs in focused runbooks such as migration and operations documentation.
+Factual descriptions must be verified against the current repository. Detailed historical reasoning belongs in `docs/DECISIONS.md`; user-facing introduction and setup belong in `README.md`; engineering process belongs in `PROJECT_PLAYBOOK.md`; operational detail belongs in focused runbooks such as migration and operations documentation.
 
 The Build Playbook PDF is a periodically generated snapshot derived from repository documents. The repository Markdown files remain the maintainable source.
 

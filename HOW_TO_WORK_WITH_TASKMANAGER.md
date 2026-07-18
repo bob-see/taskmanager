@@ -14,6 +14,19 @@ Before significant work, read in this order:
 
 The current repository implementation remains the source of truth.
 
+## Default Engineering Workflow
+
+Use the six-stage TaskManager lifecycle by default:
+
+1. **Investigate** — inspect the repository and working tree before recommending changes.
+2. **Design** — clarify product, architecture, scope, ownership, constraints and acceptance criteria before implementation.
+3. **Implement** — make the smallest complete, coherent change and avoid unrelated work.
+4. **Verify** — provide evidence from risk-appropriate automated, security, manual, browser/device and deployment checks.
+5. **Document** — review the owning documents and update them, or state deliberately that no update is required.
+6. **Commit** — inspect the final diff and commit only when explicitly authorised.
+
+The stages are iterative. New evidence can return work to Investigation or Design. A genuinely small task may abbreviate the workflow, but material security, data, migration or user-workflow risk must not be silently skipped. See [`PROJECT_PLAYBOOK.md`](./PROJECT_PLAYBOOK.md#engineering-workflow) for the owning guidance.
+
 ## Working Rules
 
 - Preserve multi-user security.
@@ -31,10 +44,11 @@ The current repository implementation remains the source of truth.
 
 Coding assistants must:
 
-- Run or report the relevant verification.
+- Report evidence from the relevant verification rather than assuming success.
 - Review documentation impact.
 - Update affected documentation where appropriate.
 - Explicitly state when no documentation update is required.
+- Review the complete diff before requesting or creating an authorised commit.
 
 The full documentation Definition of Done lives in [`PROJECT_PLAYBOOK.md`](./PROJECT_PLAYBOOK.md).
 

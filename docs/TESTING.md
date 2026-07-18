@@ -2,9 +2,7 @@
 
 **Status:** Living Document  
 **Last Updated:** 2026-07-18
-**Last Verified Against Commit:** `7049fbc`
 **Repository Branch:** `main`  
-**Working Tree Note:** This document also reflects pending documentation changes that are not represented by the verification commit.  
 **Audience:** Future maintainers, AI coding assistants, contributors reviewing changes, and anyone preparing a deployment.  
 **Purpose:** Focused reference for TaskManager's current verification system, the checks expected for each kind of change, and meaningful gaps in automated and manual coverage.
 
@@ -32,17 +30,17 @@ validation, migration status, the dependency-tree check, and `git diff --check`
 passed. Full lint failed with 47 errors and 17 warnings. The test run emitted two
 non-fatal Node module-type reparsing warnings for imported TypeScript modules.
 
-After the 18 July 2026 integrity-investigation milestone, the current suite has
-six test files and 47 passing cases. Type checking, changed-file lint, Prisma
-validation, the production build, and Node 22.13.0 tests/type checking pass. Full
-lint is 38 errors and 17 warnings; the nine-error reduction is confined to the
-affected routes.
-The expanded suite emits three non-fatal module-type reparsing warnings for
+After the later recurrence, publication, and LOST hardening milestones, the
+current suite has nine test files and 67 passing cases. Type checking,
+changed-file lint, Prisma validation, the production build, and Node 22.13.0
+tests/type checking pass. Full lint is 38 errors and 17 warnings; the nine-error
+reduction from the audit baseline is confined to the affected routes.
+The expanded suite emits five non-fatal module-type reparsing warnings for
 production TypeScript modules loaded directly by Node's test runner.
 
 | Command | What it checks | What it does not check | Connectivity and safety |
 |---|---|---|---|
-| `npm test` | Runs Node's test runner with TypeScript stripping enabled: six test files and 47 test cases. | Real Prisma route/database integration, browsers, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
+| `npm test` | Runs Node's test runner with TypeScript stripping enabled: nine test files and 67 test cases. | Real Prisma route/database integration, browsers, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
 | `npm run lint` | Runs ESLint over the repository using the checked-in Next.js ESLint configuration. | Runtime behavior, authorisation, database integrity, and browser/device behavior. | No database connectivity expected; safe locally. |
 | `npm run build` | Runs the Next.js production build, including compilation and framework build-time checks. | Correct domain behavior, permissions, migrations, real browser behavior, or deployment configuration. | Intended to be safe locally, but requires installed dependencies and any build-time environment expected by imported code; it must not mutate shared data. |
 | `npx prisma validate` | Validates Prisma schema/config structure. | Whether migrations apply, live schema matches, data is preserved, or relations contain no orphans. | Reads configured environment; normally no database write. Safe only after confirming it targets the intended configuration. |
@@ -58,15 +56,17 @@ Do not use `prisma db push` or `prisma migrate reset` against shared Railway dat
 | Test file | Area | Level | What it verifies | Main exclusions |
 |---|---|---|---|---|
 | `tests/date-time.test.mjs` | Deterministic date/time rendering | Production-coupled utility tests | Calendar-date parsing, Australian July formatting, Brisbane timestamps, midnight/noon/evening boundaries, rollover scheduling, Monday week boundaries, selected-date preservation, action-time dates, explicit hour cycles, and greeting boundaries. | React hydration itself and browser event dispatch. |
+| `tests/lost-audio.test.mjs` | LOST audio lifecycle and media-control isolation | Production-coupled controller and source-guard tests | Web Audio use without HTML media or Media Session handlers, user-interaction unlock, decoded-buffer reuse, restart and pending-load cancellation, reset/unmount cleanup, and countdown-to-failure cleanup order. | Real macOS media-key routing, Spotify interaction, browser audio focus, and installed-PWA behaviour remain manual checks. |
 | `tests/ownership-regressions.test.mjs` | Profile reorder and timesheet timer ownership | Production-core service tests with transactional in-memory adapters | Unauthenticated boundaries, complete owned-profile reorder, mixed-owner/unknown rollback, separate-user timers, same-user conflict, wrong-profile start, wrong-user read/stop, Brisbane stop date, real elapsed duration, and concurrent/repeated stop finalisation. | NextAuth and real Prisma/MariaDB route integration; manual two-account verification remains required. |
+| `tests/playbook-html.test.mjs` | Engineering Playbook HTML output safety | Production-coupled publication helper tests | Separate text/attribute escaping, attribute-injection resistance, repository-link escaping, Unicode preservation, and stable attribute-safe heading slugs. | Full Chrome/PDF rendering and visual layout; use the publication build and QA workflow. |
 | `tests/recurrence-carry-forward.test.mjs` | Recurring occurrence visibility | Production-coupled utility and persistence-guard tests | Scheduled-day visibility, multi-day carry-forward, later week/month inclusion, completion removal, historical non-reappearance, next-occurrence distinction, pause/future hiding, recurrence immutability, ownership predicates, atomic completion predicate, and uniqueness guard. | Does not execute React views or a real Prisma transaction; completion generation remains build/type checked and should receive database integration coverage when a disposable MariaDB target exists. |
 | `tests/recurrence-pause.test.mjs` | Recurrence and pause rules | Pure logic, duplicated test implementation | Finite pause boundary, indefinite pause, next occurrence after pause, daily and fortnightly intervals, routine due/off-days, default daily interval, paused-view filtering, and expired pauses. | Reimplements helpers inside the test instead of importing application code; no routes, persistence, UI, series deletion, timezone integration, or production recurrence-module coupling. |
 | `tests/push-subscriptions.test.mjs` | Push subscription validation and hashing | Pure logic, duplicated test implementation | Deterministic SHA-256 endpoint hash, accepted browser subscription shape, trimming, ignored client user ID, missing-key rejection, and rejection of a `javascript:` endpoint. | Reimplements hashing/validation instead of importing `app/lib/push-subscriptions.ts`; no authenticated route ownership, Prisma storage, length limits, HTTP edge cases, browser subscription API, or real provider. |
 | `tests/push-delivery.test.mjs` | Web Push delivery core and payload mapping | Service-level with mocks | Global and per-type preference handling, missing preference behavior, missing VAPID handling, no-subscription handling, multi-device attempts, isolated temporary failure, `404`/`410` cleanup, Push delivery without an in-app row, same-origin target sanitisation, unread badge payload, and concise payload mapping. | Database, logger, VAPID configuration, and Web Push transport are mocked; no dispatcher/route, real Prisma, provider encryption/delivery, service worker, browser permission, device receipt, or UI state. |
 | `tests/orphan-integrity-audit.test.mjs` | Production integrity audit guardrails | Production-coupled query/lifecycle tests | Exactly 28 relation definitions, single read-only aggregate statements, mutation-SQL rejection, consistent-snapshot setup, and rollback after success or query failure. | Does not connect to a test database, prove query-plan performance, or authorise/treat production data. |
 
-`date-time.test.mjs`, `ownership-regressions.test.mjs`,
-`recurrence-carry-forward.test.mjs`,
+`date-time.test.mjs`, `lost-audio.test.mjs`, `ownership-regressions.test.mjs`,
+`playbook-html.test.mjs`, `recurrence-carry-forward.test.mjs`,
 `orphan-integrity-audit.test.mjs`, and
 `push-delivery.test.mjs` import production implementations.
 `recurrence-pause.test.mjs` and `push-subscriptions.test.mjs` copy production logic
@@ -90,7 +90,7 @@ The current automated suite does not prove:
 - desktop notification permission/delivery, iPhone Home Screen delivery, lock-screen content, or notification-click authentication redirects;
 - migration application against a disposable MariaDB test database or preservation of existing rows. The fixed read-only audit now detects production orphans repeatably, but destructive-route and remediation integration still lack a safe database harness.
 
-These gaps are not equally urgent. Cross-user route authorisation and the two known ownership defects are the highest priorities. Browser automation and broader reporting coverage are useful later, while real-device Push checks remain inherently manual even if browser automation grows.
+These gaps are not equally urgent. The fixed profile-reorder and timer ownership rules now have focused production-core coverage, while broader cross-user route-authorisation matrices remain important before expanding collaborative features. Browser automation and broader reporting coverage are useful later, while real-device Push checks remain inherently manual even if browser automation grows.
 
 ## Test Levels
 

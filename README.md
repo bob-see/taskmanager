@@ -1,276 +1,124 @@
 # TaskManager
 
-TaskManager is a multi-user work management application for task tracking, delegated work, lightweight collaboration, time logging, reporting, and notifications.
+TaskManager is a multi-user work management application for practical day-to-day task tracking, delegated work, lightweight collaboration, time logging, reporting, and notifications. It is designed for individuals and small teams managing work across several responsibilities without the process overhead of a large project-management platform.
 
-It is designed for practical daily use: fast task capture, clear visibility across work contexts, shared delegated workflows, and enough reporting to understand what is happening without turning the app into a heavy enterprise project-management suite.
+The repository is suitable for public technical review, but the deployed application, its accounts, and its data are private/internal. Do not place private identities, credentials, production data, or environment values in repository content.
 
 ## Current Status
 
-TaskManager is an active Next.js application with the following implemented systems:
+TaskManager is an actively maintained Next.js App Router application backed by Prisma and MariaDB. The living repository and Markdown documentation are authoritative; generated publications are reviewed snapshots.
 
-- Multi-user authentication and user visibility controls.
-- Profile-based task and project workspaces.
-- Cross-profile Overview workspace.
-- Delegated task lifecycle for work assigned between users.
-- Collaborative Spaces for structured shared workflows.
-- In-app notifications and Browser Push notifications.
-- PWA support, including installed-app usage and Home Screen Push support where the platform allows it.
-- Timesheets and time reports.
-- Productivity, activity, and user reports.
-- Prisma/MariaDB migration history reconciled and documented.
+The project currently requires Node.js 22.13.0 or later. Its framework and database packages are maintained as aligned, supported sets, with remaining security and technical-debt items tracked in the architecture and security documents.
 
-The application is currently maintained as a private project and internal collaboration platform.
+## Key Capabilities
 
-## Core Concepts
+- Credentials-based multi-user authentication with server-side ownership and access checks.
+- Profiles as separate work contexts, with Tasks and Projects for planning and delivery.
+- Day, week, month, active, upcoming, overdue, paused, done, and archived task workflows.
+- Recurring task occurrences that carry forward while outstanding and retain their future schedule.
+- Cross-profile Overview for filtering, grouping, sorting, and acting on current work.
+- Delegated Tasks with participant-specific lifecycle actions, shared notes, and notifications.
+- Collaborative Spaces for member-managed matrix-style workflows.
+- In-app notifications plus Browser Push, including multiple device subscriptions.
+- Responsive web and installed PWA use, subject to browser and platform capabilities.
+- Manual and timer-based timesheets, reports, and administrator activity views.
+- Specialised Routine Support and Sunday Check-in workflows for enabled profiles.
 
-TaskManager is organised around a few concepts that appear throughout the application:
+Detailed behaviour, permissions, data relationships, and known limitations belong in the linked owning documents rather than this overview.
 
-### Profiles
-
-A profile is a work context. Profiles can represent people, areas of responsibility, or specialised workflows. Most task, project, timesheet, report, routine, and check-in views are scoped to one or more profiles.
-
-### Tasks
-
-Tasks are the main unit of work. They can stand alone, belong to a project, repeat on a schedule, carry notes and metadata, or become part of a delegated workflow between users.
-
-### Projects
-
-Projects group related tasks and provide a higher-level planning surface. They are visible in profile views and the Overview workspace.
-
-### Delegation
-
-Delegated tasks are shared work items between two users. The delegated-task workflow records sender, recipient, status, notes, completion, closeout, and notification events.
-
-### Notifications
-
-Notifications are stored in the database for the in-app notification center. Browser Push is implemented as an additional delivery channel for the same domain events, not as a separate notification system.
-
-## Key Features
-
-### Profiles, Tasks, and Projects
-
-- Profiles act as work contexts.
-- Tasks support start dates, due dates, completion, priority, categories, notes, recurrence, repeat pauses, and project assignment.
-- Projects group related tasks and support priority, collapsed/archived state, due dates, and progress visibility.
-- Profile task views support day, week, month, active, upcoming, overdue, paused, done, and archived workflows.
-
-### Overview
-
-- Overview aggregates active work across profiles.
-- It supports filtering, sorting, grouping, priority visibility, and task/project actions.
-- It is the primary workspace for cross-profile planning.
-
-### Delegated Tasks
-
-- Users can create a delegated task or delegate an existing task.
-- Delegated tasks remain shared between delegator and assignee.
-- Lifecycle: pending, accepted, in progress, completed, closed, or declined.
-- Both participants can add shared notes.
-- Delegated task events create notifications.
-
-### Notifications and Push
-
-- In-app notification center with unread counts, mark-read, clear, and archive behavior.
-- Notification preferences per delegated-task event type.
-- Browser Push delivery for delegated task events.
-- Multi-device Push subscriptions per user.
-- Service worker handles Push display, active-tab suppression, click routing, and badge updates.
-
-See [Push Notifications](./docs/PUSH_NOTIFICATIONS.md) for implementation and testing details.
-
-### Collaborative Spaces
-
-- Shared matrix-style workspaces with members, rows, columns, cells, statuses, notes, and print views.
-- Member and owner permissions are enforced server-side.
-- User selection respects group visibility.
-
-### Timesheets and Reports
-
-- Profile-based manual and timer-sourced time entries.
-- Week-based timesheet workflow.
-- Reports for productivity, time, efficiency, activity, and profile-level work.
-- Admin-facing user activity reporting.
-
-## Application Areas
-
-The main application areas are:
-
-- Profile pages for day-to-day task and project work.
-- Overview for cross-profile planning.
-- Delegated Tasks for assigned-to-me and assigned-by-me workflows.
-- Spaces for shared matrix-style collaboration.
-- Timesheets for weekly time entry.
-- Reports for profile, task, productivity, and activity review.
-- Settings for notification preferences and account-level controls.
-
-Some administrative and specialised workflows are intentionally available only to permitted users. Access checks are enforced server-side.
-
-## Technology Stack
-
-- [Next.js](https://nextjs.org/) App Router
-- React
-- TypeScript
-- Prisma
-- MariaDB on Railway
-- NextAuth credentials authentication
-- Tailwind CSS
-- Vercel-style deployment
-- Browser Push via the Web Push protocol and `web-push`
-
-## Repository Structure
-
-| Path | Purpose |
-|---|---|
-| `app/` | Next.js routes, layouts, pages, API routes, and feature screens. |
-| `app/api/` | Authenticated server endpoints for profiles, tasks, projects, delegated tasks, notifications, Push subscriptions, spaces, timesheets, users, and check-ins. |
-| `app/components/` | Shared UI components such as the app shell, sidebar, notification center, editors, modals, and common task controls. |
-| `app/lib/` | Server-side utilities and services, including Prisma, notifications, Push delivery, and reporting helpers. |
-| `prisma/` | Prisma schema and migration history. |
-| `public/` | Static assets, manifest icons, service worker, and media assets. |
-| `tests/` | Node test files for recurrence and Push-related behavior. |
-| `docs/` | Architecture, ADRs, Push documentation, migration workflow, migration history, and operations notes. |
-| `scripts/` | Utility scripts used for project-specific maintenance and inspection. |
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 
-- Node.js 22.13.0 or later. Run `nvm use` to select the repository baseline from `.nvmrc`.
-- npm.
+- Node.js 22.13.0 or later. Use `nvm use` to select the version in `.nvmrc`.
+- npm compatible with the repository lockfile.
 - Access to a MariaDB-compatible database.
-- Required environment variables for database, authentication, and Push configuration.
+- An approved development account. A routine first-administrator bootstrap is not currently provided for a completely empty installation.
+- Local values for the documented database, authentication, and Browser Push environment variables.
 
-### Installation
+### Install and configure
 
-```bash
+```sh
 npm install
-```
-
-### Environment Variables
-
-Create local environment configuration using the repository's example file as a guide:
-
-```bash
 cp .env.example .env
 ```
 
-Important variables include:
+Replace the placeholders in `.env` with values for your local environment. Never commit real credentials or production configuration.
 
-- `DATABASE_URL`
-- `NEXTAUTH_SECRET`
-- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT`
+### Run locally
 
-Do not commit real secrets.
-
-### Development Server
-
-```bash
+```sh
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Confirm which database the environment targets before performing any action that writes data.
 
-### Database Migration Workflow
+## Essential Commands
 
-TaskManager uses Prisma migrations. Do not use `prisma db push` against the shared Railway database.
-
-For the required process, read [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md).
-
-### Common Commands
-
-```bash
-npm run dev
-npm test
-npm run build
-npm run lint
-npx prisma validate
-npx prisma generate
-npx prisma migrate status
-```
-
-Use `npx prisma migrate deploy` for applying committed migrations to the shared Railway database. Do not run schema-changing or migration-ledger-changing commands against shared environments without following the migration workflow.
-
-### Tests
-
-```bash
-npm test
-```
-
-### Build
-
-```bash
-npm run build
-```
-
-## Documentation
-
-TaskManager uses repository-first documentation. The implementation is the source of truth, and documentation explains how the implementation works.
-
-Each major topic has one owning document. Other documents should link to that source instead of duplicating detail.
-
-| Document | Purpose |
+| Command | Purpose |
 |---|---|
-| [README.md](./README.md) | Project overview and repository entry point. |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Technical architecture, modules, data model overview, security model, deployment shape, and review register. |
-| [docs/SECURITY.md](./docs/SECURITY.md) | Authentication, authorisation, data isolation, collaboration boundaries, security invariants, and review areas. |
-| [docs/TESTING.md](./docs/TESTING.md) | Current automated coverage, change-based verification, manual workflows, and testing priorities. |
-| [docs/DECISIONS.md](./docs/DECISIONS.md) | Architecture Decision Records explaining why major decisions were made. |
-| [PROJECT_PLAYBOOK.md](./PROJECT_PLAYBOOK.md) | Development philosophy, workflow standards, documentation strategy, and Definition of Done. |
-| [HOW_TO_WORK_WITH_TASKMANAGER.md](./HOW_TO_WORK_WITH_TASKMANAGER.md) | Quick routing guide for AI coding assistants. |
-| [docs/PUSH_NOTIFICATIONS.md](./docs/PUSH_NOTIFICATIONS.md) | Browser Push implementation, behavior, troubleshooting, and manual test plans. |
-| [docs/PRISMA_MIGRATION_WORKFLOW.md](./docs/PRISMA_MIGRATION_WORKFLOW.md) | Mandatory database migration workflow. |
-| [docs/MIGRATION_HISTORY.md](./docs/MIGRATION_HISTORY.md) | Migration-history reconciliation notes. |
-| [docs/OPERATIONS_MANUAL.md](./docs/OPERATIONS_MANUAL.md) | Operational notes and deployment procedures. |
+| `npm run dev` | Start the local development server. |
+| `npm test` | Run the current Node test suite. |
+| `npm run lint` | Run repository-wide ESLint checks; known baseline debt is documented in Testing. |
+| `npm run build` | Create a production Next.js build. |
+| `npx tsc --noEmit` | Run TypeScript checking without emitting files. |
+| `npx prisma generate` | Generate Prisma Client from the current schema. |
+| `npx prisma validate` | Validate Prisma schema and configuration. |
+| `npx prisma migrate status` | Inspect migration status for the configured database; confirm the target first. |
+| `npm run db:integrity:audit` | Run the read-only aggregate relationship audit against the configured database. |
+| `npm run docs:playbook` | Build the Engineering Playbook publication. |
+| `npm run docs:playbook:qa` | Render publication pages and contact sheets for visual QA. |
 
-When updating the repository, prefer changing the document that owns the topic. For example, Push internals belong in `docs/PUSH_NOTIFICATIONS.md`, architecture changes belong in `docs/ARCHITECTURE.md`, and migration process changes belong in `docs/PRISMA_MIGRATION_WORKFLOW.md`.
+Schema changes and shared-database operations must follow the [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md). Do not use `prisma db push` or `prisma migrate reset` against shared Railway data.
 
-## Contributing
+## Documentation Map
 
-TaskManager is maintained with small, intentional changes.
+Each major topic has one primary owner. Follow the link rather than relying on a duplicated summary elsewhere.
 
-Before making significant changes:
+| Document | Owns |
+|---|---|
+| [Architecture](./docs/ARCHITECTURE.md) | How the application is structured, how major systems interact, and the active technical-debt/review register. |
+| [Security](./docs/SECURITY.md) | Authentication, authorisation, ownership, collaboration boundaries, security invariants, and review triggers. |
+| [Testing](./docs/TESTING.md) | Current automated coverage, verification commands, manual workflows, gaps, and change-based test expectations. |
+| [Architecture Decisions](./docs/DECISIONS.md) | Why significant architecture, security, data, operational, and UX decisions were made. |
+| [Project Playbook](./PROJECT_PLAYBOOK.md) | Product philosophy, the engineering workflow, development standards, documentation strategy, and Definition of Done. |
+| [AI Quick Start](./HOW_TO_WORK_WITH_TASKMANAGER.md) | Brief routing and working rules for AI-assisted development sessions. |
+| [Push Notifications](./docs/PUSH_NOTIFICATIONS.md) | Browser Push architecture, preferences, subscriptions, badges, troubleshooting, and device testing. |
+| [Operations Manual](./docs/OPERATIONS_MANUAL.md) | Deployment and operational procedures. |
+| [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md) | Mandatory process for designing, testing, reviewing, and deploying migrations. |
+| [Migration History](./docs/MIGRATION_HISTORY.md) | Reconciled migration history and historical context. |
+| [Engineering Playbook manuscript](./docs/ENGINEERING_PLAYBOOK_V2_SOURCE.md) | Source Markdown for the broader Engineering Playbook publication. |
+| [Publication system](./docs/publication/README.md) | How the Playbook is assembled, built, verified, and published. |
 
-- Read the documentation relevant to the work.
-- Preserve server-side security and ownership checks.
-- Prefer extending existing services and UI surfaces before adding parallel systems.
-- Use Prisma migrations for schema changes.
-- Run relevant automated checks.
-- Manually verify affected workflows.
-- Review documentation impact before marking work complete.
+The current generated snapshot is the [Engineering Playbook Repository Edition v2.0 — Draft 1](<./docs/publication/generated/TaskManager Engineering Playbook - Repository Edition v2.0 - Draft 1.pdf>). It is a retained publication output, not a replacement for the living Markdown.
 
-The full Definition of Done is documented in [PROJECT_PLAYBOOK.md](./PROJECT_PLAYBOOK.md).
+## Engineering Workflow
 
-## Deployment
+TaskManager uses six high-level stages for meaningful engineering work:
 
-TaskManager is built for deployment with:
+1. **Investigate** — inspect the repository, current behaviour, documentation, tests, working tree, and data implications.
+2. **Design** — confirm the outcome, scope, ownership rules, constraints, migration implications, and acceptance criteria.
+3. **Implement** — make the smallest complete and coherent change without unrelated work.
+4. **Verify** — gather risk-appropriate automated, security, manual, browser/device, and deployment evidence.
+5. **Document** — update the owning documents, or deliberately record that no documentation change is required.
+6. **Commit** — review the final diff and create one intentional, accurately scoped commit when authorised.
 
-- Vercel-style hosting for the Next.js application.
-- Railway-hosted MariaDB for production data.
-- Prisma migrations for schema evolution.
-- VAPID environment variables for Browser Push.
+The lifecycle is iterative: new evidence can return work to Investigation or Design. The [Project Playbook](./PROJECT_PLAYBOOK.md#engineering-workflow) owns the full practice and relates it to the detailed execution sequence used in the Engineering Playbook.
 
-Deployment and operational details are maintained in focused documentation rather than duplicated here:
+## Deployment and Operations
+
+TaskManager is built for a Vercel-style Next.js deployment with Railway-hosted MariaDB and VAPID configuration for Browser Push. Use the focused documents for operational work:
 
 - [Operations Manual](./docs/OPERATIONS_MANUAL.md)
 - [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md)
 - [Push Notifications](./docs/PUSH_NOTIFICATIONS.md)
 
-## Project Status
+Do not infer production safety from a successful local build. Confirm the target environment, follow the relevant runbook, and perform risk-appropriate smoke checks.
 
-Stable implemented systems include:
+## Maintenance
 
-- Profile, project, and task management.
-- Overview workspace.
-- Delegated task lifecycle.
-- In-app notifications and Browser Push delivery.
-- Collaborative Spaces.
-- Timesheets and reports.
-- Prisma/MariaDB migration workflow and reconciliation documentation.
+TaskManager favours small, evidence-based changes and one authoritative document per topic. Known debt is prioritised in [Architecture](./docs/ARCHITECTURE.md#known-technical-debt--future-review); public setup or capability changes should also prompt a README review.
 
-Current improvement areas include documentation maintenance, permission-helper consolidation, broader automated coverage, notification badge behavior review, and operational hardening.
+## Licence
 
-## License
-
-Private project - not licensed for distribution.
+Private project — not licensed for distribution.
