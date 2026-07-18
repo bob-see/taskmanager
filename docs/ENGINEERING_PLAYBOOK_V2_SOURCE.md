@@ -981,8 +981,11 @@ Playbook intentionally contains no personal data, row content, names, or IDs.
 
 ## P1 Gate Before Further TaskManager Feature Work
 
-1. Upgrade Next.js and matching framework/ESLint packages to a patched supported
-   release in an isolated milestone. Do not run `npm audit fix --force` blindly.
+1. **Framework security milestone completed and verified.** `next` and
+   `eslint-config-next` were upgraded from 16.1.6 to 16.2.10. All direct Next.js
+   advisories from the baseline audit are cleared; remaining Prisma, PostCSS, and
+   NextAuth transitive advisories stay in the dependency/toolchain register. Do not
+   run `npm audit fix --force` blindly.
 2. Fix global profile-reorder cross-user authorisation and add owner/wrong-user
    regressions.
 3. Fix timer start/stop ownership, explicitly decide simultaneous-user timer
@@ -998,6 +1001,12 @@ reviewed preferably idempotent repair process with before/after counts.
 After a framework upgrade, run `npm audit`, type checking, tests, production build,
 login smoke testing, Server Action testing, Proxy redirect testing, and direct
 restricted-route testing.
+
+For this milestone, audit, dependency-tree, type, test, build, Prisma, targeted
+lint, Proxy redirect, public-route, PWA asset, and Node 22.13.0 checks passed. Full
+lint remained at 47 errors and 17 warnings. Authenticated login and mutation smoke
+checks require the deployed environment because the repository has no disposable
+application database; they remain mandatory before release.
 
 ## Active Planned Debt
 

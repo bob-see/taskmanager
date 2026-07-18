@@ -631,11 +631,31 @@ The test run also emitted two non-fatal Node module-type reparsing warnings for
 TypeScript modules imported by the Node test runner. They are quality noise rather
 than test failures.
 
+### Milestone 1 Status — Framework Security Upgrade
+
+Completed and verified on 18 July 2026. `next` and `eslint-config-next` were
+upgraded together from 16.1.6 to the stable 16.2.10 release. React and React DOM
+remain at 19.2.3 because they satisfy the framework peer requirements; the
+repository minimum remains Node.js 22.13.0.
+
+The post-upgrade production audit still reports 16 vulnerabilities, now 8 high and
+8 moderate. All direct Next.js advisories reported in the baseline audit are gone.
+The remaining findings are Prisma CLI/config transitive packages (high), Next.js's
+pinned PostCSS dependency (moderate), and NextAuth's UUID dependency (moderate).
+They remain in the dependency/toolchain register rather than being folded into this
+isolated framework milestone. Type checking, 31 tests, the production build, Prisma
+validation, dependency-tree validation, targeted framework-file linting, and
+minimum-runtime TypeScript/tests/build passed. Full lint remains at the unchanged
+pre-existing baseline of 47 errors and 17 warnings. Safe local HTTP checks confirmed
+public assets/routes and unauthenticated redirects; authenticated mutation checks
+remain a deployment smoke-test responsibility because the repository has no
+disposable application database.
+
 ### Active Register
 
 | Item | Status | Priority | Category | Evidence / audit date | Recommended action | Blocks feature work? |
 |---|---|---|---|---|---|---|
-| Next.js/framework security update | Confirmed affected dependency range | P1 | Security gap | `npm audit --omit=dev`, 18 July 2026: 16 production vulnerabilities, including 9 high; direct `next@16.1.6` advisories include Proxy/Middleware bypass, CSRF, and denial-of-service classes. | Upgrade Next.js and matching framework/ESLint packages in an isolated milestone; do not run `npm audit fix --force` blindly. | Yes |
+| Next.js/framework security update | Completed and verified | Resolved | Resolved / retire from register | 18 July 2026: `next` and `eslint-config-next` upgraded from 16.1.6 to 16.2.10; all direct Next.js advisories cleared; required checks passed and full lint remained 47 errors/17 warnings. | Perform the outstanding authenticated deployment smoke checks before release. Track remaining transitive advisories under dependency/toolchain alignment. | No |
 | Global profile reorder ownership | Confirmed defect | P1 | Security gap | `app/api/profiles/reorder/route.ts` has no route-local session/owner check and reads, updates, and returns profiles without user scope. | Scope candidate IDs, updates, and response rows to the authenticated owner; add correct-user and wrong-user tests. | Yes |
 | Timer start/stop ownership | Confirmed defect | P1 | Security gap | Timer start accepts any existing profile and performs a global active-timer check; timer stop selects the latest active timer globally. | Authenticate locally, enforce profile/timer ownership, define simultaneous-user behavior, and add two-user regressions. | Yes |
 | Timer Brisbane calendar date | Confirmed defect | P1 | Data correctness | Timer start/stop derive `entryDate` through server-local `Date` fields. A UTC runtime can assign Brisbane activity before 10:00 am to the previous day. | Derive the Brisbane calendar date from the action instant and test both sides of Brisbane midnight. | Yes |
@@ -689,9 +709,10 @@ Production orphan data must not be mutated without:
 
 ### Recommended Milestones
 
-1. **Framework security:** upgrade Next.js and matching framework/ESLint packages
-   alone, then run `npm audit`, type checking, tests, production build, login,
-   Server Action, Proxy redirect, and restricted-route checks.
+1. **Framework security — completed:** Next.js and matching framework/ESLint
+   packages were upgraded alone and automated plus safe local route checks passed.
+   Complete authenticated login, Server Action, and mutation smoke checks in the
+   deployed environment before release.
 2. **Ownership and timer correctness:** add focused regressions, fix global profile
    reorder, isolate timer start/stop by user, and persist the Brisbane action date.
 3. **Production integrity:** back up, investigate, approve, and safely repair or
