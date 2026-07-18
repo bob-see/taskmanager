@@ -510,7 +510,7 @@ export function NotificationSettingsClient({
         <div className="border-b border-[color:var(--tm-border)] p-4 md:p-5">
           <h2 className="text-base font-semibold">Delegated Tasks</h2>
           <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-            Push preferences are saved now; delegated task events will start using them in the push delivery release.
+            Delegated task events use these settings for both in-app and Push notifications.
           </p>
         </div>
         <div className="divide-y divide-[color:var(--tm-border)]">

@@ -1,8 +1,8 @@
 # TaskManager Testing
 
 **Status:** Living Document  
-**Last Updated:** 2026-07-12  
-**Last Verified Against Commit:** `69fea16d`  
+**Last Updated:** 2026-07-18
+**Last Verified Against Commit:** `7049fbc`
 **Repository Branch:** `main`  
 **Working Tree Note:** This document also reflects pending documentation changes that are not represented by the verification commit.  
 **Audience:** Future maintainers, AI coding assistants, contributors reviewing changes, and anyone preparing a deployment.  
@@ -25,6 +25,13 @@
 
 The repository requires Node.js 22.13.0 or later and has no CI configuration, coverage command, browser-automation framework, dedicated test script beyond Node's test runner, or declared staging/test database.
 
+The authoritative 18 July 2026 verification and technical-debt baseline is recorded
+in [Architecture: Known Technical Debt & Future Review](./ARCHITECTURE.md#known-technical-debt--future-review).
+At that baseline, type checking, all 31 tests, the production build, Prisma
+validation, migration status, the dependency-tree check, and `git diff --check`
+passed. Full lint failed with 47 errors and 17 warnings. The test run emitted two
+non-fatal Node module-type reparsing warnings for imported TypeScript modules.
+
 | Command | What it checks | What it does not check | Connectivity and safety |
 |---|---|---|---|
 | `npm test` | Runs Node's test runner with TypeScript stripping enabled: the four current test files and 31 test cases. | Routes, browsers, a live database, real Web Push, and most domain workflows. | No database or network is used by the current tests; safe locally. |
@@ -46,7 +53,7 @@ Do not use `prisma db push` or `prisma migrate reset` against shared Railway dat
 | `tests/push-subscriptions.test.mjs` | Push subscription validation and hashing | Pure logic, duplicated test implementation | Deterministic SHA-256 endpoint hash, accepted browser subscription shape, trimming, ignored client user ID, missing-key rejection, and rejection of a `javascript:` endpoint. | Reimplements hashing/validation instead of importing `app/lib/push-subscriptions.ts`; no authenticated route ownership, Prisma storage, length limits, HTTP edge cases, browser subscription API, or real provider. |
 | `tests/push-delivery.test.mjs` | Web Push delivery core and payload mapping | Service-level with mocks | Global and per-type preference handling, missing preference behavior, missing VAPID handling, no-subscription handling, multi-device attempts, isolated temporary failure, `404`/`410` cleanup, Push delivery without an in-app row, same-origin target sanitisation, unread badge payload, and concise payload mapping. | Database, logger, VAPID configuration, and Web Push transport are mocked; no dispatcher/route, real Prisma, provider encryption/delivery, service worker, browser permission, device receipt, or UI state. |
 
-Only `push-delivery.test.mjs` imports the production implementation under test (`app/lib/push-delivery-core.ts`). The other two files can detect changes to their copied expectations but can drift independently from production code. None of the current files are route-level, database-integration, browser/UI, or end-to-end tests.
+`date-time.test.mjs` and `push-delivery.test.mjs` import their production implementations (`app/lib/date-time.ts` and `app/lib/push-delivery-core.ts`). `recurrence-pause.test.mjs` and `push-subscriptions.test.mjs` copy production logic and can drift independently from it. None of the current files are route-level, database-integration, browser/UI, or end-to-end tests.
 
 ## Current Coverage Boundaries
 
@@ -64,7 +71,7 @@ The current automated suite does not prove:
 - Sunday Check-ins, Routine Support, Brisbane Sunday logic, or reporting summaries;
 - React UI behavior, responsive layout, accessibility, title/favicon badges, PWA installation, or real service-worker behavior;
 - desktop notification permission/delivery, iPhone Home Screen delivery, lock-screen content, or notification-click authentication redirects;
-- migration application against a real MariaDB test database, preservation of existing rows, or orphan detection under `relationMode = "prisma"`.
+- migration application against a real MariaDB test database, preservation of existing rows, or automated orphan detection under `relationMode = "prisma"`. The 18 July audit used ad hoc read-only counts and confirmed production orphans; it did not add a repeatable harness.
 
 These gaps are not equally urgent. Cross-user route authorisation and the two known ownership defects are the highest priorities. Browser automation and broader reporting coverage are useful later, while real-device Push checks remain inherently manual even if browser automation grows.
 
@@ -231,7 +238,7 @@ A confirmed defect should normally produce a reproducible case, a failing automa
 | Recurrence tests | Useful cases, but copied logic | Tests can pass while production diverges | Move/add tests that import production recurrence/date helpers and add route persistence boundaries. | Medium |
 | Push subscription tests | Copied validation/hash logic | Production validation can drift silently | Import production helpers and add authenticated persistence cases. | Medium |
 | Timesheet/report calculations | No automated coverage | Incorrect rounding, week totals, or reporting | Add pure utility tests first, then owned-entry route cases. | Medium |
-| MariaDB migration/integrity | No disposable test DB or orphan checks | Migration/data-integrity surprises | Define a safe non-production MariaDB verification workflow and targeted orphan queries. | Medium |
+| MariaDB migration/integrity | No disposable test DB or repeatable orphan checks; the 18 July read-only audit confirmed production orphans | Existing integrity defects can persist and destructive workflows can create more | Define a safe non-production MariaDB workflow and repeatable count-only orphan checks before repair or relation changes. | High |
 | Browser/service worker automation | Manual only | UI/PWA regressions detected late | Add focused browser automation only after stable high-value scenarios are identified; retain device checks. | Medium |
 | Reports, Routine Support, Sunday Check-ins | Manual/code inspection only | Calculation/date regressions | Add deterministic summary/date tests around known business cases. | Low to Medium |
 

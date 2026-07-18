@@ -1,9 +1,10 @@
 # TaskManager Security
 
 **Status:** Living Document  
-**Last Updated:** 2026-07-12  
-**Last Verified Against Commit:** `69fea16d`  
+**Last Updated:** 2026-07-18
+**Last Verified Against Commit:** `7049fbc`
 **Repository Branch:** `main`  
+**Working Tree Note:** This document includes documentation changes made after the clean audit baseline and therefore not represented by the verification commit.
 **Audience:** Future maintainers, AI coding assistants, and contributors reviewing security-sensitive changes.  
 **Purpose:** Focused reference for how TaskManager protects authentication, user data, ownership boundaries, and collaborative workflows, and for the rules future development must preserve.
 
@@ -196,14 +197,22 @@ Repository maintenance scripts deserve separate handling: the admin-user bootstr
 
 ## Known Security Debt and Review Areas
 
+The authoritative dated priorities, verification results, data-integrity counts,
+and retirement record are maintained in
+[Architecture: Known Technical Debt & Future Review](./ARCHITECTURE.md#known-technical-debt--future-review).
+This table retains the security-specific implications and review triggers.
+
 | Current state | Practical risk | Review trigger |
 |---|---|---|
+| `next@16.1.6` was in an affected range for multiple high-severity advisories in the 18 July 2026 production dependency audit, including Proxy/Middleware bypass classes. | Framework defects can weaken request-boundary assumptions; three known defective routes currently rely on proxy authentication without route-local user isolation. | P1 before further feature work: perform an isolated patched framework/ESLint upgrade and full authentication smoke verification. Do not run `npm audit fix --force` blindly. |
 | The profile reorder handler omits session and ownership checks and operates on every profile in the database. | An authenticated user can enumerate basic profile metadata and reorder profiles belonging to other users. | Before profile-ordering work, multi-user rollout expansion, or a security release. |
 | Timer start/stop handlers omit session and ownership checks; start accepts an arbitrary profile and stop finds the latest active timer globally. | An authenticated user can affect another user's timer despite proxy authentication. | Before any timer work, multi-user rollout expansion, or security release. |
 | Authentication, current-user resolution, ownership checks, and participant checks are repeated across many files; only some domains use shared helpers. | A new route can diverge or omit a predicate, as the timer routes demonstrate. | When adding routes or touching a domain with duplicated guards; centralise only where it preserves clear domain rules. |
 | Lost/Hatch access uses a hard-coded private owner identity in application code. | Identity changes require a code change, and accidental disclosure is easier than with role/config-based policy. | When ownership changes, the feature expands, or access needs more than one stable owner. |
+| `scripts/create-admin-user.js` contains a known temporary password, can reset the configured administrator hash, and prints the credential. | An obsolete or mistakenly targeted maintenance command could establish a known live credential. | Confirm whether the script remains required and whether it has ever targeted a live environment; remove or harden it before reuse. |
 | Automated tests currently cover Push helpers/delivery and recurrence, but not route-level authentication, wrong-user ownership, Groups, delegated lifecycle permissions, Space roles, notifications, or admin actions. | Authorisation regressions may reach production unless caught manually. | Before expanding multi-user or collaborative behavior and whenever security-sensitive routes change. |
-| `relationMode = "prisma"` is not backed by automated orphan/integrity checks. | Direct SQL or incomplete application behavior can leave orphaned or inconsistent records. | Before/after data repair, user deletion, relation changes, or production maintenance. |
+| `relationMode = "prisma"` is not backed by automated orphan/integrity checks, and read-only counts on 18 July 2026 confirmed orphaned production records. | The risk is realised: inaccessible or inconsistent task, project, note, time-entry, and Space records already exist. | P1 investigation before repair or further destructive/relation work. Do not mutate the records without a verified backup, origin investigation, approved treatment, and reviewed preferably idempotent process. |
+| Push-subscription validation accepts arbitrary HTTP/HTTPS endpoint hosts and the Web Push transport later makes an outbound HTTPS request to the stored host. | This may provide an authenticated blind server-side request path unless application or hosting egress controls prevent unsafe destinations. | Review HTTPS, private/link-local/loopback host, DNS, and egress policy before expanding integrations or Push exposure. |
 | JWT sessions have no application revocation/version mechanism, and password reset does not explicitly revoke existing tokens. | A previously issued token may remain usable until normal NextAuth expiry, although current database role/ownership checks still apply. | When account disablement, credential compromise response, or self-service password management is introduced. |
 | Credentials login has no application rate limiting, lockout, or attempt audit. | Repeated password guessing is not constrained by this repository's application code. | Before broader internet exposure or if authentication abuse appears in hosting logs. |
 | Mutation routes rely on NextAuth cookie behavior and route-specific method handling; no repository-wide explicit Origin/CSRF helper is present for custom JSON APIs. | CSRF posture can become inconsistent as new mutation styles or clients are added. This is a review area, not a confirmed exploit. | When adding cross-origin use, public APIs, native clients, or nonstandard cookie/session settings. |

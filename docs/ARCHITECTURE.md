@@ -2,7 +2,7 @@
 
 **Status:** Living Document  
 **Last Updated:** 2026-07-18
-**Last Verified Against Commit:** `ad1649d`  
+**Last Verified Against Commit:** `7049fbc`
 **Repository Branch:** `main`  
 **Working Tree Note:** This document also reflects pending documentation changes that are not represented by the verification commit.  
 **Purpose:** Authoritative technical architecture reference for TaskManager. This document explains how the application is currently structured, how its major modules interact, and why key architectural decisions exist. It is intended for maintainers and future AI-assisted development sessions before significant technical changes are made.
@@ -568,6 +568,8 @@ TaskManager combines automated checks with manual workflow verification.
 
 Automated tests currently cover:
 
+- deterministic Australian/Brisbane date and time formatting
+- Brisbane date, greeting, midnight, and week-boundary behavior
 - recurring task pause behavior
 - push subscription validation and endpoint hashing
 - push delivery preference behavior
@@ -595,16 +597,170 @@ Deployment verification should include:
 
 ## Known Technical Debt & Future Review
 
-Outstanding architecture items and future review areas:
+This section is the maintainable source for the active technical-debt register. The
+Engineering Playbook curates it, while Security, Testing, Push, migration, and
+operations documents own their detailed rules. Priorities use the following scale:
 
-- **Permission helper consolidation:** Ownership and authorisation checks are still distributed across several route groups.
-- **Polling optimisation:** Notification counts and some delegated counts use polling rather than real-time transport.
-- **Badge synchronisation review:** Installed app badge updates are send-time and page-driven, not a complete cross-device sync system.
-- **Synchronous Push delivery review:** Web Push is currently awaited during notification dispatch. Review an asynchronous queue or outbox only if measured production latency or delivery requirements justify the added complexity.
-- **Sunday Check-in generalisation review:** The current Sunday Check-in supports a specialised routine-support workflow. A future generalised version could allow users to choose whether check-ins are enabled, which profile they apply to, preferred weekday, title or purpose, questions/options, and whether check-ins contribute to routine or reporting views.
-- **Documentation upkeep:** README, Playbook, and architecture docs should be kept aligned after major feature commits.
-- **Automated integrity checks:** Broader tests for route permissions, delegated lifecycle, timesheets, and collaborative spaces would reduce regression risk.
-- **Legacy compatibility cleanup:** Any fallback paths for historical migration gaps should be reviewed after confirming all environments are reconciled.
+- **P0:** immediate severe risk;
+- **P1:** address before further TaskManager feature work;
+- **P2:** important planned cleanup;
+- **P3:** acceptable to defer; and
+- **Monitor only:** do not implement without evidence or a review trigger.
+
+### Audit Baseline — 18 July 2026
+
+The repository and configured production database were audited from clean HEAD
+`7049fbc`. Checks were read-only except for normal local build output. No application
+or production data changes were made.
+
+| Check | Result |
+|---|---|
+| Repository minimum runtime | Node.js 22.13.0 |
+| Local audit runtime | Node v25.6.1; npm 11.18.0 |
+| Full lint | Failed: 47 errors and 17 warnings |
+| TypeScript | Passed: `npx tsc --noEmit` |
+| Automated tests | Passed: 31; failed: 0 |
+| Production build | Passed |
+| Prisma validation | Passed |
+| Migration status | 32 migrations; configured database up to date |
+| Production dependency audit | 16 vulnerabilities: 9 high and 7 moderate |
+| Dependency tree | `npm ls --depth=0` passed |
+| Diff hygiene | `git diff --check` passed |
+
+The test run also emitted two non-fatal Node module-type reparsing warnings for
+TypeScript modules imported by the Node test runner. They are quality noise rather
+than test failures.
+
+### Active Register
+
+| Item | Status | Priority | Category | Evidence / audit date | Recommended action | Blocks feature work? |
+|---|---|---|---|---|---|---|
+| Next.js/framework security update | Confirmed affected dependency range | P1 | Security gap | `npm audit --omit=dev`, 18 July 2026: 16 production vulnerabilities, including 9 high; direct `next@16.1.6` advisories include Proxy/Middleware bypass, CSRF, and denial-of-service classes. | Upgrade Next.js and matching framework/ESLint packages in an isolated milestone; do not run `npm audit fix --force` blindly. | Yes |
+| Global profile reorder ownership | Confirmed defect | P1 | Security gap | `app/api/profiles/reorder/route.ts` has no route-local session/owner check and reads, updates, and returns profiles without user scope. | Scope candidate IDs, updates, and response rows to the authenticated owner; add correct-user and wrong-user tests. | Yes |
+| Timer start/stop ownership | Confirmed defect | P1 | Security gap | Timer start accepts any existing profile and performs a global active-timer check; timer stop selects the latest active timer globally. | Authenticate locally, enforce profile/timer ownership, define simultaneous-user behavior, and add two-user regressions. | Yes |
+| Timer Brisbane calendar date | Confirmed defect | P1 | Data correctness | Timer start/stop derive `entryDate` through server-local `Date` fields. A UTC runtime can assign Brisbane activity before 10:00 am to the previous day. | Derive the Brisbane calendar date from the action instant and test both sides of Brisbane midnight. | Yes |
+| Ownership and timezone regression coverage | Missing | P1 | Test coverage gap | No current test calls a route handler with unauthenticated, owner, and wrong-user sessions; timer persistence is also untested. | Establish the smallest route/service test seam needed for profile reorder and timer start/stop, including simultaneous users and midnight boundaries. | Blocks completion of the P1 fixes |
+| Orphaned production records | Confirmed current data defect | P1 | Data integrity | Read-only relationship counts on 18 July 2026 found real orphans; aggregate evidence is recorded below. | Investigate origin, approve treatment, back up, repair through a reviewed preferably idempotent process, and add repeatable integrity checks. | Yes |
+| Push subscription endpoint hardening | Credible risk; environment controls unverified | P2 | Security gap | Subscription validation accepts arbitrary HTTP/HTTPS hosts and `web-push` later constructs an outbound HTTPS request to the stored host. | Require HTTPS and review private, loopback, link-local, unsafe-host, and egress protections; add malicious-host tests. | No |
+| Repository-wide lint debt | Active | P2 | Maintainability debt | 47 errors and 17 warnings on 18 July 2026: 42 explicit `any` errors, 3 React effect/state errors, 2 JSX escaping errors, 13 unused warnings, and 4 hook-dependency warnings. | Address hook correctness first, then API transaction types, then dead code/style. | No |
+| Delegation, Spaces, notification, and Push route coverage | Missing/incomplete | P2 | Test coverage gap | Current tests do not exercise participant, member/owner/non-member, recipient, cursor, preference, or subscription ownership at route level. | Add focused role/ownership matrices before expanding those subsystems. | Before affected feature expansion |
+| Copied production logic in tests | Active drift risk | P2 | Test coverage gap | Recurrence-pause and Push-subscription tests reimplement logic; date-time and Push-delivery tests import production modules. | Import small production helpers where practical; label any retained copies as specification examples. | No |
+| CI | Missing | P2 | Test coverage gap | No repository CI configuration exists. | Add type, test, build, and lint gates after the P1 work and a deliberate lint transition. | No |
+| Disposable MariaDB migration/integrity target | Missing | P2 | Operational limitation | `relationMode = "prisma"` has no physical foreign-key safety; there is no repeatable non-production migration target or automated orphan suite. | Define a safe disposable target and count-only integrity checks before further relation/destructive work. | Before schema/destructive work |
+| Distributed permission and task-action logic | Active | P2 | Maintainability debt | Ownership checks are repeated across profile/task/project routes, while Tracker and Overview duplicate significant task-action behavior. | Consolidate narrow domain helpers without introducing a broad generic permission framework. | Before adding similar routes/actions |
+| Query and payload scaling | Evidence-based risk; no current incident | P2 | Operational limitation | Home performs one task request per profile; Overview loads all open tasks and note histories; Reports loads all historical tasks/time entries before in-memory filtering. | Add scoped summary queries, database period filtering, and pagination only where data growth or measured latency warrants it. | No |
+| Legacy admin bootstrap script | Requires investigation | P2 | Security gap | `scripts/create-admin-user.js` contains a known temporary password, can reset an administrator hash, and prints the credential. | Confirm whether it is still needed or has been used live; remove it or require explicit safe inputs and target confirmation. | No |
+| Dependency/toolchain alignment | Active | P2 | Maintainability debt | Installed Prisma adapter and Client/CLI minor versions differ; Node types target 20 while runtime minimum is 22; several audit findings are Prisma/tooling transitives. | Align versions in a controlled dependency milestone and reassess production versus development dependencies. | No |
+| Delegated task origin semantics | Undecided | P2 | Product review trigger | Acceptance/copy behavior and older “origin should not move” philosophy are not fully aligned. | Decide the intended long-term copy/move/ownership model before adding reassignment, reopen, or expanded lifecycle features. | Before delegated lifecycle expansion |
+| Account/session lifecycle and login controls | Known limitation | P3 | Security gap | JWT sessions have no application revocation/version mechanism; password reset does not explicitly revoke tokens; no application lockout/attempt audit exists. | Review with exposure, offboarding, compromise-response, or self-service account requirements. | No |
+| Security headers and hosting controls | Needs environment confirmation | P3 | Security review trigger | No application-specific headers are declared; Vercel/WAF rate limiting and header policy were not verified by the repository audit. | Confirm deployment controls before changing repository policy. | No |
+| Logging, privacy, and retention | Known limitation | P3 | Operational limitation | Logs can include internal IDs and error detail; notifications/activity records have no documented retention process. No secrets or full Push endpoints were found in application logs. | Define access and retention before external observability or material user growth. | No |
+| Push-device lifecycle | Known limitation | P3 | Operational limitation | Multi-device storage and expired-provider cleanup exist; retention windows, device labels, and remove-all-device controls do not. | Revisit with device churn, shared devices, or formal offboarding. | No |
+| Browser automation, coverage tooling, and staging | Deferred | P3 | Test coverage gap | No broad browser suite, coverage target, or declared staging environment exists. | Add selected stable scenarios after route/security coverage; retain real-device Push checks. | No |
+| Legacy fallbacks and lint suppressions | Localised | P3 | Maintainability debt | Two temporary profile compatibility TODOs and five LOST hook-dependency suppressions remain. | Remove or review only when environment reconciliation or feature work supplies evidence. | No |
+
+### Production Data-Integrity Evidence
+
+The audit ran read-only `LEFT JOIN ... COUNT(*)` checks across 28 modelled
+relationships. It returned aggregate counts only; no personal data, row content,
+names, or identifiers were read into the audit record.
+
+| Orphan relationship/class | Count | Additional safe aggregate context |
+|---|---:|---|
+| Tasks referencing missing profiles | 6 | Across 2 missing parents; 4 tasks are open |
+| Tasks referencing missing projects | 1 | The task is open |
+| Task notes referencing missing tasks | 5 | Across 3 missing tasks |
+| Projects referencing missing profiles | 2 | Both are not archived |
+| Time entries referencing missing profiles | 4 | None is an active timer |
+| Matrix columns referencing missing Spaces | 32 | Across 7 missing Spaces; all are unarchived |
+| Matrix rows referencing missing Spaces | 80 | Across 9 missing Spaces; 79 are not done |
+
+All other checked immediate relationships returned zero orphans. Clean immediate
+cell-to-row/column counts do not prove that the inaccessible orphaned Space
+subgraphs contain no child cells or notes; that belongs in the dedicated integrity
+investigation.
+
+Production orphan data must not be mutated without:
+
+1. a verified backup;
+2. investigation of likely origin and current deletion behavior;
+3. human approval of delete, retain, archive, or reattach treatment; and
+4. a reviewed and preferably idempotent repair process with before/after counts.
+
+### Recommended Milestones
+
+1. **Framework security:** upgrade Next.js and matching framework/ESLint packages
+   alone, then run `npm audit`, type checking, tests, production build, login,
+   Server Action, Proxy redirect, and restricted-route checks.
+2. **Ownership and timer correctness:** add focused regressions, fix global profile
+   reorder, isolate timer start/stop by user, and persist the Brisbane action date.
+3. **Production integrity:** back up, investigate, approve, and safely repair or
+   retain the orphan classes; add repeatable count-only checks.
+4. **Verification baseline:** reduce lint debt, add CI, and extend high-risk route
+   coverage.
+5. **Planned cleanup:** address dependency alignment, selected query scaling,
+   shared domain helpers, and other P2 work as affected areas are revisited.
+
+Milestones 1–3 are the recommended work before further TaskManager feature work.
+
+### Safe To Leave Unchanged For Now
+
+The audit found no evidence that the following require implementation now:
+
+- 60-second visible-tab notification and delegated-count polling;
+- synchronous Push delivery;
+- progressive title, favicon, and installed-app badge synchronisation;
+- the web-first PWA architecture;
+- specialised Sunday Check-in behavior;
+- no general real-time transport;
+- the elevated delegated-task transaction timeout;
+- no broad generic permission framework;
+- no comprehensive browser suite or coverage target yet; and
+- hard-coded LOST owner access while the owner remains stable and the feature
+  remains private.
+
+These are review triggers, not defects. Reconsider them only with measured
+performance, reliability, security, product, device, or ownership evidence. The
+legacy administrator bootstrap script is separate and remains an active P2
+investigation item.
+
+### Outstanding Human Decisions
+
+1. Should orphaned historical production data be deleted, retained for audit,
+   archived, or reattached where possible?
+2. Is TaskManager publicly internet-reachable without additional Vercel/WAF rate
+   limiting and security-header policy?
+3. Is `scripts/create-admin-user.js` still required, and has its known temporary
+   password ever been used against a live environment?
+4. Are separate users explicitly intended to have simultaneous active timers?
+5. Is delegated acceptance copy/move behavior the intended long-term origin model?
+6. Is task-title, actor, and decline-reason notification content acceptable on
+   locked or shared devices?
+7. Should LOST access remain tied to one named owner or eventually move to a role
+   or configuration policy?
+
+### Resolved Or Retired From The Previous Register
+
+- The README is current enough to retire the previous stale-README item.
+- The root service worker and Browser Push infrastructure are implemented.
+- Title, favicon, and installed-app badge support are implemented, with progressive
+  platform limitations documented separately.
+- Initial-render hydration/date-time instability is resolved for the confirmed
+  Tracker, Reports, Timesheets, Overview, Home, and delegated-note surfaces through
+  deterministic formatting, stable initial snapshots, and Brisbane boundary
+  refreshes. The timer persistence defect above is separate from hydration.
+- Profile-specific task reorder no longer uses the previous large interactive
+  transaction and preserves `updatedAt` through a parameterised bulk update.
+- Migration reconciliation is complete and all 32 committed migrations were
+  applied at the audit baseline.
+- Node runtime support is explicitly Node.js 22.13.0 or later.
+- Disposable publication build output is ignored while intended generated
+  deliverables remain retained.
+
+Automated testing has improved to 31 cases, including production-coupled date-time
+and Push-delivery tests, but broader route/database/browser coverage remains active
+debt. The older 47-error/18-warning lint snapshot is superseded, not retired, by
+the authoritative 18 July baseline of 47 errors and 17 warnings.
 
 ## Maintaining This Document
 
@@ -618,12 +774,12 @@ The Build Playbook PDF is a periodically generated snapshot derived from reposit
 
 | Area | Current Status | Next Review | Notes |
 |---|---|---|---|
-| Notifications | Implemented: in-app, preferences, browser push, active-tab suppression | After next notification feature | Review badge sync and delivery observability. |
+| Notifications | Implemented: in-app, preferences, browser push, active-tab suppression | After P1 work or before next notification feature | Review Push endpoint hardening; otherwise monitor badge sync and delivery observability. |
 | Delegated Tasks | Implemented core lifecycle and notification events | Before adding reopen/cancel/detail pages | Preserve participant-only permissions. |
-| Permissions | Functional but distributed | Next security pass | Consider shared ownership helpers for profile/task/project routes. |
-| Database Migrations | Reconciled and documented | Every schema change | Follow Prisma migration workflow; never use `db push` on Railway. |
+| Permissions | Distributed; profile reorder and timer routes have confirmed gaps | P1 before further feature work | Fix the confirmed routes with regressions, then consider narrow shared ownership helpers. |
+| Database Migrations | Ledger reconciled; production integrity defects confirmed | P1 integrity investigation and every schema change | Follow the approved orphan-safety conditions and Prisma workflow; never use `db push` on Railway. |
 | Collaborative Spaces | Implemented with member/owner helpers | Before major spaces expansion | Review tests and permission coverage. |
-| Timesheets | Implemented manual/timer workflows | Before timer expansion | Review ownership and timer scoping assumptions. |
+| Timesheets | Manual entries are owner-scoped; timer ownership and Brisbane persistence have confirmed defects | P1 before further feature work | Define simultaneous-user behavior and add owner/timezone regressions with the fixes. |
 | Sunday Check-ins / Routine Support | Specialised Evie routine-support workflow | Before making check-ins available to general users | Do not treat the current Sunday-specific workflow as a general configurable check-in system. |
 | PWA / Push | Implemented delivery for delegated notifications | After production push soak | Monitor expired subscriptions and platform badge limitations. |
 | Documentation | Architecture document established | Each major commit | Keep README concise and Playbook operational. |

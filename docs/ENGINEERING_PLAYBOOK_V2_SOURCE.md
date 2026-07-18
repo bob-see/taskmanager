@@ -957,53 +957,105 @@ This chapter turns the Playbook’s principles into concise preparation and revi
 
 This chapter curates verified engineering concerns and explains how to prioritise and retire them. It is a review register, not a feature roadmap.
 
-## Security
+The living, maintainable register—including item status, category, priority,
+evidence, action, feature-blocking effect, aggregate integrity counts, and retirement
+history—is [Architecture: Known Technical Debt & Future Review](./ARCHITECTURE.md#known-technical-debt--future-review).
+This chapter preserves the 18 July 2026 decision baseline for future Playbook
+publication without duplicating the full register.
 
-- **Architecture review — Permission-helper consistency:** authentication and ownership logic is distributed across routes. Shared helpers exist for Spaces, visibility, and notifications, but omissions remain possible. Consolidate only where domain predicates stay explicit.
-- **Confirmed defect — Profile reorder ownership:** cross-user reads and mutations are possible; fix with user scoping and regression tests.
-- **Confirmed defect — Timer start/stop ownership:** cross-user timer actions are possible; fix with authenticated owner isolation and simultaneous-user tests.
-- **Known limitation — Owner identity configuration:** Lost/Hatch uses a hard-coded private identity in application code. Review if ownership or access expands.
-- **Known limitation — Session/account lifecycle:** no application revocation/version mechanism, inactive state, or login-attempt control exists. Review when exposure or account-management needs grow.
+## 18 July 2026 Audit Baseline
 
-## Testing
+The audit ran from clean HEAD `7049fbc` using Node v25.6.1 and npm 11.18.0;
+the repository minimum is Node.js 22.13.0. Type checking, 31 automated tests,
+the production build, Prisma validation, the 32-migration status check, dependency
+tree check, and `git diff --check` passed. Full lint failed with 47 errors and
+17 warnings. The test run produced two non-fatal module-type reparsing warnings.
+`npm audit --omit=dev` reported 16 production vulnerabilities: 9 high and
+7 moderate.
 
-- **Coverage gap — Route authorisation:** no current route-test harness; highest-value next capability.
-- **Coverage gap — Delegated lifecycle and Spaces:** important participant/member/owner behavior has no automated route coverage.
-- **Coverage gap — Notification ownership:** Push core is tested, but notification and subscription routes are not.
-- **Coverage gap — Copied logic tests:** recurrence and Push subscription tests can drift from production because they reimplement functions.
-- **Known limitation — Lint debt:** a known static-analysis baseline exists; consult [`docs/TESTING.md`](./TESTING.md) and current command output for verified figures. It is not a pass.
-- **Known limitation — Test environment maturity:** no CI, browser automation, coverage tooling, staging environment, or dedicated disposable MariaDB test database is declared.
+Read-only `LEFT JOIN ... COUNT(*)` checks across 28 modelled relationships
+confirmed real production orphans in task/profile, task/project, note/task,
+project/profile, time-entry/profile, matrix-column/Space, and matrix-row/Space
+relationships. The living register retains the safe aggregate counts; this
+Playbook intentionally contains no personal data, row content, names, or IDs.
 
-## Architecture
+## P1 Gate Before Further TaskManager Feature Work
 
-- **Architecture review — Synchronous Push delivery:** Push is attempted during notification dispatch. Review background/queue architecture only if measured latency or reliability justifies the complexity.
-- **Architecture review — Polling optimisation:** notification UI relies on polling. Consider alternatives only with evidence of scale, battery, latency, or load problems.
-- **Known limitation — Badge synchronisation:** app/title/favicon badges are progressive and not fully real-time across all read/clear/device cases.
-- **Architecture review — Permission and action sharing:** continue converging genuinely shared rules, including task action definitions, without forcing unrelated domains into generic frameworks.
+1. Upgrade Next.js and matching framework/ESLint packages to a patched supported
+   release in an isolated milestone. Do not run `npm audit fix --force` blindly.
+2. Fix global profile-reorder cross-user authorisation and add owner/wrong-user
+   regressions.
+3. Fix timer start/stop ownership, explicitly decide simultaneous-user timer
+   behavior, and add two-user regressions.
+4. Persist timer entry dates using the Brisbane calendar day at action time and
+   test Brisbane midnight boundaries.
+5. Investigate the confirmed production orphans and agree a treatment plan.
 
-## Operations
+Production orphan data must not be mutated without a verified backup, likely-origin
+investigation, human approval of delete/retain/archive/reattach treatment, and a
+reviewed preferably idempotent repair process with before/after counts.
 
-- **Coverage gap — Integrity/orphan checks:** relation mode lacks physical FK guarantees and no automated orphan suite exists.
-- **Known limitation — Migration test target:** a safe, repeatable MariaDB migration environment is not defined.
-- **Known limitation — Logging/privacy:** operational errors can contain internal IDs or raw error detail; production access and retention need review as observability expands.
-- **Known limitation — Push device lifecycle:** multi-device rows and expired cleanup exist, but retention and user-directed device management are limited.
+After a framework upgrade, run `npm audit`, type checking, tests, production build,
+login smoke testing, Server Action testing, Proxy redirect testing, and direct
+restricted-route testing.
 
-## Product-Specific Future Review
+## Active Planned Debt
 
-- **Product opportunity — Configurable routine support:** keep the current Sunday Check-in workflow specialised until a concrete broader model is justified.
-- **Product opportunity — Real-time behavior:** do not adopt real-time transport because it is fashionable; review only for measured collaboration/notification needs.
-- **Product opportunity — Mobile/installed experience:** continue practical PWA improvements while retaining real-device checks and web-first simplicity.
-- **Architecture review — Delegated task origin semantics:** reconcile actual acceptance/copy behavior with older philosophy before expanding lifecycle or ownership rules.
+- **Testing:** no route-authorisation harness; missing delegated lifecycle,
+  Collaborative Spaces, notification, Push-subscription, timesheet, and reporting
+  route coverage; recurrence and Push-subscription tests still copy production
+  logic; no CI or disposable MariaDB migration/integrity target.
+- **Lint and maintainability:** 47 errors and 17 warnings remain; permission and
+  task-action logic is distributed; selected Home, Overview, and Reports queries
+  load broad or unbounded datasets.
+- **Security and operations:** Push endpoint host validation needs review; the
+  administrator bootstrap script contains a known temporary password; account
+  revocation/login controls, headers, logging/privacy, retention, and device
+  lifecycle remain limited.
+- **Product:** delegated acceptance copy/move behavior needs an explicit long-term
+  origin decision before lifecycle expansion.
 
-## Prioritising Debt
+Broad browser automation and coverage tooling are deferred improvements, not
+current blockers. They follow high-risk route and data-integrity coverage.
 
-Debt priority should combine likelihood, impact, and the cost of leaving the system hard to verify. The ownership defects are high priority because they cross users and already have a concrete failing predicate. Route-authorisation tests are high leverage because they both prevent recurrence and make future permission changes safer. A full real-time notification transport is lower priority until polling or synchronous delivery produces measured user or operational harm.
+## Explicitly Safe To Leave Alone For Now
 
-Do not rank every concern High. Doing so removes the value of the register. Some items are review triggers rather than active defects: security headers need target-environment/threat-model review; general Sunday Check-ins need a product case; background queues need evidence. Keep wording precise enough that a future reader can distinguish “broken now,” “coverage missing,” “architecture could mature,” and “reconsider only if conditions change.”
+Without new evidence, do not replace 60-second visible-tab polling, synchronous
+Push delivery, progressive badge synchronisation, the web-first PWA architecture,
+or the specialised Sunday Check-in model. Do not add general real-time transport,
+a broad generic permission framework, or a comprehensive browser suite merely for
+architectural completeness. Keep the elevated delegated-task timeout unless logs
+show contention. Hard-coded LOST owner access may remain while the owner is stable
+and the feature private; the legacy administrator bootstrap script is a separate
+active investigation.
 
-Debt should leave the register when evidence changes. A fixed timer route with two-user regressions should move from known defect to implemented invariant and covered behavior. A new disposable MariaDB workflow should update Testing and Operations. Historical lessons may remain in ADRs or migration history without keeping resolved items in the active list.
+## Human Decisions Still Required
 
-Technical debt is safest when it is visible, understood, and intentionally prioritised rather than silently accepted.
+1. Delete, retain for audit, archive, or reattach orphaned historical data.
+2. Confirm public reachability and Vercel/WAF rate-limit and security-header policy.
+3. Confirm whether `scripts/create-admin-user.js` is required or has used its known
+   temporary password against a live environment.
+4. Confirm whether different users should have simultaneous active timers.
+5. Confirm long-term delegated acceptance copy/move origin semantics.
+6. Confirm whether task-title, actor, and decline-reason Push content is acceptable
+   on locked or shared devices.
+7. Confirm whether LOST access should remain owner-specific or move to role/config.
+
+## Resolved And Retired
+
+Retire the previous stale-README, missing-service-worker, missing-app-badge,
+profile-task-reorder timeout, migration-reconciliation, Node-runtime ambiguity,
+and disposable-publication-output items. Initial hydration/date-time instability is
+also resolved for the confirmed initial-render surfaces through deterministic
+formatting, stable snapshots, and Brisbane boundary refreshes. The timer persistence
+defect is separate from hydration.
+
+Testing is broader than the older “narrow tests” description but remains incomplete.
+The former 47-error/18-warning lint snapshot is superseded by 47 errors and
+17 warnings; lint debt is not retired.
+
+Technical debt is safest when it is visible, understood, and intentionally
+prioritised rather than silently accepted.
 
 ---
 
@@ -1245,6 +1297,11 @@ Primary sources used for this draft:
 
 ## Source Attribution Note
 
-This Draft Source for Review was produced from the TaskManager repository on 2026-07-12, branch `main`, verified against commit `69fea16d52a55ee624b2317f41ecea965493d45a`.
+This Draft Source for Review was updated from the TaskManager repository on
+2026-07-18, branch `main`, verified against clean audit commit `7049fbc`.
 
-It also reflects pending working-tree documentation changes to README, Architecture, Project Playbook, AI Quick Start, and the uncommitted Security and Testing documents. Those changes are not represented by the verification commit. Historical PDFs and architecture notes were not treated as authoritative. No private credentials or literal private owner identity are included.
+It also reflects the pending documentation changes that preserve the 18 July audit
+and are not represented by the verification commit. Historical PDFs and architecture
+notes were not treated as authoritative. The publication PDF was not regenerated
+for this documentation pass. No private credentials or literal private owner
+identity are included.
