@@ -110,6 +110,9 @@ type Project = {
   orderIndex: number | null;
 };
 
+type SystemSectionKey = "recurring" | "unassigned";
+type SystemSectionCollapseState = Record<SystemSectionKey, boolean>;
+
 export type TrackerInitialData = {
   profiles: Profile[];
   tasks: Task[];
@@ -235,6 +238,10 @@ const DEFAULT_VISIBLE_TASK_COLUMNS: Record<VisibleTaskColumn, boolean> = {
   due: true,
   waitingOn: false,
   notes: true,
+};
+const DEFAULT_SYSTEM_SECTION_COLLAPSE_STATE: SystemSectionCollapseState = {
+  recurring: false,
+  unassigned: false,
 };
 const AVERAGE_BASIS_OPTIONS: Array<{ value: AverageBasis; label: string }> = [
   { value: "calendar-days", label: "Calendar days" },
@@ -1455,6 +1462,36 @@ function getTaskNotesText(task: Pick<Task, "noteHistory">) {
 
 function getColumnPreferenceKey(profileId: string) {
   return `taskmanager:profile:${profileId}:task-columns`;
+}
+
+function getSystemSectionCollapseKey(profileId: string) {
+  return `taskmanager:profile:${profileId}:system-section-collapse`;
+}
+
+function normalizeSystemSectionCollapseState(value: unknown): SystemSectionCollapseState {
+  if (!value || typeof value !== "object") {
+    return { ...DEFAULT_SYSTEM_SECTION_COLLAPSE_STATE };
+  }
+
+  const candidate = value as Partial<Record<SystemSectionKey, unknown>>;
+  return {
+    recurring: typeof candidate.recurring === "boolean" ? candidate.recurring : false,
+    unassigned: typeof candidate.unassigned === "boolean" ? candidate.unassigned : false,
+  };
+}
+
+function loadSystemSectionCollapseState(profileId: string) {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_SYSTEM_SECTION_COLLAPSE_STATE };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(getSystemSectionCollapseKey(profileId));
+    return normalizeSystemSectionCollapseState(rawValue ? JSON.parse(rawValue) : null);
+  } catch (error) {
+    console.warn("Could not load system section collapse preferences", error);
+    return { ...DEFAULT_SYSTEM_SECTION_COLLAPSE_STATE };
+  }
 }
 
 function normalizeVisibleTaskColumns(value: unknown): Record<VisibleTaskColumn, boolean> {
@@ -3188,6 +3225,8 @@ export function TrackerClient({
   const preferenceSyncProfileIdRef = useRef<string | null>(null);
   const columnPreferencesHydratedRef = useRef(false);
   const skipNextColumnPreferenceSaveRef = useRef(false);
+  const systemSectionCollapseHydratedRef = useRef(false);
+  const skipNextSystemSectionCollapseSaveRef = useRef(false);
   const dragOrderSnapshotRef = useRef<Task[] | null>(null);
   const projectDragOrderSnapshotRef = useRef<Project[] | null>(null);
   const lastSavedPreferencesRef = useRef<{
@@ -3215,6 +3254,10 @@ export function TrackerClient({
   const [visibleColumns, setVisibleColumns] = useState<Record<VisibleTaskColumn, boolean>>(
     () => ({ ...DEFAULT_VISIBLE_TASK_COLUMNS })
   );
+  const [systemSectionCollapse, setSystemSectionCollapse] =
+    useState<SystemSectionCollapseState>(() => ({
+      ...DEFAULT_SYSTEM_SECTION_COLLAPSE_STATE,
+    }));
   const [searchQuery, setSearchQuery] = useState("");
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -3389,6 +3432,8 @@ export function TrackerClient({
     preferenceSyncProfileIdRef.current = null;
     columnPreferencesHydratedRef.current = false;
     skipNextColumnPreferenceSaveRef.current = false;
+    systemSectionCollapseHydratedRef.current = false;
+    skipNextSystemSectionCollapseSaveRef.current = false;
     lastSavedPreferencesRef.current = null;
   }, [profileId]);
 
@@ -3422,6 +3467,12 @@ export function TrackerClient({
   }, [profileId]);
 
   useEffect(() => {
+    setSystemSectionCollapse(loadSystemSectionCollapseState(profileId));
+    systemSectionCollapseHydratedRef.current = true;
+    skipNextSystemSectionCollapseSaveRef.current = true;
+  }, [profileId]);
+
+  useEffect(() => {
     if (!columnPreferencesHydratedRef.current || typeof window === "undefined") return;
     if (skipNextColumnPreferenceSaveRef.current) {
       skipNextColumnPreferenceSaveRef.current = false;
@@ -3437,6 +3488,23 @@ export function TrackerClient({
       console.warn("Could not persist task column preferences", error);
     }
   }, [profileId, visibleColumns]);
+
+  useEffect(() => {
+    if (!systemSectionCollapseHydratedRef.current || typeof window === "undefined") return;
+    if (skipNextSystemSectionCollapseSaveRef.current) {
+      skipNextSystemSectionCollapseSaveRef.current = false;
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        getSystemSectionCollapseKey(profileId),
+        JSON.stringify(systemSectionCollapse)
+      );
+    } catch (error) {
+      console.warn("Could not persist system section collapse preferences", error);
+    }
+  }, [profileId, systemSectionCollapse]);
 
   useEffect(() => {
     setSortColumn(null);
@@ -3881,7 +3949,7 @@ export function TrackerClient({
       key: "recurring",
       label: "Recurring",
       project: null,
-      collapsed: false,
+      collapsed: systemSectionCollapse.recurring,
       openTasks: displayedDayViewTasks.filter(
         (task) => isRecurringTask(task) && !task.projectId
       ),
@@ -3895,7 +3963,7 @@ export function TrackerClient({
       key: "unassigned",
       label: "Unassigned",
       project: null,
-      collapsed: false,
+      collapsed: systemSectionCollapse.unassigned,
       openTasks: displayedDayViewTasks.filter(
         (task) => !isRecurringTask(task) && !task.projectId
       ),
@@ -5017,6 +5085,13 @@ export function TrackerClient({
     }
   }
 
+  function toggleSystemSectionCollapsed(sectionKey: SystemSectionKey) {
+    setSystemSectionCollapse((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey],
+    }));
+  }
+
   async function toggleProjectArchived(project: Project) {
     try {
       await updateProject(project.id, { archived: !project.archived });
@@ -6101,6 +6176,20 @@ export function TrackerClient({
                               }
                               onDelete={setDeleteProjectModalProject}
                             />
+                          )}
+                          {!section.project && (
+                            <button
+                              aria-expanded={!section.collapsed}
+                              className="tm-button inline-flex h-9 items-center rounded-[10px] border px-3 text-sm"
+                              type="button"
+                              onClick={() =>
+                                toggleSystemSectionCollapsed(
+                                  section.key as SystemSectionKey
+                                )
+                              }
+                            >
+                              {section.collapsed ? "Expand" : "Collapse"}
+                            </button>
                           )}
                         </div>
                       </div>
