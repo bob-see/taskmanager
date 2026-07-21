@@ -77,6 +77,7 @@ Each major topic has one primary owner. Follow the link rather than relying on a
 
 | Document | Owns |
 |---|---|
+| [Product Roadmap](./ROADMAP.md) | Future product direction, priorities, deliberate milestones, and later possibilities. |
 | [Architecture](./docs/ARCHITECTURE.md) | How the application is structured, how major systems interact, and the active technical-debt/review register. |
 | [Security](./docs/SECURITY.md) | Authentication, authorisation, ownership, collaboration boundaries, security invariants, and review triggers. |
 | [Testing](./docs/TESTING.md) | Current automated coverage, verification commands, manual workflows, gaps, and change-based test expectations. |
