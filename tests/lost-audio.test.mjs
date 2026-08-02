@@ -210,3 +210,19 @@ test("failure transition explicitly cleans up countdown audio first", async () =
     "countdown audio must stop before failure audio starts"
   );
 });
+
+test("leaving LOST stops playback without resetting the user's audio choice", async () => {
+  const providerSource = await readFile(
+    new URL("../app/lost/lost-timer-provider.tsx", import.meta.url),
+    "utf8"
+  );
+  const pathnameEffect = providerSource.slice(
+    providerSource.indexOf('if (pathname === "/lost") return;'),
+    providerSource.indexOf('if (pathname === "/lost") return;') + 220
+  );
+
+  assert.doesNotMatch(pathnameEffect, /setSoundMutedState\(true\)/);
+  assert.match(pathnameEffect, /stopFailureAudio\(\)/);
+  assert.match(pathnameEffect, /stopCountdownAudio\(\)/);
+  assert.match(pathnameEffect, /stopAll\(\)/);
+});

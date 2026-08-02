@@ -451,7 +451,6 @@ export function LostTimerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (pathname === "/lost") return;
 
-    setSoundMutedState(true);
     stopFailureAudio();
     stopCountdownAudio();
     audioRef.current?.stopAll();
