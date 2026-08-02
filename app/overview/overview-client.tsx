@@ -109,6 +109,32 @@ type OverviewClientProps = {
   initialDate: string;
 };
 
+type TaskSearchStatus = "all" | "open" | "done";
+
+type TaskSearchResult = {
+  id: string;
+  title: string;
+  notes: string | null;
+  startDate: string;
+  category: string | null;
+  dueAt: string | null;
+  completedOn: string | null;
+  isPriority: boolean;
+  projectId: string | null;
+  repeatEnabled: boolean;
+  repeatPattern: RepeatPattern | null;
+  repeatInterval: number;
+  repeatDays: number | null;
+  repeatWeeklyDay: number | null;
+  repeatMonthlyDay: number | null;
+  repeatPaused: boolean;
+  repeatPauseUntil: string | null;
+  repeatPauseNote: string | null;
+  noteHistory: TaskNoteHistoryEntry[];
+  profile: { id: string; name: string };
+  project: { id: string; name: string } | null;
+};
+
 type TaskPendingAction = "complete" | "update" | "delete";
 const MIN_TASK_PENDING_MS = 500;
 
@@ -172,6 +198,8 @@ const overdueChipClass =
   "rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700";
 const taskActionMenuItemClass =
   "flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm transition-colors hover:bg-white/60 disabled:opacity-50";
+const taskTitleButtonClass =
+  "min-w-0 cursor-pointer rounded border border-transparent px-1 py-0.5 text-left transition-colors hover:border-amber-700/20 hover:bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]";
 const overviewCounterChipClass =
   "tm-chip inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] leading-tight";
 const REPEAT_PAUSE_PRESET_OPTIONS: Array<{
@@ -189,6 +217,12 @@ const DEFAULT_OVERVIEW_OPTIONS = {
   sortMode: "manual" as OverviewSortMode,
   groupingMode: "project" as OverviewGroupingMode,
 };
+
+const TASK_SEARCH_STATUS_OPTIONS: Array<{ value: TaskSearchStatus; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "open", label: "Open" },
+  { value: "done", label: "Done" },
+];
 
 type OverviewOptionsPreference = typeof DEFAULT_OVERVIEW_OPTIONS;
 
@@ -628,8 +662,8 @@ function TaskNotesIndicator({ notes }: { notes: string }) {
       <button
         ref={buttonRef}
         type="button"
-        className="tm-chip inline-flex h-5 w-5 items-center justify-center rounded-full border text-[color:var(--tm-muted)] transition-colors hover:bg-white/80 hover:text-[color:var(--tm-text)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]"
-        aria-label="Show task notes"
+        className="tm-chip inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] transition-colors hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]"
+        aria-label="View task notes"
         aria-expanded={open}
         onMouseEnter={showPreview}
         onMouseLeave={() => setOpen(false)}
@@ -645,15 +679,7 @@ function TaskNotesIndicator({ notes }: { notes: string }) {
           }
         }}
       >
-        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none">
-          <path
-            d="M4 3.5h8v9H4zM6 6h4M6 8.25h4M6 10.5h2.5"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.5"
-          />
-        </svg>
+        📝
       </button>
       {open && position && (
         <div
@@ -3344,9 +3370,19 @@ export function OverviewClient({
   userPreferenceKey,
   initialDate,
 }: OverviewClientProps) {
+  const router = useRouter();
   const [currentDateValue, setCurrentDateValue] = useState(initialDate);
   const [orderedProfiles, setOrderedProfiles] = useState(profiles);
-  const [query, setQuery] = useState("");
+  const [profileQuery, setProfileQuery] = useState("");
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  const [taskSearchStatus, setTaskSearchStatus] = useState<TaskSearchStatus>("all");
+  const [taskSearchResults, setTaskSearchResults] = useState<TaskSearchResult[]>([]);
+  const [taskSearchLoading, setTaskSearchLoading] = useState(false);
+  const [taskSearchError, setTaskSearchError] = useState<string | null>(null);
+  const [searchTaskToEdit, setSearchTaskToEdit] = useState<TaskSearchResult | null>(null);
+  const [searchTaskEditForm, setSearchTaskEditForm] = useState<EditTaskFormState | null>(null);
+  const [searchTaskEditSaving, setSearchTaskEditSaving] = useState(false);
+  const [taskSearchRefreshKey, setTaskSearchRefreshKey] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState<OverviewTaskFilter>(
     DEFAULT_OVERVIEW_OPTIONS.selectedFilter
   );
@@ -3380,6 +3416,54 @@ export function OverviewClient({
   useEffect(() => {
     setOrderedProfiles(profiles);
   }, [profiles]);
+
+  useEffect(() => {
+    const query = taskSearchQuery.trim();
+    if (!query) {
+      setTaskSearchResults([]);
+      setTaskSearchLoading(false);
+      setTaskSearchError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setTaskSearchLoading(true);
+      setTaskSearchError(null);
+
+      try {
+        const params = new URLSearchParams({
+          q: query,
+          status: taskSearchStatus,
+          limit: "50",
+        });
+        const response = await fetch(`/api/tasks/search?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          results?: TaskSearchResult[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Could not search tasks");
+        }
+
+        setTaskSearchResults(payload.results ?? []);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setTaskSearchResults([]);
+        setTaskSearchError(error instanceof Error ? error.message : "Could not search tasks");
+      } finally {
+        if (!controller.signal.aborted) setTaskSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [taskSearchQuery, taskSearchStatus, taskSearchRefreshKey]);
 
   useBrisbaneBoundaryRefresh((now) => {
     setCurrentDateValue(getBrisbaneDate(now));
@@ -3424,13 +3508,122 @@ export function OverviewClient({
   ]);
 
   const filteredProfiles = useMemo(() => {
-    const trimmedQuery = query.trim().toLocaleLowerCase();
+    const trimmedQuery = profileQuery.trim().toLocaleLowerCase();
     if (!trimmedQuery) return orderedProfiles;
 
     return orderedProfiles.filter((profile) =>
       profile.name.toLocaleLowerCase().includes(trimmedQuery)
     );
-  }, [orderedProfiles, query]);
+  }, [orderedProfiles, profileQuery]);
+
+  const searchTaskProjectOptions = useMemo(() => {
+    if (!searchTaskToEdit) return [];
+
+    return (
+      orderedProfiles
+        .find((profile) => profile.id === searchTaskToEdit.profile.id)
+        ?.projects.map((project) => ({
+          id: project.id,
+          name: project.name,
+          archived: project.archived,
+        })) ?? []
+    );
+  }, [orderedProfiles, searchTaskToEdit]);
+
+  const searchTaskCategorySuggestions = useMemo(
+    () =>
+      orderedProfiles.find((profile) => profile.id === searchTaskToEdit?.profile.id)
+        ?.categorySuggestions ?? [],
+    [orderedProfiles, searchTaskToEdit]
+  );
+
+  const searchTaskWaitingOnSuggestions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          searchTaskToEdit?.noteHistory
+            .map((note) => note.waitingOn?.trim() ?? "")
+            .filter(Boolean) ?? []
+        )
+      ),
+    [searchTaskToEdit]
+  );
+
+  function openSearchTaskEditor(task: TaskSearchResult) {
+    setSearchTaskToEdit(task);
+    setSearchTaskEditForm(createEditTaskForm(task));
+  }
+
+  async function submitSearchTaskEditor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!searchTaskToEdit || !searchTaskEditForm) return;
+
+    setSearchTaskEditSaving(true);
+
+    try {
+      const response = await fetch(
+        `/api/p/${searchTaskToEdit.profile.id}/tasks/${searchTaskToEdit.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: searchTaskEditForm.title.trim(),
+            startDate: searchTaskEditForm.startDate,
+            dueAt: searchTaskEditForm.dueAt || null,
+            category: searchTaskEditForm.category || null,
+            notes: searchTaskEditForm.notes || null,
+            waitingOn: searchTaskEditForm.waitingOn || null,
+            projectId: searchTaskEditForm.projectId || null,
+            repeatEnabled: searchTaskEditForm.repeatEnabled,
+            repeatPattern: searchTaskEditForm.repeatEnabled
+              ? searchTaskEditForm.repeatPattern
+              : null,
+            repeatInterval: searchTaskEditForm.repeatEnabled
+              ? searchTaskEditForm.repeatInterval
+              : 1,
+            repeatDays:
+              searchTaskEditForm.repeatEnabled &&
+              (searchTaskEditForm.repeatPattern === "daily" ||
+                searchTaskEditForm.repeatPattern === "weekly")
+                ? searchTaskEditForm.repeatDays
+                : null,
+            repeatWeeklyDay:
+              searchTaskEditForm.repeatEnabled && searchTaskEditForm.repeatPattern === "weekly"
+                ? searchTaskEditForm.repeatWeeklyDay
+                : null,
+            repeatMonthlyDay:
+              searchTaskEditForm.repeatEnabled && searchTaskEditForm.repeatPattern === "monthly"
+                ? searchTaskEditForm.repeatMonthlyDay
+                : null,
+            repeatPaused: searchTaskEditForm.repeatEnabled
+              ? searchTaskEditForm.repeatPaused
+              : false,
+            repeatPauseUntil:
+              searchTaskEditForm.repeatEnabled && searchTaskEditForm.repeatPaused
+                ? searchTaskEditForm.repeatPauseUntil || null
+                : null,
+            repeatPauseNote:
+              searchTaskEditForm.repeatEnabled && searchTaskEditForm.repeatPaused
+                ? searchTaskEditForm.repeatPauseNote.trim() || null
+                : null,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error ?? "Could not update task");
+      }
+
+      setSearchTaskToEdit(null);
+      setSearchTaskEditForm(null);
+      setTaskSearchRefreshKey((value) => value + 1);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not update task");
+    } finally {
+      setSearchTaskEditSaving(false);
+    }
+  }
 
   async function persistOrder(
     nextProfiles: OverviewProfileData[],
@@ -3532,7 +3725,7 @@ export function OverviewClient({
             </p>
           </div>
 
-          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:max-w-xl sm:flex-1 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:max-w-3xl sm:flex-1 sm:items-end sm:justify-end">
             <OverviewOptionsMenu
               selectedFilter={selectedFilter}
               sortMode={sortMode}
@@ -3544,14 +3737,146 @@ export function OverviewClient({
               onSortChange={setSortMode}
               onGroupingChange={setGroupingMode}
             />
-            <input
-              className={`${inputClass} w-full sm:max-w-xs`}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter profiles by name"
-            />
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+              <input
+                className={`${inputClass} w-full sm:max-w-sm`}
+                value={taskSearchQuery}
+                onChange={(e) => setTaskSearchQuery(e.target.value)}
+                placeholder="Search tasks, notes, projects..."
+                aria-label="Search tasks"
+              />
+              <input
+                className={`${inputClass} w-full sm:max-w-xs`}
+                value={profileQuery}
+                onChange={(e) => setProfileQuery(e.target.value)}
+                placeholder="Filter profiles by name"
+                aria-label="Filter profiles by name"
+              />
+            </div>
+            {taskSearchQuery.trim() && (
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:justify-end">
+                <div className="tm-tabset inline-flex rounded-full border p-1 text-xs">
+                  {TASK_SEARCH_STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={
+                        taskSearchStatus === option.value
+                          ? "tm-tab-active rounded-full px-3 py-1.5"
+                          : "tm-tab rounded-full px-3 py-1.5"
+                      }
+                      onClick={() => setTaskSearchStatus(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {taskSearchQuery.trim() && (
+          <section className="tm-card mt-6 rounded-[12px] border p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold">Task search</h2>
+                <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+                  {taskSearchLoading
+                    ? "Searching…"
+                    : `${taskSearchResults.length}${taskSearchResults.length === 50 ? "+" : ""} result${taskSearchResults.length === 1 ? "" : "s"}`}
+                </p>
+              </div>
+              <span className="text-xs text-[color:var(--tm-muted)]">
+                Searching all profiles
+              </span>
+            </div>
+
+            {taskSearchError ? (
+              <p className="mt-4 text-sm text-red-700">{taskSearchError}</p>
+            ) : taskSearchLoading ? null : taskSearchResults.length === 0 ? (
+              <p className="mt-4 text-sm text-[color:var(--tm-muted)]">
+                No tasks match this search.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[620px] text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-[color:var(--tm-muted)]">
+                    <tr className="border-b border-[color:var(--tm-border)]">
+                      <th className="px-2 py-2 font-medium">Task</th>
+                      <th className="px-2 py-2 font-medium">Profile</th>
+                      <th className="px-2 py-2 font-medium">Project</th>
+                      <th className="px-2 py-2 font-medium">Notes</th>
+                      <th className="px-2 py-2 font-medium">Due</th>
+                      <th className="px-2 py-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {taskSearchResults.map((task) => (
+                      <tr
+                        key={task.id}
+                        className="border-b border-[color:var(--tm-border)] last:border-b-0"
+                      >
+                        <td className="px-2 py-3 font-medium">
+                          <button
+                            type="button"
+                            className={`${taskTitleButtonClass} font-semibold`}
+                            onClick={() => openSearchTaskEditor(task)}
+                            title="Open task editor"
+                          >
+                            {task.title}
+                          </button>
+                          {task.isPriority && (
+                            <span className="ml-2 text-xs text-rose-700">Priority</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-3">
+                          <button
+                            type="button"
+                            className="text-left hover:underline"
+                            onClick={() => router.push(`/p/${task.profile.id}`)}
+                          >
+                            {task.profile.name}
+                          </button>
+                        </td>
+                        <td className="px-2 py-3 text-[color:var(--tm-muted)]">
+                          {task.project?.name ?? "—"}
+                        </td>
+                        <td className="px-2 py-3">
+                          {task.noteHistory.length > 0 ? (
+                            <TaskNotesIndicator notes={formatTaskNotesPreview(task)} />
+                          ) : (
+                            <span className="text-[color:var(--tm-muted)]">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-3 text-[color:var(--tm-muted)]">
+                          {task.dueAt
+                            ? formatAustralianDate(task.dueAt, {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : "—"}
+                        </td>
+                        <td className="px-2 py-3">
+                          <span
+                            className={
+                              task.completedOn
+                                ? "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800"
+                                : "rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                            }
+                          >
+                            {task.completedOn ? "Done" : "Open"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="mt-6 grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProfiles.length === 0 ? (
@@ -3584,6 +3909,24 @@ export function OverviewClient({
             ))
           )}
         </section>
+
+        <TaskEditorModal
+          open={Boolean(searchTaskToEdit && searchTaskEditForm)}
+          form={searchTaskEditForm}
+          saving={searchTaskEditSaving}
+          categorySuggestions={searchTaskCategorySuggestions}
+          waitingOnSuggestions={searchTaskWaitingOnSuggestions}
+          projectOptions={searchTaskProjectOptions}
+          onClose={() => {
+            if (searchTaskEditSaving) return;
+            setSearchTaskToEdit(null);
+            setSearchTaskEditForm(null);
+          }}
+          onSubmit={submitSearchTaskEditor}
+          onFormChange={(updater) =>
+            setSearchTaskEditForm((prev) => (prev ? updater(prev) : prev))
+          }
+        />
       </div>
     </main>
   );

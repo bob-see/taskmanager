@@ -74,6 +74,8 @@ Filter supports All open, Today, Overdue and Upcoming. Sort supports Manual, Sta
 
 Filter, Sort and Group By selections are saved and restored per logged-in user.
 
+Overview task search is a page-wide control beside Overview Options. It searches task titles, notes and note history, categories, projects and profile names across the logged-in user's profiles. Search results can be filtered to All, Open or Done tasks, show note previews using the profile task-row treatment, and open the existing task editor when a title is clicked. Profile names link back to the relevant profile. The existing profile-name filter remains separate.
+
 Overview Group By currently supports:
 
 - Project
