@@ -48,3 +48,5 @@ next-env.d.ts
 *.sql
 !prisma/migrations/**/migration.sql
 backups/
+*.sql.gz.enc
+taskmanager-*.manifest.json

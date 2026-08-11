@@ -66,11 +66,15 @@ Open [http://localhost:3000](http://localhost:3000). Confirm which database the 
 | `npx prisma generate` | Generate Prisma Client from the current schema. |
 | `npx prisma validate` | Validate Prisma schema and configuration. |
 | `npx prisma migrate status` | Inspect migration status for the configured database; confirm the target first. |
+| `npm run db:backup` | Create an encrypted production SQL backup after configuring the approved backup environment. |
+| `npm run db:backup:verify -- /absolute/path/to/backup.sql.gz.enc` | Check an encrypted backup's checksum and decrypt/decompress integrity without writing plaintext data to disk. |
 | `npm run db:integrity:audit` | Run the read-only aggregate relationship audit against the configured database. |
 | `npm run docs:playbook` | Build the Engineering Playbook publication. |
 | `npm run docs:playbook:qa` | Render publication pages and contact sheets for visual QA. |
 
 Schema changes and shared-database operations must follow the [Prisma Migration Workflow](./docs/PRISMA_MIGRATION_WORKFLOW.md). Do not use `prisma db push` or `prisma migrate reset` against shared Railway data.
+
+For production data protection and recovery, follow the [Backup and Recovery Runbook](./docs/BACKUP_AND_RECOVERY.md). It is intentionally separate from routine development commands because it can briefly lock production writes.
 
 ## Documentation Map
 

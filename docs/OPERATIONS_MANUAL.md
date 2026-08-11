@@ -106,7 +106,9 @@ Before deployment, confirm that:
 
 ## Database Backups
 
-Create a SQL backup before:
+Use the repository's [Backup and Recovery Runbook](./BACKUP_AND_RECOVERY.md) for the backup command, off-site storage requirements, verification and restoration procedure.
+
+Create and verify a SQL backup before:
 
 - Prisma migrations
 - schema changes
@@ -126,7 +128,7 @@ Examples:
 2026-07-11-before-notification-preferences.sql
 ```
 
-Keep production backups outside public documentation and avoid committing sensitive data.
+Keep production backups outside public documentation and avoid committing sensitive data. The backup command requires an explicit acknowledgement before it takes a write lock, because historical MariaDB compatibility may include non-transactional tables.
 
 ## Migration Safety
 
@@ -318,7 +320,6 @@ For schema changes, also verify:
 
 Future focused runbooks may cover:
 
-- detailed Railway backup and restore procedures
 - Vercel rollback procedures
 - environment variable rotation
 - user administration
