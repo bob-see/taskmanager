@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
 import { formatActivityType } from "@/app/lib/activity-log";
+import { scopedVisibleUserWhere } from "@/app/api/users/visibility";
 
 type SearchParams = Promise<{
   userId?: string;
@@ -60,13 +61,19 @@ export default async function ActivityPage({
 
   const resolvedSearchParams = await searchParams;
   const isAdmin = currentUser.role === "admin";
+  const visibleUserWhere = isAdmin
+    ? await scopedVisibleUserWhere(currentUser)
+    : { id: currentUser.id };
   const selectedUserId = isAdmin ? resolvedSearchParams.userId?.trim() || "" : "";
   const selectedType = isAdmin ? resolvedSearchParams.type?.trim() || "" : "";
 
   const where = {
-    ...(isAdmin && selectedUserId ? { userId: selectedUserId } : {}),
-    ...(isAdmin && selectedType ? { type: selectedType } : {}),
-    ...(!isAdmin ? { userId: currentUser.id } : {}),
+    AND: [
+      visibleUserWhere,
+      isAdmin && selectedUserId ? { userId: selectedUserId } : {},
+      isAdmin && selectedType ? { type: selectedType } : {},
+      !isAdmin ? { userId: currentUser.id } : {},
+    ],
   };
 
   const [logs, users, types] = await Promise.all([
@@ -75,9 +82,10 @@ export default async function ActivityPage({
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
-    isAdmin
-      ? prisma.user.findMany({
-          orderBy: [{ name: "asc" }, { email: "asc" }],
+      isAdmin
+        ? prisma.user.findMany({
+            where: visibleUserWhere,
+            orderBy: [{ name: "asc" }, { email: "asc" }],
           select: {
             id: true,
             name: true,

@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
+import { getAdminGroupScope } from "@/app/api/users/visibility";
 
 type SearchParams = Promise<{
   error?: string;
@@ -29,7 +30,37 @@ async function requireAdmin() {
     select: { id: true, role: true },
   });
 
-  return user?.role === "admin" ? user : null;
+  if (user?.role !== "admin") return null;
+
+  return {
+    ...user,
+    groupIds: (await getAdminGroupScope(user)) ?? [],
+  };
+}
+
+function isScopedAdmin(admin: Awaited<ReturnType<typeof requireAdmin>>) {
+  return Boolean(admin?.groupIds.length);
+}
+
+async function ensureUserInAdminScope(
+  admin: NonNullable<Awaited<ReturnType<typeof requireAdmin>>>,
+  userId: string
+) {
+  if (!isScopedAdmin(admin)) return;
+
+  const membershipCount = await prisma.userGroup.count({
+    where: { userId, groupId: admin.groupIds[0] },
+  });
+  if (membershipCount === 0) usersRedirect({ error: "forbidden-scope" });
+}
+
+function ensureGroupInAdminScope(
+  admin: NonNullable<Awaited<ReturnType<typeof requireAdmin>>>,
+  groupId: string
+) {
+  if (isScopedAdmin(admin) && admin.groupIds[0] !== groupId) {
+    usersRedirect({ error: "forbidden-scope" });
+  }
 }
 
 function readString(formData: FormData, key: string) {
@@ -73,9 +104,17 @@ async function createUser(formData: FormData) {
   const email = readString(formData, "email").toLocaleLowerCase();
   const password = readString(formData, "password");
   const role = normalizeRole(readString(formData, "role"));
+  const groupId = readString(formData, "groupId");
 
-  if (!name || !email || !password) {
+  if (!name || !email || !password || !groupId) {
     usersRedirect({ error: "missing-create-fields" });
+  }
+
+  ensureGroupInAdminScope(admin, groupId);
+
+  const groupExists = await prisma.group.count({ where: { id: groupId } });
+  if (groupExists === 0) {
+    usersRedirect({ error: "missing-group-id" });
   }
 
   const existingUser = await prisma.user.findUnique({
@@ -96,6 +135,9 @@ async function createUser(formData: FormData) {
         email,
         passwordHash,
         role,
+        groupMemberships: {
+          create: { groupId },
+        },
       },
     });
   } catch (error) {
@@ -123,6 +165,8 @@ async function resetPassword(formData: FormData) {
     usersRedirect({ error: "missing-reset-fields" });
   }
 
+  await ensureUserInAdminScope(admin, id);
+
   const passwordHash = await bcrypt.hash(password, 12);
 
   await prisma.user.update({
@@ -139,6 +183,8 @@ async function createGroup(formData: FormData) {
 
   const admin = await requireAdmin();
   if (!admin) return notFound();
+
+  if (isScopedAdmin(admin)) usersRedirect({ error: "forbidden-scope" });
 
   const name = readString(formData, "name");
   const description = readString(formData, "description");
@@ -180,6 +226,8 @@ async function updateGroup(formData: FormData) {
     usersRedirect({ error: "missing-group-name" });
   }
 
+  ensureGroupInAdminScope(admin, id);
+
   try {
     await prisma.group.update({
       where: { id },
@@ -212,6 +260,8 @@ async function deleteGroup(formData: FormData) {
     usersRedirect({ error: "missing-group-id" });
   }
 
+  if (isScopedAdmin(admin)) usersRedirect({ error: "forbidden-scope" });
+
   await prisma.group.delete({
     where: { id },
   });
@@ -231,6 +281,15 @@ async function updateUserGroups(formData: FormData) {
 
   if (!userId) {
     usersRedirect({ error: "missing-user-id" });
+  }
+
+  await ensureUserInAdminScope(admin, userId);
+
+  if (
+    isScopedAdmin(admin) &&
+    groupIds.some((groupId) => groupId !== admin.groupIds[0])
+  ) {
+    usersRedirect({ error: "forbidden-scope" });
   }
 
   const [userExists, validGroupCount] = await Promise.all([
@@ -256,17 +315,26 @@ async function updateUserGroups(formData: FormData) {
     usersRedirect({ error: "missing-group-id" });
   }
 
+  if (isScopedAdmin(admin)) {
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (targetUser?.role === "admin" && !groupIds.includes(admin.groupIds[0])) {
+      usersRedirect({ error: "forbidden-scope" });
+    }
+  }
+
+  const membershipWhere = isScopedAdmin(admin)
+    ? { userId, groupId: admin.groupIds[0] }
+    : { userId };
+
   await prisma.$transaction([
-    prisma.userGroup.deleteMany({
-      where: { userId },
-    }),
+    prisma.userGroup.deleteMany({ where: membershipWhere }),
     ...(groupIds.length > 0
       ? [
           prisma.userGroup.createMany({
-            data: groupIds.map((groupId) => ({
-              userId,
-              groupId,
-            })),
+            data: groupIds.map((groupId) => ({ userId, groupId })),
             skipDuplicates: true,
           }),
         ]
@@ -280,10 +348,11 @@ async function updateUserGroups(formData: FormData) {
 function messageFor(error?: string, success?: string) {
   if (error === "duplicate-email") return "A user with that email already exists.";
   if (error === "duplicate-group") return "A group with that name already exists.";
-  if (error === "missing-create-fields") return "Name, email and password are required.";
+  if (error === "missing-create-fields") return "Name, email, password and a group are required.";
   if (error === "missing-reset-fields") return "Choose a new password before resetting.";
   if (error === "missing-group-name") return "Group name is required.";
-  if (error === "missing-group-id") return "Choose a group before deleting.";
+  if (error === "missing-group-id") return "Choose a valid group before continuing.";
+  if (error === "forbidden-scope") return "You can only manage users and groups in your own group.";
   if (error === "missing-user-id") return "Choose a user before updating groups.";
   if (success === "created") return "User created.";
   if (success === "password-reset") return "Password reset.";
@@ -316,8 +385,14 @@ export default async function UsersPage({
   );
   const isError = Boolean(resolvedSearchParams.error);
 
+  const scoped = isScopedAdmin(admin);
+  const scopedGroupId = scoped ? admin.groupIds[0] : undefined;
+
   const [users, groups] = await Promise.all([
     prisma.user.findMany({
+      where: scopedGroupId
+        ? { groupMemberships: { some: { groupId: scopedGroupId } } }
+        : undefined,
       orderBy: [{ createdAt: "asc" }, { email: "asc" }],
       select: {
         id: true,
@@ -326,6 +401,7 @@ export default async function UsersPage({
         role: true,
         createdAt: true,
         groupMemberships: {
+          where: scopedGroupId ? { groupId: scopedGroupId } : undefined,
           include: {
             group: true,
           },
@@ -338,6 +414,7 @@ export default async function UsersPage({
       },
     }),
     prisma.group.findMany({
+      where: scopedGroupId ? { id: scopedGroupId } : undefined,
       orderBy: [{ name: "asc" }, { createdAt: "asc" }],
       include: {
         _count: {
@@ -349,6 +426,95 @@ export default async function UsersPage({
     }),
   ]);
 
+  const usersByGroup = new Map<string, typeof users>();
+  const ungroupedUsers: typeof users = [];
+
+  for (const user of users) {
+    if (user.groupMemberships.length === 0) {
+      ungroupedUsers.push(user);
+      continue;
+    }
+
+    for (const membership of user.groupMemberships) {
+      const groupUsers = usersByGroup.get(membership.groupId) ?? [];
+      groupUsers.push(user);
+      usersByGroup.set(membership.groupId, groupUsers);
+    }
+  }
+
+  function userRow(user: (typeof users)[number]) {
+    return (
+      <div
+        key={user.id}
+        className="flex flex-col gap-2 border-t border-[color:var(--tm-border)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+            <span>{user.name}</span>
+            <span className="tm-chip inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize">
+              {user.role}
+            </span>
+          </div>
+          <div className="mt-0.5 truncate text-xs text-[color:var(--tm-muted)]">
+            {user.email} · joined {formatCreatedAt(user.createdAt)}
+          </div>
+        </div>
+        <details className="relative shrink-0 self-start sm:self-auto">
+          <summary className="tm-button flex h-8 cursor-pointer list-none items-center rounded-[9px] border px-2.5 text-xs [&::-webkit-details-marker]:hidden">
+            Actions
+          </summary>
+          <div className="tm-menu absolute right-0 top-full z-30 mt-2 w-72 rounded-[10px] border p-3 shadow-xl">
+            <form action={updateUserGroups} className="grid gap-2">
+              <input type="hidden" name="userId" value={user.id} />
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                Groups
+              </div>
+              <div className="grid max-h-32 gap-1 overflow-y-auto rounded-[9px] border border-[color:var(--tm-border)] bg-white/35 p-2">
+                {groups.map((group) => {
+                  const checked = user.groupMemberships.some(
+                    (membership) => membership.groupId === group.id
+                  );
+
+                  return (
+                    <label key={group.id} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        name="groupIds"
+                        value={group.id}
+                        defaultChecked={checked}
+                      />
+                      <span>{group.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <button type="submit" className={buttonClass}>
+                Update groups
+              </button>
+            </form>
+            <div className="my-3 border-t border-[color:var(--tm-border)]" />
+            <form action={resetPassword} className="grid gap-2">
+              <input type="hidden" name="id" value={user.id} />
+              <label className="grid gap-1 text-xs">
+                <span className="text-[color:var(--tm-muted)]">Reset password</span>
+                <input
+                  name="password"
+                  type="password"
+                  className={`w-full ${inputClass}`}
+                  placeholder="New password"
+                  required
+                />
+              </label>
+              <button type="submit" className={buttonClass}>
+                Reset password
+              </button>
+            </form>
+          </div>
+        </details>
+      </div>
+    );
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -358,8 +524,61 @@ export default async function UsersPage({
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Users</h1>
         </div>
-        <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
+        <div className="flex items-center gap-2">
+          <details className="relative">
+            <summary className="tm-button-primary flex h-9 cursor-pointer list-none items-center justify-center rounded-[10px] border px-3 text-sm [&::-webkit-details-marker]:hidden">
+              <span className="mr-1 text-base leading-none">+</span> Add
+            </summary>
+            <div className="tm-menu absolute right-0 z-40 mt-2 w-80 rounded-[12px] border p-4 shadow-xl">
+              <h2 className="text-base font-semibold tracking-tight">Create user</h2>
+              <form action={createUser} className="mt-3 grid gap-3">
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Name</div>
+                  <input name="name" className={`w-full ${inputClass}`} required />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Email</div>
+                  <input name="email" type="email" className={`w-full ${inputClass}`} required />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Password</div>
+                  <input name="password" type="password" className={`w-full ${inputClass}`} required />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Group</div>
+                  <select name="groupId" className={`w-full ${inputClass}`} required defaultValue="">
+                    <option value="" disabled>Choose a group</option>
+                    {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Role</div>
+                  <select name="role" className={`w-full ${inputClass}`} defaultValue="user">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                <button type="submit" className={primaryButtonClass}>Create user</button>
+              </form>
+              <div className="my-4 border-t border-[color:var(--tm-border)]" />
+              <h2 className="text-base font-semibold tracking-tight">Create group</h2>
+              <p className="mt-1 text-xs text-[color:var(--tm-muted)]">Groups control which users can see and interact with each other.</p>
+              <form action={createGroup} className="mt-3 grid gap-3">
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Name</div>
+                  <input name="name" className={`w-full ${inputClass}`} required />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <div className="text-[color:var(--tm-muted)]">Description</div>
+                  <input name="description" className={`w-full ${inputClass}`} />
+                </label>
+                <button type="submit" className={primaryButtonClass}>Create group</button>
+              </form>
+            </div>
+          </details>
+          <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
           {users.length} {users.length === 1 ? "user" : "users"}
+          </div>
         </div>
       </div>
 
@@ -375,219 +594,57 @@ export default async function UsersPage({
         </div>
       ) : null}
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-        <article className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
-          <h2 className="text-lg font-semibold tracking-tight">Create user</h2>
-          <form action={createUser} className="mt-4 grid gap-3">
-            <label className="space-y-1 text-sm">
-              <div className="text-[color:var(--tm-muted)]">Name</div>
-              <input name="name" className={`w-full ${inputClass}`} required />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-[color:var(--tm-muted)]">Email</div>
-              <input
-                name="email"
-                type="email"
-                className={`w-full ${inputClass}`}
-                required
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-[color:var(--tm-muted)]">Password</div>
-              <input
-                name="password"
-                type="password"
-                className={`w-full ${inputClass}`}
-                required
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-[color:var(--tm-muted)]">Role</div>
-              <select name="role" className={`w-full ${inputClass}`} defaultValue="user">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-            <div className="flex justify-end">
-              <button type="submit" className={primaryButtonClass}>
-                Create user
-              </button>
-            </div>
-          </form>
-        </article>
-
-        <article className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
-          <h2 className="text-lg font-semibold tracking-tight">Create group</h2>
-          <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-            Groups control which users can see and interact with each other.
-          </p>
-          <form action={createGroup} className="mt-4 grid gap-3">
-            <label className="space-y-1 text-sm">
-              <div className="text-[color:var(--tm-muted)]">Name</div>
-              <input name="name" className={`w-full ${inputClass}`} required />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-[color:var(--tm-muted)]">Description</div>
-              <input name="description" className={`w-full ${inputClass}`} />
-            </label>
-            <div className="flex justify-end">
-              <button type="submit" className={primaryButtonClass}>
-                Create group
-              </button>
-            </div>
-          </form>
-        </article>
-
-        <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5 xl:col-span-2">
+      <section className="mt-6 tm-card overflow-hidden rounded-[14px] border shadow-sm">
+        <div className="border-b border-[color:var(--tm-border)] px-4 py-3 md:px-5">
           <h2 className="text-lg font-semibold tracking-tight">Groups</h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead>
-                <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2">Description</th>
-                  <th className="px-3 py-2">Users</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groups.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-4 text-[color:var(--tm-muted)]" colSpan={4}>
-                      No groups yet.
-                    </td>
-                  </tr>
-                ) : (
-                  groups.map((group) => (
-                    <tr key={group.id} className="tm-table-row border-b last:border-0">
-                      <td className="px-3 py-3">
-                        <form action={updateGroup} className="grid gap-2">
-                          <input type="hidden" name="id" value={group.id} />
-                          <input
-                            name="name"
-                            className={`w-full ${inputClass}`}
-                            defaultValue={group.name}
-                            required
-                          />
-                          <input
-                            name="description"
-                            className={`w-full ${inputClass}`}
-                            defaultValue={group.description ?? ""}
-                            placeholder="Description"
-                          />
-                          <button type="submit" className={buttonClass}>
-                            Save
-                          </button>
-                        </form>
-                      </td>
-                      <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                        {group.description || "No description"}
-                      </td>
-                      <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                        {group._count.memberships}
-                      </td>
-                      <td className="px-3 py-3">
-                        <form action={deleteGroup}>
-                          <input type="hidden" name="id" value={group.id} />
-                          <button type="submit" className={buttonClass}>
-                            Delete
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5 xl:col-span-2">
-          <h2 className="text-lg font-semibold tracking-tight">Existing users</h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead>
-                <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2">Email</th>
-                  <th className="px-3 py-2">Role</th>
-                  <th className="px-3 py-2">Groups</th>
-                  <th className="px-3 py-2">Created</th>
-                  <th className="px-3 py-2">Reset password</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="tm-table-row border-b last:border-0"
-                  >
-                    <td className="px-3 py-3 font-medium">{user.name}</td>
-                    <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                      {user.email}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="tm-chip inline-flex rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <form action={updateUserGroups} className="grid gap-2">
-                        <input type="hidden" name="userId" value={user.id} />
-                        <div className="grid max-h-32 gap-1 overflow-y-auto rounded-[10px] border border-[color:var(--tm-border)] bg-white/35 p-2">
-                          {groups.length === 0 ? (
-                            <span className="text-xs text-[color:var(--tm-muted)]">
-                              Create a group first.
-                            </span>
-                          ) : (
-                            groups.map((group) => {
-                              const checked = user.groupMemberships.some(
-                                (membership) => membership.groupId === group.id
-                              );
-
-                              return (
-                                <label key={group.id} className="flex items-center gap-2 text-xs">
-                                  <input
-                                    type="checkbox"
-                                    name="groupIds"
-                                    value={group.id}
-                                    defaultChecked={checked}
-                                  />
-                                  <span>{group.name}</span>
-                                </label>
-                              );
-                            })
-                          )}
-                        </div>
-                        <button type="submit" className={buttonClass}>
-                          Update groups
-                        </button>
+          <p className="mt-1 text-sm text-[color:var(--tm-muted)]">Expand a group to see its users.</p>
+        </div>
+        {groups.length === 0 ? (
+          <div className="px-4 py-5 text-sm text-[color:var(--tm-muted)]">No groups yet. Use Add to create the first group.</div>
+        ) : (
+          groups.map((group) => {
+            const groupUsers = usersByGroup.get(group.id) ?? [];
+            return (
+              <details key={group.id} className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-white/30 [&::-webkit-details-marker]:hidden md:px-5">
+                  <span className="text-xs text-[color:var(--tm-muted)] transition-transform group-open:rotate-90">▶</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
+                  <span className="hidden truncate text-xs text-[color:var(--tm-muted)] sm:block">{group.description || "No description"}</span>
+                  <span className="tm-chip rounded-full border px-2 py-0.5 text-xs">{groupUsers.length}</span>
+                  <details className="relative shrink-0">
+                    <summary className="tm-button flex h-8 cursor-pointer list-none items-center rounded-[9px] border px-2.5 text-xs [&::-webkit-details-marker]:hidden">Actions</summary>
+                    <div className="tm-menu absolute right-0 top-full z-30 mt-2 w-72 rounded-[10px] border p-3 shadow-xl">
+                      <form action={updateGroup} className="grid gap-2">
+                        <input type="hidden" name="id" value={group.id} />
+                        <label className="grid gap-1 text-xs"><span className="text-[color:var(--tm-muted)]">Name</span><input name="name" className={`w-full ${inputClass}`} defaultValue={group.name} required /></label>
+                        <label className="grid gap-1 text-xs"><span className="text-[color:var(--tm-muted)]">Description</span><input name="description" className={`w-full ${inputClass}`} defaultValue={group.description ?? ""} /></label>
+                        <button type="submit" className={buttonClass}>Save changes</button>
                       </form>
-                    </td>
-                    <td className="px-3 py-3 text-[color:var(--tm-muted)]">
-                      {formatCreatedAt(user.createdAt)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <form action={resetPassword} className="flex gap-2">
-                        <input type="hidden" name="id" value={user.id} />
-                        <input
-                          name="password"
-                          type="password"
-                          className={`w-44 ${inputClass}`}
-                          placeholder="New password"
-                          required
-                        />
-                        <button type="submit" className={buttonClass}>
-                          Reset
-                        </button>
+                      <div className="my-3 border-t border-[color:var(--tm-border)]" />
+                      <form action={deleteGroup}>
+                        <input type="hidden" name="id" value={group.id} />
+                        <button type="submit" className={`${buttonClass} w-full text-red-700`}>Delete group</button>
                       </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                    </div>
+                  </details>
+                </summary>
+                <div className="bg-white/15 pb-1 pl-4 md:pl-12">
+                  {groupUsers.length === 0 ? <div className="border-t border-[color:var(--tm-border)] px-3 py-3 text-xs text-[color:var(--tm-muted)]">No users in this group.</div> : groupUsers.map(userRow)}
+                </div>
+              </details>
+            );
+          })
+        )}
+        {ungroupedUsers.length > 0 ? (
+          <details className="group border-t border-[color:var(--tm-border)]">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden md:px-5">
+              <span className="text-xs text-[color:var(--tm-muted)] transition-transform group-open:rotate-90">▶</span>
+              <span className="flex-1 text-sm font-semibold">No group</span>
+              <span className="tm-chip rounded-full border px-2 py-0.5 text-xs">{ungroupedUsers.length}</span>
+            </summary>
+            <div className="bg-white/15 pb-1 pl-4 md:pl-12">{ungroupedUsers.map(userRow)}</div>
+          </details>
+        ) : null}
       </section>
     </main>
   );
