@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { formatActivityType } from "@/app/lib/activity-log";
 import { prisma } from "@/app/lib/prisma";
+import { scopedVisibleUserWhere } from "@/app/api/users/visibility";
 import { isMissingDatabaseObjectError } from "@/app/lib/prisma-errors";
 import {
   buildSundayCheckInSummary,
@@ -226,13 +227,18 @@ export default async function UserActivityPage({
   const range = getDateRange(period, params.from, params.to);
 
   const users = await prisma.user.findMany({
+    where: await scopedVisibleUserWhere(admin),
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: { id: true, name: true, email: true },
   });
+  const visibleUserIds = users.map((user) => user.id);
   const selectedUserId = users.some((user) => user.id === params.userId) ? params.userId! : "";
   const where = {
-    ...(selectedUserId ? { userId: selectedUserId } : {}),
-    createdAt: { gte: range.start, lt: range.end },
+    AND: [
+      { userId: { in: visibleUserIds } },
+      ...(selectedUserId ? [{ userId: selectedUserId }] : []),
+      { createdAt: { gte: range.start, lt: range.end } },
+    ],
   };
 
   const [typeGroups, completionLogs, recentLogs] = await Promise.all([

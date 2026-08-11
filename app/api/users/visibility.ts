@@ -9,20 +9,36 @@ export function isAdminUser(user: VisibilityUser) {
   return user.role === "admin";
 }
 
+/**
+ * A one-group admin is scoped to that group. Admins with zero or multiple
+ * groups retain the existing global-admin behaviour.
+ */
+export async function getAdminGroupScope(
+  user: VisibilityUser
+): Promise<string[] | null> {
+  if (!isAdminUser(user)) return [];
+
+  const memberships = await prisma.userGroup.findMany({
+    where: { userId: user.id },
+    select: { groupId: true },
+  });
+  const groupIds = memberships.map((membership) => membership.groupId);
+
+  return groupIds.length === 1 ? groupIds : null;
+}
+
 export async function scopedVisibleUserWhere(currentUser: VisibilityUser) {
-  if (isAdminUser(currentUser)) {
+  const adminGroupScope = await getAdminGroupScope(currentUser);
+  if (isAdminUser(currentUser) && adminGroupScope === null) {
     return {};
   }
 
-  const memberships = await prisma.userGroup.findMany({
-    where: {
-      userId: currentUser.id,
-    },
-    select: {
-      groupId: true,
-    },
-  });
-  const groupIds = memberships.map((membership) => membership.groupId);
+  const groupIds =
+    adminGroupScope ??
+    (await prisma.userGroup.findMany({
+      where: { userId: currentUser.id },
+      select: { groupId: true },
+    })).map((membership) => membership.groupId);
 
   if (groupIds.length === 0) {
     return {
@@ -51,7 +67,8 @@ export async function canSeeUser(currentUser: VisibilityUser, targetUserId: stri
     return true;
   }
 
-  if (isAdminUser(currentUser)) {
+  const adminGroupScope = await getAdminGroupScope(currentUser);
+  if (isAdminUser(currentUser) && adminGroupScope === null) {
     const userCount = await prisma.user.count({
       where: { id: targetUserId },
     });
@@ -59,11 +76,12 @@ export async function canSeeUser(currentUser: VisibilityUser, targetUserId: stri
     return userCount > 0;
   }
 
-  const currentUserGroups = await prisma.userGroup.findMany({
-    where: { userId: currentUser.id },
-    select: { groupId: true },
-  });
-  const groupIds = currentUserGroups.map((membership) => membership.groupId);
+  const groupIds =
+    adminGroupScope ??
+    (await prisma.userGroup.findMany({
+      where: { userId: currentUser.id },
+      select: { groupId: true },
+    })).map((membership) => membership.groupId);
 
   if (groupIds.length === 0) {
     return false;
