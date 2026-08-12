@@ -107,6 +107,8 @@ type TaskEditorModalProps = {
   categorySuggestions: string[];
   waitingOnSuggestions: string[];
   projectOptions: ProjectOption[];
+  showProjectField?: boolean;
+  showRepeatFields?: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (updater: (prev: EditTaskFormState) => EditTaskFormState) => void;
@@ -123,6 +125,8 @@ type TaskCreatorModalProps<T extends TaskCreateFormState> = {
   submitDisabled?: boolean;
   topActionLabel?: string;
   onTopAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (updater: (prev: T) => T) => void;
@@ -744,6 +748,8 @@ function TaskFormFields<T extends TaskCreateFormState>({
   categorySuggestions,
   waitingOnSuggestions,
   projectOptions,
+  showProjectField = true,
+  showRepeatFields = true,
   noteHistory,
   showDueDateClear = false,
   onFormChange,
@@ -752,6 +758,8 @@ function TaskFormFields<T extends TaskCreateFormState>({
   categorySuggestions: string[];
   waitingOnSuggestions: string[];
   projectOptions: ProjectOption[];
+  showProjectField?: boolean;
+  showRepeatFields?: boolean;
   noteHistory?: TaskNoteHistoryEntry[];
   showDueDateClear?: boolean;
   onFormChange: (updater: (prev: T) => T) => void;
@@ -860,39 +868,45 @@ function TaskFormFields<T extends TaskCreateFormState>({
           )}
         </section>
       )}
-      <label className="space-y-1 text-sm">
-        <div className="tm-muted">Project</div>
-        <select
-          className={`w-full ${inputClass}`}
-          value={form.projectId}
-          onChange={(event) =>
-            onFormChange((prev) => ({ ...prev, projectId: event.target.value }))
-          }
-        >
-          <option value="" className="text-black">
-            Unassigned
-          </option>
-          {projectOptions.map((project) => (
-            <option key={project.id} value={project.id} className="text-black">
-              {project.name}
-              {project.archived ? " (Archived)" : ""}
+      {showProjectField ? (
+        <label className="space-y-1 text-sm">
+          <div className="tm-muted">Project</div>
+          <select
+            className={`w-full ${inputClass}`}
+            value={form.projectId}
+            onChange={(event) =>
+              onFormChange((prev) => ({ ...prev, projectId: event.target.value }))
+            }
+          >
+            <option value="" className="text-black">
+              Unassigned
             </option>
-          ))}
-        </select>
-      </label>
-      <RepeatFields
-        form={form}
-        defaultDateValue={form.startDate}
-        onChange={(updater) => onFormChange((prev) => updater(prev))}
-      />
-      {hasRepeatPauseFields(form) && (
-        <RepeatPauseFields
-          form={form}
-          onChange={(updater) =>
-            onFormChange((prev) => updater(prev as T & RepeatPauseFormState) as T)
-          }
-        />
-      )}
+            {projectOptions.map((project) => (
+              <option key={project.id} value={project.id} className="text-black">
+                {project.name}
+                {project.archived ? " (Archived)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {showRepeatFields ? (
+        <>
+          <RepeatFields
+            form={form}
+            defaultDateValue={form.startDate}
+            onChange={(updater) => onFormChange((prev) => updater(prev))}
+          />
+          {hasRepeatPauseFields(form) && (
+            <RepeatPauseFields
+              form={form}
+              onChange={(updater) =>
+                onFormChange((prev) => updater(prev as T & RepeatPauseFormState) as T)
+              }
+            />
+          )}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -945,6 +959,8 @@ export function TaskEditorModal({
   categorySuggestions,
   waitingOnSuggestions,
   projectOptions,
+  showProjectField = true,
+  showRepeatFields = true,
   onClose,
   onSubmit,
   onFormChange,
@@ -961,6 +977,8 @@ export function TaskEditorModal({
             categorySuggestions={categorySuggestions}
             waitingOnSuggestions={waitingOnSuggestions}
             projectOptions={projectOptions}
+            showProjectField={showProjectField}
+            showRepeatFields={showRepeatFields}
             noteHistory={form.noteHistory}
             showDueDateClear
             onFormChange={onFormChange}
@@ -987,6 +1005,8 @@ export function AddTaskModal<T extends TaskCreateFormState>({
   submitDisabled = false,
   topActionLabel,
   onTopAction,
+  secondaryActionLabel,
+  onSecondaryAction,
   onClose,
   onSubmit,
   onFormChange,
@@ -997,11 +1017,18 @@ export function AddTaskModal<T extends TaskCreateFormState>({
         className="flex max-h-[calc(100vh-144px)] min-h-0 flex-col overflow-hidden"
         onSubmit={onSubmit}
       >
-        {topActionLabel && onTopAction ? (
-          <div className="mb-3 flex shrink-0 justify-end">
-            <button className={buttonClass} type="button" onClick={onTopAction}>
-              {topActionLabel}
-            </button>
+        {(topActionLabel && onTopAction) || (secondaryActionLabel && onSecondaryAction) ? (
+          <div className="mb-3 flex shrink-0 justify-end gap-2">
+            {secondaryActionLabel && onSecondaryAction ? (
+              <button className={buttonClass} type="button" onClick={onSecondaryAction}>
+                {secondaryActionLabel}
+              </button>
+            ) : null}
+            {topActionLabel && onTopAction ? (
+              <button className={buttonClass} type="button" onClick={onTopAction}>
+                {topActionLabel}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <TaskFormFields

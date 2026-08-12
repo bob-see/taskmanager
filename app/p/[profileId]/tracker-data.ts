@@ -95,6 +95,7 @@ export async function getTrackerPageData(profileId: string, email: string) {
           },
         },
         projectId: true,
+        workflowRunId: true,
         recurrenceSeriesId: true,
         repeatEnabled: true,
         repeatPattern: true,

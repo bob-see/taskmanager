@@ -17,19 +17,21 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  profiles               Profile[]
-  spaceMemberships       SpaceMember[]
-  groupMemberships       UserGroup[]
-  matrixCells            MatrixCell[]     @relation("MatrixCellUserValue")
-  matrixCellNotes        MatrixCellNote[]
-  taskNotes              TaskNote[]
-  sentDelegatedTasks     DelegatedTask[]  @relation("DelegatedTaskAssignedBy")
-  receivedDelegatedTasks DelegatedTask[]  @relation("DelegatedTaskAssignedTo")
-  receivedNotifications  Notification[]   @relation("NotificationRecipient")
-  actedNotifications     Notification[]   @relation("NotificationActor")
+  profiles                Profile[]
+  spaceMemberships        SpaceMember[]
+  groupMemberships        UserGroup[]
+  matrixCells             MatrixCell[]             @relation("MatrixCellUserValue")
+  matrixCellNotes         MatrixCellNote[]
+  taskNotes               TaskNote[]
+  sentDelegatedTasks      DelegatedTask[]          @relation("DelegatedTaskAssignedBy")
+  receivedDelegatedTasks  DelegatedTask[]          @relation("DelegatedTaskAssignedTo")
+  receivedNotifications   Notification[]           @relation("NotificationRecipient")
+  actedNotifications      Notification[]           @relation("NotificationActor")
   notificationPreferences NotificationPreference[]
-  notificationPushEnabled Boolean          @default(false)
-  pushSubscriptions      PushSubscription[]
+  notificationPushEnabled Boolean                  @default(false)
+  pushSubscriptions       PushSubscription[]
+  workflows               Workflow[]
+  workflowRuns            WorkflowRun[]
 
   @@index([email])
   @@map("user")
@@ -148,6 +150,7 @@ model Task {
   profileId          String?   @default("default") @db.VarChar(36)
   projectId          String?   @db.VarChar(36)
   recurrenceSeriesId String?   @db.VarChar(36)
+  workflowRunId      String?   @db.VarChar(36)
   repeatEnabled      Boolean   @default(false)
   repeatPattern      String?
   repeatInterval     Int       @default(1)
@@ -162,6 +165,7 @@ model Task {
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   noteHistory   TaskNote[]
   delegatedTask DelegatedTask?
+  workflowRun   WorkflowRun?   @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
 
   @@unique([profileId, recurrenceSeriesId, startDate])
   @@index([profileId, startDate])
@@ -170,7 +174,73 @@ model Task {
   @@index([profileId, completedOn, orderIndex])
   @@index([profileId, recurrenceSeriesId])
   @@index([projectId])
+  @@index([workflowRunId])
   @@map("task")
+}
+
+model Workflow {
+  id          String   @id @default(cuid()) @db.VarChar(36)
+  userId      String   @db.VarChar(36)
+  name        String   @db.VarChar(191)
+  description String?  @db.Text
+  category    String?  @db.VarChar(191)
+  status      String   @default("ACTIVE") @db.VarChar(32)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks WorkflowTask[]
+  runs  WorkflowRun[]
+
+  @@index([userId, status, updatedAt])
+  @@map("workflow")
+}
+
+model WorkflowTask {
+  id              String   @id @default(cuid()) @db.VarChar(36)
+  workflowId      String   @db.VarChar(36)
+  position        Int
+  title           String   @db.VarChar(191)
+  notes           String?  @db.Text
+  startOffsetDays Int      @default(0)
+  dueRule         String   @default("NONE") @db.VarChar(32)
+  dueOffsetDays   Int?
+  isPriority      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, position])
+  @@index([workflowId])
+  @@map("workflowtask")
+}
+
+model WorkflowRun {
+  id                   String    @id @default(cuid()) @db.VarChar(36)
+  workflowId           String    @db.VarChar(36)
+  userId               String    @db.VarChar(36)
+  profileId            String    @db.VarChar(36)
+  launchName           String    @db.VarChar(191)
+  workflowNameSnapshot String    @db.VarChar(191)
+  categorySnapshot     String?   @db.VarChar(191)
+  workflowDate         DateTime
+  idempotencyKey       String    @db.VarChar(191)
+  createdTaskCount     Int
+  launchedAt           DateTime  @default(now())
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile  Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  tasks    Task[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, profileId, completedAt, launchedAt])
+  @@index([workflowId, launchedAt])
+  @@map("workflowrun")
 }
 
 enum DelegatedTaskStatus {
@@ -237,6 +307,7 @@ model Profile {
   projects              Project[]
   timeEntries           TimeEntry[]
   sundayCheckIns        SundayCheckIn[]
+  workflowRuns          WorkflowRun[]
 
   @@index([userId])
   @@map("profile")

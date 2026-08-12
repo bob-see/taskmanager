@@ -24,9 +24,11 @@ import {
   type TaskNoteHistoryEntry,
 } from "@/app/components/editors";
 import { TaskDeleteConfirmationModal } from "@/app/components/task-delete-confirmation-modal";
+import { TaskNotesButton } from "@/app/components/task-notes-button";
 import { DoneTaskButton } from "@/app/components/done-task-button";
 import { DelegateTaskModal } from "@/app/delegated/delegate-task-modal";
 import { SundayCheckIn } from "@/app/components/sunday-check-in";
+import { WorkflowRunCards } from "@/app/p/[profileId]/workflow-run-cards";
 import {
   DelegatedSenderBadge,
   DelegatedTaskStatusPill,
@@ -74,6 +76,7 @@ type Task = {
   notes: string | null;
   noteHistory: TaskNoteHistoryEntry[];
   projectId: string | null;
+  workflowRunId: string | null;
   recurrenceSeriesId: string | null;
   repeatEnabled: boolean;
   repeatPattern: RepeatPattern | null;
@@ -1677,116 +1680,6 @@ function DiscardChangesModal({
         </div>
       </div>
     </div>
-  );
-}
-
-function TaskNotesButton({ notes }: { notes: string }) {
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{
-    left: number;
-    top: number;
-    placement: "above" | "below";
-    width: number;
-  } | null>(null);
-
-  function updatePosition() {
-    const button = buttonRef.current;
-    if (!button) return;
-
-    const rect = button.getBoundingClientRect();
-    const width = Math.min(380, window.innerWidth - 32);
-    const left = Math.min(
-      Math.max(16, rect.left),
-      Math.max(16, window.innerWidth - width - 16)
-    );
-    const placement =
-      window.innerHeight - rect.bottom < 180 && rect.top > 180 ? "above" : "below";
-    const top = placement === "above" ? rect.top - 8 : rect.bottom + 8;
-
-    setPosition({ left, top, placement, width });
-  }
-
-  function toggleOpen() {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-
-    updatePosition();
-    setOpen(true);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      if (
-        buttonRef.current?.contains(target) ||
-        popoverRef.current?.contains(target)
-      ) {
-        return;
-      }
-
-      setOpen(false);
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    function handleReposition() {
-      updatePosition();
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleReposition);
-    window.addEventListener("scroll", handleReposition, true);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleReposition);
-      window.removeEventListener("scroll", handleReposition, true);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        aria-expanded={open}
-        aria-label="View task notes"
-        className="tm-chip inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] transition-colors hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]"
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          toggleOpen();
-        }}
-      >
-        📝
-      </button>
-      {open && position && (
-        <div
-          ref={popoverRef}
-          className="fixed z-[80] max-h-64 overflow-auto whitespace-pre-wrap rounded-[12px] border border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-xs leading-5 text-[color:var(--tm-text)] shadow-2xl"
-          style={{
-            left: position.left,
-            top: position.top,
-            width: position.width,
-            transform:
-              position.placement === "above" ? "translateY(-100%)" : undefined,
-          }}
-        >
-          {notes}
-        </div>
-      )}
-    </>
   );
 }
 
@@ -3615,6 +3508,7 @@ export function TrackerClient({
   const monthEndValue = dateInputValue(monthEnd);
 
   const projectById = new Map(projects.map((project) => [project.id, project]));
+  const taskList = tasks.filter((task) => !task.workflowRunId);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchActive = normalizedSearchQuery.length > 0;
   const archivedView = taskView === "archived";
@@ -3638,8 +3532,8 @@ export function TrackerClient({
     : [];
 
   const visibleTasks = archivedView
-    ? tasks.filter((task) => isTaskInArchivedProject(task, projectById))
-    : filterTasksByArchivedVisibility(tasks, projectById, false);
+    ? taskList.filter((task) => isTaskInArchivedProject(task, projectById))
+    : filterTasksByArchivedVisibility(taskList, projectById, false);
   const selectedDayVisibleTasks = visibleTasks.filter((task) =>
     isRecurringTask(task) ? isTaskVisibleOnDate(task, selectedDay) : true
   );
@@ -3774,7 +3668,7 @@ export function TrackerClient({
       isTaskVisibleInDayView(task) && matchesTaskSearch(task, searchQuery, projectById)
   );
   const archivedDayTasks = sortTasks(
-    tasks.filter(
+    taskList.filter(
       (task) =>
         isTaskInArchivedProject(task, projectById) &&
         matchesTaskSearch(task, searchQuery, projectById)
@@ -6305,6 +6199,41 @@ export function TrackerClient({
                   </section>
                 );
               })}
+              <WorkflowRunCards
+                profileId={profileId}
+                selectedDay={selectedDay}
+                showDone={taskView === "done"}
+                pendingTaskIds={Object.keys(pendingTaskActions)}
+                priorityOverrides={Object.fromEntries(
+                  tasks
+                    .filter((task) => task.workflowRunId)
+                    .map((task) => [task.id, task.isPriority])
+                )}
+                onToggleTask={(taskId, completed) => {
+                  void toggleTaskCompleted(taskId, completed).catch((err: unknown) =>
+                    setError(err instanceof Error ? err.message : "Could not update task")
+                  );
+                }}
+                onTogglePriority={async (taskId, nextValue) => {
+                  const task = tasks.find((item) => item.id === taskId);
+                  if (!task || task.isPriority === nextValue) return;
+                  await toggleTaskPriority(task);
+                }}
+                onOpenEditTask={(taskId) => {
+                  const task = tasks.find((item) => item.id === taskId);
+                  if (task) openTaskEditor(task);
+                }}
+                onOpenTaskContextMenu={(event, taskId) => {
+                  const task = tasks.find((item) => item.id === taskId);
+                  if (task) {
+                    openTaskContextMenu(event, task, {
+                      showSnoozeAction: !isTaskCompleted(task),
+                      toggleCompletedTo: !isTaskCompleted(task),
+                      pauseReferenceDate: selectedDay,
+                    });
+                  }
+                }}
+              />
               {visibleGroupedSections.length === 0 && (
                 <div className="text-sm opacity-60">No matching tasks for this day.</div>
               )}
@@ -6752,6 +6681,11 @@ export function TrackerClient({
         projectOptions={newTaskProjectOptions}
         topActionLabel="+ Project"
         onTopAction={openNewProjectDialog}
+        secondaryActionLabel="+ Workflow"
+        onSecondaryAction={() => {
+          setNewTaskOpen(false);
+          router.push(`/workflows/launch?profileId=${encodeURIComponent(profileId)}`);
+        }}
         onClose={closeNewTaskDialog}
         onSubmit={createTask}
         onFormChange={(updater) => setForm((prev) => updater(prev))}
@@ -7283,6 +7217,8 @@ export function TrackerClient({
         categorySuggestions={categorySuggestions}
         waitingOnSuggestions={waitingOnSuggestions}
         projectOptions={projectOptions}
+        showProjectField={!Boolean(editTask?.workflowRunId)}
+        showRepeatFields={!Boolean(editTask?.workflowRunId)}
         onClose={closeTaskEditor}
         onSubmit={submitTaskEditor}
         onFormChange={(updater) =>

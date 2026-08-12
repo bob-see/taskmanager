@@ -115,6 +115,8 @@ export function AppSidebar({
         ? "Assigned By Me"
       : pathname === "/spaces"
         ? "Collaborative Spaces"
+      : pathname === "/workflows"
+        ? "Workflows"
       : pathname === "/timesheets"
         ? "Timesheets"
         : pathname === "/activity"
@@ -215,6 +217,13 @@ export function AppSidebar({
                 onClick={onNavigate}
               >
                 Collaborative Spaces
+              </Link>
+              <Link
+                href="/workflows"
+                className={itemClassName(pathname === "/workflows")}
+                onClick={onNavigate}
+              >
+                Workflows
               </Link>
               <Link
                 href="/timesheets"

@@ -20,13 +20,18 @@ export function keychainLookupArguments(environment = process.env) {
   ];
 }
 
-export async function runScheduledBackup({ environment = process.env, lookupPassphrase } = {}) {
+export async function readKeychainPassphrase({ environment = process.env, lookupPassphrase } = {}) {
   const readPassphrase = lookupPassphrase || (async () => {
     const { stdout } = await execFileAsync("security", keychainLookupArguments(environment), { maxBuffer: 4096 });
     return stdout.trim();
   });
   const passphrase = await readPassphrase();
   if (!passphrase) throw new Error("TaskManager backup passphrase was not available from Keychain");
+  return passphrase;
+}
+
+export async function runScheduledBackup({ environment = process.env, lookupPassphrase } = {}) {
+  const passphrase = await readKeychainPassphrase({ environment, lookupPassphrase });
   return runBackup({ environment: { ...environment, TASKMANAGER_BACKUP_PASSPHRASE: passphrase } });
 }
 
