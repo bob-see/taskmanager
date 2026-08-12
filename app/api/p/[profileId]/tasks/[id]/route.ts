@@ -52,6 +52,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       category: true,
       notes: true,
       projectId: true,
+      workflowRunId: true,
       recurrenceSeriesId: true,
       completedAt: true,
       completedOn: true,
@@ -134,6 +135,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if (body?.projectId !== undefined) {
     const projectId = parseOptionalTextInput(body.projectId, "projectId");
     if (projectId.error) return projectId.error;
+    if (existingTask.workflowRunId && projectId.value) {
+      return Response.json(
+        { error: "Workflow tasks cannot be moved into a Project" },
+        { status: 400 }
+      );
+    }
     if (projectId.value) {
       const project = await ensureProject(profileId, projectId.value);
       if (!project) {

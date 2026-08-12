@@ -31,20 +31,22 @@ The confirmed product model is:
 - Workflows live under **Tools → Workflows**.
 - Projects represent active work; Workflows represent repeatable processes.
 - Workflows are created and managed separately from launching them.
-- Launching begins from the existing **Add Task** dialog through a **+ Workflow** option.
+- Launching begins from the existing **Add Task** dialog through a **+ Workflow** option, and may target any Profile belonging to the launching user.
 - Editing a Workflow affects future launches only. Tasks created by earlier launches remain unchanged.
-- Workflows should be archived rather than deleted where practical.
+- Workflows are archived rather than deleted.
+- Each launch creates a named, project-like Workflow Run card containing ordinary generated tasks. The Run card leaves active work when all its tasks are complete and remains available through Done/history views.
+- The detailed Version 1 product and technical design is in [`docs/WORKFLOW_TEMPLATES_DESIGN.md`](./docs/WORKFLOW_TEMPLATES_DESIGN.md).
 
 #### Profiles and Users
 
 Profiles are personal workspaces belonging to an individual TaskManager user. Simon, Sales, DREAM, and other work areas may all be Profiles belonging to that user; they are not separate application users.
 
-- Each Workflow has one default Profile.
-- Every task created from a Version 1 Workflow belongs to the Workflow's selected Profile.
-- A single Version 1 Workflow does not span multiple Profiles.
+- A Workflow definition is user-owned and Profile-independent.
+- Each Workflow Run targets one Profile selected at launch.
+- Every task created from a Version 1 Workflow belongs to that Workflow Run's selected Profile.
 - Version 1 Workflows are launched only for the user launching them.
 - Version 1 does not assign Workflow tasks to other TaskManager users.
-- Cross-user task assignment and delegation are future enhancements.
+- Workflow sharing, cross-user task assignment, and delegation are future enhancements.
 
 #### Workflow Structure
 
@@ -52,44 +54,25 @@ A Workflow records:
 
 - title;
 - description;
-- default Profile;
-- optional default Project;
-- optional default Category;
-- Workflow access and permissions; and
+- one Workflow-level Category value; and
 - Active or Archived status.
 
 Each ordered Workflow task records:
 
 - position;
 - title;
-- calendar-day offset relative to Workflow Date;
-- Due Date rule;
-- Waiting On;
+- Start and Due Date rules relative to Workflow Date;
 - priority;
-- notes;
-- optional Project override; and
-- optional Category override.
+- reusable notes/instructions.
 
-### Profile, Project and Category Rules
+### Profile and Category Rules
 
-- A Workflow is associated with one Profile.
-- Only active Projects related to that Profile may be selected.
-- Only Categories related to that Profile may be selected.
-- Categories are permanent once used and are not archived.
-- If a referenced Project or Profile is later archived, the Workflow management screen shows a warning.
-- Invalid or archived references must be resolved before launch.
-- The creator may select which other TaskManager users may manage, view, or launch the Workflow.
-- Workflow-level access follows a collaboration model comparable to Collaborative Spaces.
-- Workflow access does not allow tasks to be assigned to another user in Version 1.
+- A Workflow is owned by one TaskManager user and is not associated with a Profile until launch.
+- The launch target Profile must belong to the launching user.
+- One Workflow-level Category value is copied to every generated task; Version 1 continues to use the existing free-text category model.
+- Workflow sharing and access permissions are not included in Version 1.
 
-Project and Category values resolve in this order:
-
-1. task-specific override;
-2. launch override;
-3. Workflow default;
-4. existing normal task default where no Workflow value applies.
-
-A launch-level Project or Category override replaces only the Workflow default. It does not replace an explicit task-specific override.
+Category values resolve from the Workflow value, with permitted launch-time task edits taking precedence. Version 1 does not create a Project for a Workflow Run or support project/category selection overrides.
 
 ### Workflow Date and Date Rules
 
@@ -101,24 +84,7 @@ A launch-level Project or Category override replaces only the Workflow default. 
 - Zero means on Workflow Date.
 - Positive offsets mean days after Workflow Date.
 
-Version 1 supports these Due Date rules:
-
-- no Due Date;
-- Due Date equals the calculated Start Date; or
-- Due Date equals the Workflow Date.
-
-Custom Due Date offsets are a possible later enhancement, not Version 1 scope.
-
-### Waiting On
-
-Waiting On uses TaskManager's existing user-facing task field and behaviour:
-
-- it is free-text;
-- previous entries are remembered and may appear in a dropdown;
-- it does not represent task dependencies; and
-- it does not assign work to another person.
-
-Task dependencies are not included in Version 1.
+The Workflow editor presents date rules in plain language, such as “On Workflow Date”, “1 day after”, “same day as Start”, or “2 days before”. The stored values remain date-only calendar-day rules. Task dependencies are not included in Version 1.
 
 ### Workflow Launching
 
@@ -126,17 +92,18 @@ The proposed launch experience is:
 
 **Add Task → + Workflow → Choose Workflow → Select Workflow → Select Workflow Date → Preview → Create or Launch**
 
-Before launch, users may override the Workflow-level default Project and Category.
+The launch requires a user-entered Run name. The final card title combines the Run name with the immutable Workflow name snapshot, for example `Ruby10.1 Auction Prep`.
+
+At launch, users may adjust individual task dates, notes, and priority values. Workflow notes and priority defaults are copied into generated tasks.
 
 Preview displays:
 
 - task title;
+- Workflow Run card title;
 - calculated Start Date;
 - Due Date where applicable;
-- Waiting On;
 - priority;
 - Profile;
-- Project;
 - Category; and
 - future repeat settings when recurrence is eventually supported.
 
@@ -152,15 +119,16 @@ The record conceptually retains:
 
 - Workflow reference;
 - Workflow name snapshot;
+- user-entered Run name;
 - Workflow Date;
 - launch date and time;
 - user who launched it;
 - Profile;
-- applied Project and Category launch overrides;
+- Category snapshot;
 - number of tasks created; and
 - unique Workflow Launch ID.
 
-Created tasks retain a reference to their Workflow Launch. A future Workflow History interface may use this data later.
+Created tasks retain a reference to their Workflow Run. A future Workflow History interface may use this data later.
 
 ### Transactional Creation
 
@@ -181,9 +149,9 @@ Preview and creation rely on the same calculation rules so the preview cannot di
 Resolve and document:
 
 - Workflow and Workflow-task domain model;
-- Workflow-level access and permissions;
-- Profile restrictions;
-- Project and Category inheritance and override rules;
+- Workflow ownership and the Version 1 no-sharing boundary;
+- target Profile restrictions;
+- Category inheritance and launch-time task overrides;
 - date-only handling;
 - calendar-day offset calculations;
 - Due Date rules;
@@ -203,12 +171,11 @@ Deliver in the future:
 - create and edit Workflows;
 - archive and restore;
 - duplicate;
-- manage Workflow access;
 - ordered Workflow tasks;
 - drag-and-drop ordering with an accessible non-drag alternative; and
-- validation of Profile, Project and Category selections.
+- validation of Profile, Category, and task date selections.
 
-**Acceptance direction:** An authorised user can create and maintain an ordered reusable Workflow, but launching does not yet need to be enabled.
+**Acceptance direction:** A user can create and maintain an ordered reusable Workflow, including reusable notes, priority defaults, date rules, and archive/restore behaviour.
 
 ### Milestone 3 — Workflow Preview and Calculation Engine
 
@@ -218,7 +185,7 @@ Deliver in the future:
 - Workflow Date;
 - date calculation service;
 - Due Date calculation;
-- Profile, Project and Category resolution;
+- target Profile and Category resolution;
 - validation warnings;
 - deterministic preview; and
 - no database task creation during preview.
@@ -231,7 +198,7 @@ Deliver in the future:
 
 - **Add Task → + Workflow**;
 - launch flow;
-- Workflow Launch record;
+- named Workflow Run record and project-like Run card;
 - transactional task creation;
 - technical duplicate protection;
 - task traceability;
@@ -249,7 +216,7 @@ Deliver in the future:
 - automated calculation tests;
 - transaction rollback tests;
 - permissions tests;
-- Profile, Project and Category validation tests;
+- Profile and Category validation tests;
 - timezone and date-boundary tests;
 - duplicate-submission tests;
 - desktop and mobile review;

@@ -74,6 +74,10 @@ export function TaskDeleteConfirmationModal({
               </div>
             </div>
 
+            <p className="rounded-[10px] border border-red-300/60 bg-red-50/80 p-3 text-sm leading-5 text-red-800">
+              If this task has note history, deleting it will permanently delete those notes too.
+            </p>
+
             {recurring && (
               <div className="space-y-2">
                 <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--tm-muted)]">
