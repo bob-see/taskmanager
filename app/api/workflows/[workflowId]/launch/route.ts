@@ -30,6 +30,10 @@ export async function POST(req: Request, ctx: Ctx) {
   }
   const profileId = typeof body.profileId === "string" ? body.profileId : "";
   if (!profileId) return Response.json({ error: "Profile is required" }, { status: 400 });
+  const selectedTaskIds = Array.isArray(body.selectedTaskIds)
+    ? body.selectedTaskIds.filter((id: unknown): id is string => typeof id === "string")
+    : null;
+  if (selectedTaskIds && selectedTaskIds.length === 0) return Response.json({ error: "Select at least one task" }, { status: 400 });
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -52,10 +56,16 @@ export async function POST(req: Request, ctx: Ctx) {
       if (!profile) throw new Error("Profile not found");
       if (workflow.tasks.length === 0) throw new Error("Workflow has no tasks");
 
+      const selectedIds = selectedTaskIds ?? workflow.tasks.map((template) => template.id);
+      const selectedIdSet = new Set(selectedIds);
+      if (selectedIdSet.size !== selectedIds.length || selectedIds.some((id: string) => !workflow.tasks.some((template) => template.id === id))) {
+        throw new Error("Selected tasks must belong to this Workflow");
+      }
+
       const rawOverrides = body.taskOverrides && typeof body.taskOverrides === "object" ? body.taskOverrides : {};
       const overrides = rawOverrides as Record<string, unknown>;
       const orderResult = await tx.task.aggregate({ where: { profileId }, _max: { orderIndex: true } });
-      const tasks = workflow.tasks.map((template, index) => {
+      const tasks = workflow.tasks.filter((template) => selectedIdSet.has(template.id)).map((template, index) => {
         const raw = overrides[template.id];
         const override = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
         const calculated = calculateWorkflowDates(workflowDate, {

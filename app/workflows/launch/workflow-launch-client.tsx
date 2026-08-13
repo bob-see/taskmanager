@@ -46,6 +46,7 @@ export function WorkflowLaunchClient() {
   const [workflowDate, setWorkflowDate] = useState(() => getBrisbaneDate(new Date()));
   const [launchName, setLaunchName] = useState("");
   const [overrides, setOverrides] = useState<Record<string, Override>>({});
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
@@ -73,7 +74,10 @@ export function WorkflowLaunchClient() {
       setSelectedWorkflowId(loadedWorkflow?.id ?? "");
       setProfiles(loadedProfiles);
       setProfileId(loadedProfiles.some((profile) => profile.id === requestedProfileId) ? requestedProfileId! : loadedProfiles[0]?.id ?? "");
-      if (loadedWorkflow) setOverrides(createOverrides(loadedWorkflow, getBrisbaneDate(new Date())));
+      if (loadedWorkflow) {
+        setOverrides(createOverrides(loadedWorkflow, getBrisbaneDate(new Date())));
+        setSelectedTaskIds(loadedWorkflow.tasks.map((task) => task.id));
+      }
     }).catch((err) => setError(err instanceof Error ? err.message : "Could not load launch details")).finally(() => setLoading(false));
   }, [workflowId, requestedProfileId]);
 
@@ -96,9 +100,17 @@ export function WorkflowLaunchClient() {
     setOverrides((current) => ({ ...current, [taskId]: { ...current[taskId], ...update } }));
   }
 
+  function setAllTasksSelected(selected: boolean) {
+    setSelectedTaskIds(selected ? preview.map((task) => task.id) : []);
+  }
+
   async function launch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workflow || !profileId) return;
+    if (selectedTaskIds.length === 0) {
+      setError("Select at least one task to launch this Workflow");
+      return;
+    }
     setLaunching(true);
     setError("");
     try {
@@ -110,6 +122,7 @@ export function WorkflowLaunchClient() {
           workflowDate,
           launchName,
           idempotencyKey: crypto.randomUUID(),
+          selectedTaskIds,
           taskOverrides: Object.fromEntries(preview.map((task) => [task.id, { startDate: task.startDate, dueDate: task.dueDate || null, notes: task.notes, isPriority: task.isPriority }])),
         }),
       });
@@ -144,15 +157,19 @@ export function WorkflowLaunchClient() {
       {error ? <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
       <form className="mt-6 space-y-5" onSubmit={launch}>
         <section className={`tm-card grid gap-4 rounded-2xl p-5 ${workflowId ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
-          {!workflowId ? <label className="text-sm font-medium">Workflow<select required className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2" value={selectedWorkflowId} onChange={(event) => { const value = event.target.value; const next = availableWorkflows.find((item) => item.id === value) ?? null; setSelectedWorkflowId(value); setWorkflow(next); if (next) setOverrides(createOverrides(next, workflowDate)); }}>{availableWorkflows.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+          {!workflowId ? <label className="text-sm font-medium">Workflow<select required className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2" value={selectedWorkflowId} onChange={(event) => { const value = event.target.value; const next = availableWorkflows.find((item) => item.id === value) ?? null; setSelectedWorkflowId(value); setWorkflow(next); if (next) { setOverrides(createOverrides(next, workflowDate)); setSelectedTaskIds(next.tasks.map((task) => task.id)); } }}>{availableWorkflows.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
           <label className="text-sm font-medium">Run name<span className="ml-1 text-red-600">*</span><input required className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2" placeholder="e.g. Ruby10.1 or Gran24" value={launchName} onChange={(event) => setLaunchName(event.target.value)} /><span className="tm-muted mt-1 block text-xs">A short name to distinguish this run from others using the same Workflow.</span></label>
           <label className="text-sm font-medium">Profile<select required className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2" value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
           <label className="text-sm font-medium">Workflow Date<input required className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2" type="date" value={workflowDate} onChange={(event) => { const value = event.target.value; setWorkflowDate(value); if (workflow) setOverrides(createOverrides(workflow, value)); }} /></label>
         </section>
         <section className="space-y-3">
+          <div className="tm-card flex items-center justify-between gap-4 rounded-2xl px-5 py-3">
+            <div><p className="text-sm font-semibold text-[color:var(--tm-text)]">Tasks to include</p><p className="mt-1 text-xs text-[color:var(--tm-muted)]">Choose which tasks apply to this Workflow run.</p></div>
+            <label className="flex shrink-0 items-center gap-2 text-sm text-[color:var(--tm-text)]"><input type="checkbox" checked={preview.length > 0 && selectedTaskIds.length === preview.length} onChange={(event) => setAllTasksSelected(event.target.checked)} /> Select all</label>
+          </div>
           {preview.map((task) => (
-            <article key={task.id} className="tm-card rounded-2xl p-4">
-              <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="font-semibold text-[color:var(--tm-text)]">{task.title}</h2><p className="mt-1 text-xs text-[color:var(--tm-muted)]">{workflow?.category || "No category"}</p></div><label className="flex items-center gap-2 text-xs text-[color:var(--tm-muted)]"><input type="checkbox" checked={task.isPriority} onChange={(event) => updateOverride(task.id, { isPriority: event.target.checked })} /> Priority</label></div>
+            <article key={task.id} className={`tm-card rounded-2xl p-4 ${selectedTaskIds.includes(task.id) ? "" : "opacity-60"}`}>
+              <div className="flex items-start gap-3"><label className="flex items-start gap-2 pt-1 text-xs text-[color:var(--tm-muted)]"><input aria-label={`Include ${task.title}`} type="checkbox" checked={selectedTaskIds.includes(task.id)} onChange={(event) => setSelectedTaskIds((current) => event.target.checked ? [...current, task.id] : current.filter((id) => id !== task.id))} /></label><div className="min-w-0 flex-1"><h2 className="font-semibold text-[color:var(--tm-text)]">{task.title}</h2><p className="mt-1 text-xs text-[color:var(--tm-muted)]">{workflow?.category || "No category"}</p></div><label className="flex items-center gap-2 text-xs text-[color:var(--tm-muted)]"><input type="checkbox" checked={task.isPriority} onChange={(event) => updateOverride(task.id, { isPriority: event.target.checked })} /> Priority</label></div>
               <div className="mt-4 grid gap-3 md:grid-cols-3"><label className="text-xs text-[color:var(--tm-muted)]">Start date<input className="tm-input mt-1 w-full rounded-[10px] border px-3 py-2" type="date" value={task.startDate} onChange={(event) => updateOverride(task.id, { startDate: event.target.value })} /></label><label className="text-xs text-[color:var(--tm-muted)]">Due date<input className="tm-input mt-1 w-full rounded-[10px] border px-3 py-2" type="date" value={task.dueDate} onChange={(event) => updateOverride(task.id, { dueDate: event.target.value })} /></label><label className="text-xs text-[color:var(--tm-muted)]">Task note/instruction<textarea className="tm-input mt-1 min-h-10 w-full rounded-[10px] border px-3 py-2" value={task.notes} onChange={(event) => updateOverride(task.id, { notes: event.target.value })} /></label></div>
             </article>
           ))}
