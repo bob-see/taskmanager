@@ -184,6 +184,11 @@ type CalendarDay = {
   openDueCount: number;
 };
 
+type CalendarTask = {
+  task: Task;
+  isDueOnDay: boolean;
+};
+
 type SearchSection = {
   key: string;
   label: string;
@@ -255,6 +260,7 @@ const PREFERENCE_SAVE_DEBOUNCE_MS = 400;
 const DATE_ONLY_INPUT_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DEFAULT_VISIBLE_CALENDAR_WEEKDAYS = [true, true, true, true, true, true, true];
 const ALL_REPEAT_DAYS_MASK = 0b1111111;
 const SNOOZE_PRESET_OPTIONS: Array<{ value: SnoozePreset; label: string }> = [
   { value: "tomorrow", label: "Tomorrow" },
@@ -331,6 +337,12 @@ type TaskActionMenuConfig = {
   completedActionLabel?: string;
   toggleCompletedTo?: boolean;
   pauseReferenceDate: string;
+};
+
+type CalendarDayContextMenuConfig = {
+  dateValue: string;
+  x: number;
+  y: number;
 };
 
 function taskViewToOpenFilter(taskView: TaskView): OpenFilter {
@@ -1114,6 +1126,37 @@ function buildCalendarDays(tasks: Task[], start: Date, end: Date, month: number)
   }
 
   return days;
+}
+
+function getCalendarTasksForDate(
+  tasks: Task[],
+  dateValue: string,
+  includeRecurring: boolean
+): CalendarTask[] {
+  return tasks
+    .filter((task) => {
+      if (isTaskCompleted(task)) return false;
+
+      if (!isRecurringTask(task)) {
+        return toDateOnly(task.startDate) === dateValue || toDateOnly(task.dueAt) === dateValue;
+      }
+
+      if (!includeRecurring) return false;
+
+      // A task with an explicit repeat rule is displayed on its scheduled occurrence.
+      // Older series instances retain their own start date and should not appear every day.
+      return task.repeatEnabled || task.repeatPattern
+        ? isRecurringTaskDueOnDate(task, dateValue)
+        : toDateOnly(task.startDate) === dateValue;
+    })
+    .map((task) => ({
+      task,
+      isDueOnDay: toDateOnly(task.dueAt) === dateValue,
+    }))
+    .sort((left, right) => {
+      if (left.isDueOnDay !== right.isDueOnDay) return left.isDueOnDay ? -1 : 1;
+      return left.task.title.localeCompare(right.task.title);
+    });
 }
 
 function matchesTaskSearch(
@@ -3104,6 +3147,37 @@ function BreakdownList({
   );
 }
 
+function CalendarTaskSnippet({
+  entry,
+  onOpen,
+}: {
+  entry: CalendarTask;
+  onOpen: () => void;
+}) {
+  const { task, isDueOnDay } = entry;
+
+  return (
+    <button
+      className={`block w-full truncate rounded px-1.5 py-1 text-left text-xs font-medium transition hover:brightness-95 ${
+        isDueOnDay
+          ? "border-l-2 border-amber-500 bg-amber-100/75 text-amber-950"
+          : isRecurringTask(task)
+            ? "border-l-2 border-sky-500 bg-sky-100/75 text-sky-950"
+            : "border-l-2 border-[color:var(--tm-accent)] bg-white/75 text-[color:var(--tm-text)]"
+      }`}
+      title={`${task.title}${isDueOnDay ? " — due today" : ""}`}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+    >
+      {isDueOnDay && <span className="mr-1 text-[10px] font-semibold uppercase">Due</span>}
+      {task.title}
+    </button>
+  );
+}
+
 export function TrackerClient({
   pageMode,
   profileId,
@@ -3153,6 +3227,10 @@ export function TrackerClient({
     }));
   const [searchQuery, setSearchQuery] = useState("");
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
+  const [calendarShowRecurring, setCalendarShowRecurring] = useState(true);
+  const [calendarVisibleWeekdays, setCalendarVisibleWeekdays] = useState<boolean[]>(
+    DEFAULT_VISIBLE_CALENDAR_WEEKDAYS
+  );
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectSaving, setNewProjectSaving] = useState(false);
@@ -3201,6 +3279,8 @@ export function TrackerClient({
   const [repeatPauseNoteValue, setRepeatPauseNoteValue] = useState("");
   const [bulkSnoozeDateValue, setBulkSnoozeDateValue] = useState("");
   const [taskContextMenu, setTaskContextMenu] = useState<TaskActionMenuConfig | null>(null);
+  const [calendarDayContextMenu, setCalendarDayContextMenu] =
+    useState<CalendarDayContextMenuConfig | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<DragPosition | null>(null);
@@ -3986,6 +4066,30 @@ export function TrackerClient({
     };
   }, [taskContextMenu]);
 
+  useEffect(() => {
+    if (!calendarDayContextMenu) return;
+
+    function closeContextMenu() {
+      setCalendarDayContextMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeContextMenu();
+    }
+
+    document.addEventListener("pointerdown", closeContextMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("resize", closeContextMenu);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeContextMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", closeContextMenu, true);
+      window.removeEventListener("resize", closeContextMenu);
+    };
+  }, [calendarDayContextMenu]);
+
   function toggleColumnSort(column: TaskSortColumn) {
     if (sortColumn !== column) {
       setSortColumn(column);
@@ -4053,6 +4157,12 @@ export function TrackerClient({
   function jumpToDay(dateValue: string) {
     setSelectedDay(dateValue);
     setViewMode("day");
+  }
+
+  function openNewTaskDialogForDate(dateValue: string) {
+    setSelectedDay(dateValue);
+    setForm(createEmptyTaskForm(dateValue));
+    setNewTaskOpen(true);
   }
 
   async function createTask(e: React.FormEvent<HTMLFormElement>) {
@@ -4135,8 +4245,7 @@ export function TrackerClient({
       currentDateValueRef.current,
       actionDate
     );
-    setForm(createEmptyTaskForm(defaultDate));
-    setNewTaskOpen(true);
+    openNewTaskDialogForDate(defaultDate);
   }
 
   function openNewProjectDialog() {
@@ -6242,8 +6351,218 @@ export function TrackerClient({
         </section>
       ) : (
         <div className="space-y-4">
+          <section className={sectionCardClass}>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--tm-border)] pb-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  {viewMode === "week" ? "Week" : "Month"}
+                </h2>
+                <div className="tm-muted text-sm">
+                  {viewMode === "week"
+                    ? `${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`
+                    : formatMonthTitle(selectedDate)}
+                </div>
+              </div>
+              <label className="tm-choice flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <input
+                  checked={calendarShowRecurring}
+                  type="checkbox"
+                  onChange={(event) => setCalendarShowRecurring(event.target.checked)}
+                />
+                Include recurring
+              </label>
+            </div>
+
+            {viewMode === "week" && (
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="tm-muted mr-1 text-sm">Show days</span>
+                {WEEKDAY_LABELS.map((label, index) => (
+                  <label key={label} className="tm-choice flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs">
+                    <input
+                      checked={calendarVisibleWeekdays[index]}
+                      type="checkbox"
+                      onChange={() =>
+                        setCalendarVisibleWeekdays((current) =>
+                          current.map((visible, dayIndex) =>
+                            dayIndex === index ? !visible : visible
+                          )
+                        )
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div className="max-w-full overflow-x-auto">
+              {viewMode === "week" ? (
+                <div
+                  className="grid min-w-[56rem] gap-3"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(1, calendarVisibleWeekdays.filter(Boolean).length)}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {weekDays.map((day, index) => {
+                    if (!calendarVisibleWeekdays[index]) return null;
+                    const dayTasks = getCalendarTasksForDate(
+                      visibleTasks,
+                      day.dateValue,
+                      calendarShowRecurring
+                    );
+                    return (
+                      <div
+                        key={day.key}
+                        aria-label={`Create task on ${formatLongDate(day.dateValue)}`}
+                        className={`tm-card min-h-[19rem] cursor-pointer p-3 transition hover:bg-white/80 ${
+                          day.dateValue === currentDateValue ? "ring-1 ring-[color:var(--tm-accent)]" : ""
+                        }`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openNewTaskDialogForDate(day.dateValue)}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          setCalendarDayContextMenu({
+                            dateValue: day.dateValue,
+                            x: event.clientX,
+                            y: event.clientY,
+                          });
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openNewTaskDialogForDate(day.dateValue);
+                          }
+                        }}
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-2 border-b border-[color:var(--tm-border)] pb-2">
+                          <div>
+                            <div className="tm-muted text-xs font-semibold uppercase tracking-wide">
+                              {WEEKDAY_LABELS[index]}
+                            </div>
+                            <div className="mt-1 text-lg font-semibold">{day.date.getDate()}</div>
+                          </div>
+                          <button
+                            aria-label={`Add task on ${formatLongDate(day.dateValue)}`}
+                            className="tm-button rounded-md px-2 py-1 text-sm"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openNewTaskDialogForDate(day.dateValue);
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {dayTasks.length === 0 ? (
+                            <div className="tm-muted pt-2 text-sm">Click to add a task</div>
+                          ) : (
+                            dayTasks.map((entry) => (
+                              <CalendarTaskSnippet
+                                key={entry.task.id}
+                                entry={entry}
+                                onOpen={() => openTaskEditor(entry.task)}
+                              />
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="min-w-[52rem]">
+                  <div className="mb-2 grid grid-cols-7 gap-2">
+                    {WEEKDAY_LABELS.map((label) => (
+                      <div key={label} className="tm-muted px-1 text-xs font-semibold uppercase tracking-wide">
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-2">
+                    {monthDays.map((day) => {
+                      const dayTasks = getCalendarTasksForDate(
+                        visibleTasks,
+                        day.dateValue,
+                        calendarShowRecurring
+                      );
+                      const visibleDayTasks = dayTasks.slice(0, 3);
+                      const moreCount = dayTasks.length - visibleDayTasks.length;
+                      return (
+                        <div
+                          key={day.key}
+                          aria-label={`Create task on ${formatLongDate(day.dateValue)}`}
+                          className={`min-h-36 cursor-pointer rounded-md border p-2 transition hover:bg-white/80 ${
+                            day.isCurrentMonth ? "tm-card" : "bg-white/40 opacity-60"
+                          } ${day.dateValue === currentDateValue ? "ring-1 ring-[color:var(--tm-accent)]" : ""}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openNewTaskDialogForDate(day.dateValue)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            setCalendarDayContextMenu({
+                              dateValue: day.dateValue,
+                              x: event.clientX,
+                              y: event.clientY,
+                            });
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openNewTaskDialogForDate(day.dateValue);
+                            }
+                          }}
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-1">
+                            <span className="text-sm font-semibold">{day.date.getDate()}</span>
+                            <button
+                              aria-label={`Add task on ${formatLongDate(day.dateValue)}`}
+                              className="tm-button rounded px-1.5 py-0.5 text-xs"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openNewTaskDialogForDate(day.dateValue);
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div className="space-y-1">
+                            {visibleDayTasks.map((entry) => (
+                              <CalendarTaskSnippet
+                                key={entry.task.id}
+                                entry={entry}
+                                onOpen={() => openTaskEditor(entry.task)}
+                              />
+                            ))}
+                            {moreCount > 0 && (
+                              <button
+                                className="tm-muted w-full truncate px-1 text-left text-xs hover:underline"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  jumpToDay(day.dateValue);
+                                }}
+                              >
+                                + {moreCount} more
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="tm-muted mt-3 text-xs">
+              Click empty space or use + to create a task. Right-click a day also creates one; click a task to edit it.
+            </div>
+          </section>
+
           <section
-            className={`${sectionCardClass} ${
+            className={`hidden ${sectionCardClass} ${
               visibleColumns.waitingOn ? "xl:-mx-3 2xl:-mx-6" : ""
             }`}
           >
@@ -6603,6 +6922,52 @@ export function TrackerClient({
 
         </div>
       )}
+
+      {calendarDayContextMenu &&
+        typeof document !== "undefined" &&
+        (() => {
+          const menuWidth = 164;
+          const gutter = 12;
+          const left = Math.min(
+            Math.max(gutter, calendarDayContextMenu.x),
+            Math.max(gutter, window.innerWidth - menuWidth - gutter)
+          );
+          const top = Math.min(
+            Math.max(gutter, calendarDayContextMenu.y),
+            Math.max(gutter, window.innerHeight - 112 - gutter)
+          );
+
+          return createPortal(
+            <div
+              className="tm-menu fixed z-[1000] min-w-40 overflow-hidden rounded-lg border py-1 text-left shadow-2xl"
+              role="menu"
+              style={{ left, top }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                className={taskActionMenuItemClass}
+                type="button"
+                onClick={() => {
+                  openNewTaskDialogForDate(calendarDayContextMenu.dateValue);
+                  setCalendarDayContextMenu(null);
+                }}
+              >
+                Create task
+              </button>
+              <button
+                className={taskActionMenuItemClass}
+                type="button"
+                onClick={() => {
+                  jumpToDay(calendarDayContextMenu.dateValue);
+                  setCalendarDayContextMenu(null);
+                }}
+              >
+                Open day
+              </button>
+            </div>,
+            document.body
+          );
+        })()}
 
       {taskContextMenu &&
         typeof document !== "undefined" &&

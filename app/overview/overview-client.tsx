@@ -181,6 +181,8 @@ type DeleteMode = "this" | "future" | "series";
 type OverviewTaskFilter = "all-open" | "today" | "overdue" | "upcoming";
 type OverviewGroupingMode = "project" | "category";
 type OverviewSortMode = "manual" | "start-date" | "due-date";
+type OverviewCalendarView = "day" | "week" | "month";
+type OverviewCalendarEntry = { task: OverviewTask; profile: OverviewProfileData; due: boolean };
 
 const cardClass = "tm-card min-w-0 rounded-[12px] border p-4 shadow-sm md:p-5";
 const inputClass =
@@ -356,6 +358,23 @@ function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
   return next;
+}
+
+function startOfWeekMon(date: Date) {
+  const next = new Date(date);
+  next.setDate(next.getDate() - ((next.getDay() + 6) % 7));
+  return next;
+}
+
+function getOverviewCalendarEntries(
+  profiles: OverviewProfileData[],
+  dateValue: string
+): OverviewCalendarEntry[] {
+  return profiles.flatMap((profile) =>
+    profile.openTasks
+      .filter((task) => task.startDate === dateValue || task.dueAt === dateValue)
+      .map((task) => ({ task, profile, due: task.dueAt === dateValue }))
+  );
 }
 
 function getNextBusinessDay(value: string) {
@@ -3372,6 +3391,14 @@ export function OverviewClient({
 }: OverviewClientProps) {
   const router = useRouter();
   const [currentDateValue, setCurrentDateValue] = useState(initialDate);
+  const [calendarView, setCalendarView] = useState<OverviewCalendarView>("day");
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState(initialDate);
+  const [calendarTaskOpen, setCalendarTaskOpen] = useState(false);
+  const [calendarTaskSaving, setCalendarTaskSaving] = useState(false);
+  const [calendarProfileId, setCalendarProfileId] = useState(profiles[0]?.id ?? "");
+  const [calendarTaskDraft, setCalendarTaskDraft] = useState<TaskDraftState>(() =>
+    createEmptyTaskDraftState(initialDate)
+  );
   const [orderedProfiles, setOrderedProfiles] = useState(profiles);
   const [profileQuery, setProfileQuery] = useState("");
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
@@ -3515,6 +3542,45 @@ export function OverviewClient({
       profile.name.toLocaleLowerCase().includes(trimmedQuery)
     );
   }, [orderedProfiles, profileQuery]);
+
+  const calendarProfile = orderedProfiles.find((profile) => profile.id === calendarProfileId);
+  const calendarProjectOptions = calendarProfile?.projects.map((project) => ({
+    id: project.id,
+    name: project.name,
+    archived: project.archived,
+  })) ?? [];
+  const calendarWaitingOnSuggestions = useMemo(
+    () => Array.from(new Set(calendarProfile?.openTasks.flatMap((task) =>
+      task.noteHistory.map((note) => note.waitingOn?.trim() ?? "").filter(Boolean)
+    ) ?? [])),
+    [calendarProfile]
+  );
+
+  function openCalendarTaskDialog(dateValue: string) {
+    setCalendarSelectedDay(dateValue);
+    setCalendarTaskDraft(createEmptyTaskDraftState(dateValue));
+    setCalendarTaskOpen(true);
+  }
+
+  async function submitCalendarTask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!calendarProfileId || !calendarTaskDraft.title.trim() || calendarTaskSaving) return;
+    setCalendarTaskSaving(true);
+    try {
+      const response = await fetch(`/api/p/${calendarProfileId}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createTaskPayload({ ...calendarTaskDraft, title: calendarTaskDraft.title.trim() })),
+      });
+      if (!response.ok) throw new Error("Could not create task");
+      setCalendarTaskOpen(false);
+      router.refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not create task");
+    } finally {
+      setCalendarTaskSaving(false);
+    }
+  }
 
   const searchTaskProjectOptions = useMemo(() => {
     if (!searchTaskToEdit) return [];
@@ -3714,6 +3780,20 @@ export function OverviewClient({
     await persistOrder(nextProfiles, previousProfiles);
   }
 
+  const calendarAnchor = parseDateOnly(calendarSelectedDay);
+  const calendarStart =
+    calendarView === "month"
+      ? startOfWeekMon(new Date(calendarAnchor.getFullYear(), calendarAnchor.getMonth(), 1))
+      : startOfWeekMon(calendarAnchor);
+  const calendarDayCount =
+    calendarView === "month"
+      ? Math.ceil((new Date(calendarAnchor.getFullYear(), calendarAnchor.getMonth() + 1, 0).getDate() +
+          ((new Date(calendarAnchor.getFullYear(), calendarAnchor.getMonth(), 1).getDay() + 6) % 7)) / 7) * 7
+      : 7;
+  const calendarDays = Array.from({ length: calendarDayCount }, (_, index) =>
+    dateInputValue(addDays(calendarStart, index))
+  );
+
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
       <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 md:py-10 xl:px-8 2xl:px-10">
@@ -3878,7 +3958,42 @@ export function OverviewClient({
           </section>
         )}
 
-        <section className="mt-6 grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="tm-card mt-6 rounded-[12px] border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className={segmentedTabSetClass}>
+              {(["day", "week", "month"] as OverviewCalendarView[]).map((view) => (
+                <button key={view} type="button" className={calendarView === view ? segmentedActiveTabClass : segmentedTabClass} onClick={() => setCalendarView(view)}>
+                  {view[0].toUpperCase() + view.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" className="tm-button rounded px-2 py-1 text-sm" onClick={() => setCalendarSelectedDay(dateInputValue(addDays(calendarAnchor, calendarView === "month" ? -31 : -7)))}>Prev</button>
+              <input className={`${inputClass} w-36`} type="date" value={calendarSelectedDay} onChange={(event) => setCalendarSelectedDay(event.target.value)} />
+              <button type="button" className="tm-button rounded px-2 py-1 text-sm" onClick={() => setCalendarSelectedDay(dateInputValue(addDays(calendarAnchor, calendarView === "month" ? 31 : 7)))}>Next</button>
+            </div>
+          </div>
+          {calendarView !== "day" && (
+            <div className="mt-4 max-w-full overflow-x-auto">
+              <div className={calendarView === "month" ? "min-w-[48rem]" : "min-w-[56rem]"}>
+                {calendarView === "month" && <div className="mb-2 grid grid-cols-7 gap-2 text-xs font-semibold uppercase text-[color:var(--tm-muted)]">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day}>{day}</div>)}</div>}
+                <div className={calendarView === "month" ? "grid grid-cols-7 gap-2" : "grid grid-cols-7 gap-3"}>
+                  {calendarDays.map((dateValue) => {
+                    const entries = getOverviewCalendarEntries(orderedProfiles, dateValue);
+                    const visibleEntries = calendarView === "month" ? entries.slice(0, 3) : entries;
+                    return <div key={dateValue} role="button" tabIndex={0} onClick={() => openCalendarTaskDialog(dateValue)} className={`cursor-pointer rounded-md border p-2 hover:bg-white/70 ${calendarView === "month" ? "min-h-32" : "min-h-64"} ${dateValue === currentDateValue ? "ring-1 ring-[color:var(--tm-accent)]" : ""}`}>
+                      <div className="mb-2 flex items-center justify-between"><span className="font-semibold">{parseDateOnly(dateValue).getDate()}</span><button type="button" className="tm-button rounded px-1.5 py-0.5 text-xs" onClick={(event) => { event.stopPropagation(); openCalendarTaskDialog(dateValue); }}>+</button></div>
+                      <div className="space-y-1">{visibleEntries.map(({ task, profile, due }) => <button key={`${profile.id}:${task.id}`} type="button" title={`${profile.name}: ${task.title}`} onClick={(event) => { event.stopPropagation(); router.push(`/p/${profile.id}`); }} className={`block w-full truncate rounded px-1.5 py-1 text-left text-xs ${due ? "border-l-2 border-amber-500 bg-amber-100/75" : "border-l-2 border-[color:var(--tm-accent)] bg-white/75"}`}>{due && <span className="mr-1 font-semibold">Due</span>}{task.title}</button>)}</div>
+                      {entries.length > visibleEntries.length && <button type="button" onClick={(event) => { event.stopPropagation(); openCalendarTaskDialog(dateValue); }} className="mt-1 text-xs text-[color:var(--tm-muted)] hover:underline">+ {entries.length - visibleEntries.length} more</button>}
+                    </div>;
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {calendarView === "day" && <section className="mt-6 grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProfiles.length === 0 ? (
             <div className="tm-card rounded-[12px] border p-4 text-sm text-[color:var(--tm-muted)] md:col-span-2 xl:col-span-3">
               No profiles match this filter.
@@ -3908,7 +4023,23 @@ export function OverviewClient({
               />
             ))
           )}
-        </section>
+        </section>}
+
+        <AddTaskModal
+          open={calendarTaskOpen}
+          form={calendarTaskDraft}
+          saving={calendarTaskSaving}
+          categorySuggestions={calendarProfile?.categorySuggestions ?? []}
+          waitingOnSuggestions={calendarWaitingOnSuggestions}
+          projectOptions={calendarProjectOptions}
+          profileOptions={orderedProfiles.map((profile) => ({ id: profile.id, name: profile.name }))}
+          profileId={calendarProfileId}
+          onProfileChange={(profileId) => { setCalendarProfileId(profileId); setCalendarTaskDraft((draft) => ({ ...draft, projectId: "" })); }}
+          submitDisabled={!calendarTaskDraft.title.trim() || !calendarProfileId}
+          onClose={() => setCalendarTaskOpen(false)}
+          onSubmit={submitCalendarTask}
+          onFormChange={(updater) => setCalendarTaskDraft((draft) => updater(draft))}
+        />
 
         <TaskEditorModal
           open={Boolean(searchTaskToEdit && searchTaskEditForm)}

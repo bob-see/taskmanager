@@ -127,6 +127,9 @@ type TaskCreatorModalProps<T extends TaskCreateFormState> = {
   onTopAction?: () => void;
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
+  profileOptions?: Array<{ id: string; name: string }>;
+  profileId?: string;
+  onProfileChange?: (profileId: string) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (updater: (prev: T) => T) => void;
@@ -1007,6 +1010,9 @@ export function AddTaskModal<T extends TaskCreateFormState>({
   onTopAction,
   secondaryActionLabel,
   onSecondaryAction,
+  profileOptions,
+  profileId,
+  onProfileChange,
   onClose,
   onSubmit,
   onFormChange,
@@ -1030,6 +1036,22 @@ export function AddTaskModal<T extends TaskCreateFormState>({
               </button>
             ) : null}
           </div>
+        ) : null}
+        {profileOptions && profileId !== undefined && onProfileChange ? (
+          <label className="mb-3 block shrink-0 text-sm">
+            <span className="tm-muted mb-1 block">Profile</span>
+            <select
+              className={`w-full ${inputClass}`}
+              value={profileId}
+              onChange={(event) => onProfileChange(event.target.value)}
+            >
+              {profileOptions.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : null}
         <TaskFormFields
           form={form}
