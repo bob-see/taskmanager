@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import {
   DelegatedSenderBadge,
   DelegatedTaskStatusPill,
@@ -183,6 +183,7 @@ type OverviewGroupingMode = "project" | "category";
 type OverviewSortMode = "manual" | "start-date" | "due-date";
 type OverviewCalendarView = "day" | "week" | "month";
 type OverviewCalendarEntry = { task: OverviewTask; profile: OverviewProfileData; due: boolean };
+type OverviewCalendarOverflow = { dateValue: string; x: number; y: number };
 
 const cardClass = "tm-card min-w-0 rounded-[12px] border p-4 shadow-sm md:p-5";
 const inputClass =
@@ -375,6 +376,64 @@ function getOverviewCalendarEntries(
       .filter((task) => task.startDate === dateValue || task.dueAt === dateValue)
       .map((task) => ({ task, profile, due: task.dueAt === dateValue }))
   );
+}
+
+function overviewDayDifference(left: string, right: string) {
+  return Math.round((parseDateOnly(left).getTime() - parseDateOnly(right).getTime()) / 86_400_000);
+}
+
+function overviewMonthDifference(left: string, right: string) {
+  const leftDate = parseDateOnly(left);
+  const rightDate = parseDateOnly(right);
+  return (leftDate.getFullYear() - rightDate.getFullYear()) * 12 + leftDate.getMonth() - rightDate.getMonth();
+}
+
+function getOverviewRepeatDayBit(dateValue: string) {
+  const sundayFirstDay = parseDateOnly(dateValue).getDay();
+  const mondayFirstDay = sundayFirstDay === 0 ? 7 : sundayFirstDay;
+  return 1 << (mondayFirstDay - 1);
+}
+
+function isOverviewRepeatDueOnDate(task: OverviewTask, dateValue: string) {
+  if (!task.repeatEnabled && !task.repeatPattern) return false;
+  if (isOverviewRepeatPausedOnDate(task, dateValue) || task.startDate > dateValue) return false;
+  const interval = Math.max(1, task.repeatInterval ?? 1);
+  const repeatDays =
+    task.repeatDays ??
+    (task.repeatWeeklyDay === null ? null : 1 << (task.repeatWeeklyDay - 1));
+  const weekdayMatches = repeatDays === null || (repeatDays & getOverviewRepeatDayBit(dateValue)) !== 0;
+
+  if (task.repeatPattern === "daily") {
+    return overviewDayDifference(dateValue, task.startDate) % interval === 0 && weekdayMatches;
+  }
+  if (task.repeatPattern === "weekly") {
+    return Math.floor(overviewDayDifference(dateValue, task.startDate) / 7) % interval === 0 && weekdayMatches;
+  }
+  if (task.repeatPattern === "monthly") {
+    return overviewMonthDifference(dateValue, task.startDate) % interval === 0 &&
+      parseDateOnly(dateValue).getDate() === (task.repeatMonthlyDay ?? parseDateOnly(task.startDate).getDate());
+  }
+  return false;
+}
+
+function getOverviewRepeatEntries(
+  profiles: OverviewProfileData[],
+  dateValue: string
+): OverviewCalendarEntry[] {
+  return profiles.flatMap((profile) => {
+    const representativeBySeries = new Map<string, OverviewTask>();
+    for (const task of profile.openTasks) {
+      if (!task.repeatEnabled && !task.repeatPattern) continue;
+      const key = task.recurrenceSeriesId ?? task.id;
+      const current = representativeBySeries.get(key);
+      if (!current || (task.startDate <= dateValue && task.startDate > current.startDate)) {
+        representativeBySeries.set(key, task);
+      }
+    }
+    return [...representativeBySeries.values()]
+      .filter((task) => isOverviewRepeatDueOnDate(task, dateValue))
+      .map((task) => ({ task, profile, due: task.dueAt === dateValue }));
+  });
 }
 
 function getNextBusinessDay(value: string) {
@@ -3394,6 +3453,10 @@ export function OverviewClient({
   const [calendarView, setCalendarView] = useState<OverviewCalendarView>("day");
   const [calendarSelectedDay, setCalendarSelectedDay] = useState(initialDate);
   const [calendarTaskOpen, setCalendarTaskOpen] = useState(false);
+  const [calendarShowRepeats, setCalendarShowRepeats] = useState(true);
+  const [calendarRepeatDay, setCalendarRepeatDay] = useState<string | null>(null);
+  const [calendarOverflow, setCalendarOverflow] = useState<OverviewCalendarOverflow | null>(null);
+  const calendarOverflowRef = useRef<HTMLDivElement | null>(null);
   const [calendarTaskSaving, setCalendarTaskSaving] = useState(false);
   const [calendarProfileId, setCalendarProfileId] = useState(profiles[0]?.id ?? "");
   const [calendarTaskDraft, setCalendarTaskDraft] = useState<TaskDraftState>(() =>
@@ -3443,6 +3506,31 @@ export function OverviewClient({
   useEffect(() => {
     setOrderedProfiles(profiles);
   }, [profiles]);
+
+  useEffect(() => {
+    if (!calendarOverflow) return;
+
+    const close = (event?: Event) => {
+      if (
+        event?.target instanceof Node &&
+        calendarOverflowRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setCalendarOverflow(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [calendarOverflow]);
 
   useEffect(() => {
     const query = taskSearchQuery.trim();
@@ -3560,6 +3648,18 @@ export function OverviewClient({
     setCalendarSelectedDay(dateValue);
     setCalendarTaskDraft(createEmptyTaskDraftState(dateValue));
     setCalendarTaskOpen(true);
+  }
+
+  function selectCalendarMonth(monthValue: string) {
+    const [year, month] = monthValue.split("-").map(Number);
+    if (!year || !month) return;
+
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    setCalendarSelectedDay(
+      dateInputValue(
+        new Date(year, month - 1, Math.min(calendarAnchor.getDate(), lastDayOfMonth))
+      )
+    );
   }
 
   async function submitCalendarTask(event: React.FormEvent<HTMLFormElement>) {
@@ -3793,6 +3893,18 @@ export function OverviewClient({
   const calendarDays = Array.from({ length: calendarDayCount }, (_, index) =>
     dateInputValue(addDays(calendarStart, index))
   );
+  const calendarWeekEnd = addDays(calendarStart, 6);
+  const calendarWeekLabel = `${formatAustralianDate(calendarStart, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })} to ${formatAustralianDate(calendarWeekEnd, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
 
   return (
     <main className="min-h-screen bg-[color:var(--tm-bg)] text-[color:var(--tm-text)]">
@@ -3973,6 +4085,44 @@ export function OverviewClient({
               <button type="button" className="tm-button rounded px-2 py-1 text-sm" onClick={() => setCalendarSelectedDay(dateInputValue(addDays(calendarAnchor, calendarView === "month" ? 31 : 7)))}>Next</button>
             </div>
           </div>
+          {calendarView === "month" && (
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Month</h2>
+                <input
+                  aria-label="Choose month"
+                  className={`${inputClass} mt-1 h-9 w-44 text-sm`}
+                  type="month"
+                  value={calendarSelectedDay.slice(0, 7)}
+                  onChange={(event) => selectCalendarMonth(event.target.value)}
+                />
+              </div>
+              <label className="tm-choice flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <input
+                  checked={calendarShowRepeats}
+                  type="checkbox"
+                  onChange={(event) => setCalendarShowRepeats(event.target.checked)}
+                />
+                Repeat tasks
+              </label>
+            </div>
+          )}
+          {calendarView === "week" && (
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Week</h2>
+                <div className="tm-muted text-sm">{calendarWeekLabel}</div>
+              </div>
+              <label className="tm-choice flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <input
+                  checked={calendarShowRepeats}
+                  type="checkbox"
+                  onChange={(event) => setCalendarShowRepeats(event.target.checked)}
+                />
+                Repeat tasks
+              </label>
+            </div>
+          )}
           {calendarView !== "day" && (
             <div className="mt-4 max-w-full overflow-x-auto">
               <div className={calendarView === "month" ? "min-w-[48rem]" : "min-w-[56rem]"}>
@@ -3980,15 +4130,24 @@ export function OverviewClient({
                 <div className={calendarView === "month" ? "grid grid-cols-7 gap-2" : "grid grid-cols-7 gap-3"}>
                   {calendarDays.map((dateValue) => {
                     const entries = getOverviewCalendarEntries(orderedProfiles, dateValue);
+                    const repeatEntries = calendarShowRepeats
+                      ? getOverviewRepeatEntries(orderedProfiles, dateValue)
+                      : [];
                     const visibleEntries = calendarView === "month" ? entries.slice(0, 3) : entries;
-                    return <div key={dateValue} role="button" tabIndex={0} onClick={() => openCalendarTaskDialog(dateValue)} className={`cursor-pointer rounded-md border p-2 hover:bg-white/70 ${calendarView === "month" ? "min-h-32" : "min-h-64"} ${dateValue === currentDateValue ? "ring-1 ring-[color:var(--tm-accent)]" : ""}`}>
+                    return <div key={dateValue} role="button" tabIndex={0} onClick={() => openCalendarTaskDialog(dateValue)} className={`tm-card cursor-pointer rounded-md border p-2 transition hover:bg-white/80 ${calendarView === "month" ? "min-h-32" : "min-h-64"} ${dateValue === currentDateValue ? "ring-1 ring-[color:var(--tm-accent)]" : ""}`}>
                       <div className="mb-2 flex items-center justify-between"><span className="font-semibold">{parseDateOnly(dateValue).getDate()}</span><button type="button" className="tm-button rounded px-1.5 py-0.5 text-xs" onClick={(event) => { event.stopPropagation(); openCalendarTaskDialog(dateValue); }}>+</button></div>
                       <div className="space-y-1">{visibleEntries.map(({ task, profile, due }) => <button key={`${profile.id}:${task.id}`} type="button" title={`${profile.name}: ${task.title}`} onClick={(event) => { event.stopPropagation(); router.push(`/p/${profile.id}`); }} className={`block w-full truncate rounded px-1.5 py-1 text-left text-xs ${due ? "border-l-2 border-amber-500 bg-amber-100/75" : "border-l-2 border-[color:var(--tm-accent)] bg-white/75"}`}>{due && <span className="mr-1 font-semibold">Due</span>}{task.title}</button>)}</div>
-                      {entries.length > visibleEntries.length && <button type="button" onClick={(event) => { event.stopPropagation(); openCalendarTaskDialog(dateValue); }} className="mt-1 text-xs text-[color:var(--tm-muted)] hover:underline">+ {entries.length - visibleEntries.length} more</button>}
+                      {repeatEntries.length > 0 && <button type="button" onClick={(event) => { event.stopPropagation(); setCalendarRepeatDay(dateValue); }} className="mt-1 rounded border border-sky-200 bg-sky-50 px-1.5 py-1 text-left text-xs font-medium text-sky-900 hover:bg-sky-100">{repeatEntries.length} repeat task{repeatEntries.length === 1 ? "" : "s"}</button>}
+                      {entries.length > visibleEntries.length && <button type="button" onClick={(event) => { event.stopPropagation(); setCalendarOverflow({ dateValue, x: event.clientX, y: event.clientY }); }} className="mt-1 text-xs text-[color:var(--tm-muted)] hover:underline">+ {entries.length - visibleEntries.length} more</button>}
                     </div>;
                   })}
                 </div>
               </div>
+            </div>
+          )}
+          {calendarView === "week" && (
+            <div className="tm-muted mt-3 text-xs">
+              Click empty space or use + to create a task. Right-click a day also creates one; click a task to open its profile.
             </div>
           )}
         </section>
@@ -4025,6 +4184,51 @@ export function OverviewClient({
           )}
         </section>}
 
+        {calendarOverflow &&
+          typeof document !== "undefined" &&
+          (() => {
+            const menuWidth = 320;
+            const gutter = 12;
+            const left = Math.min(
+              Math.max(gutter, calendarOverflow.x),
+              Math.max(gutter, window.innerWidth - menuWidth - gutter)
+            );
+            const top = Math.min(
+              Math.max(gutter, calendarOverflow.y),
+              Math.max(gutter, window.innerHeight - 360 - gutter)
+            );
+            const entries = getOverviewCalendarEntries(orderedProfiles, calendarOverflow.dateValue);
+
+            return createPortal(
+              <div
+                ref={calendarOverflowRef}
+                className="tm-menu fixed z-[1000] max-h-[min(22rem,calc(100vh-24px))] w-80 overflow-y-auto rounded-lg border p-2 shadow-2xl"
+                role="dialog"
+                aria-label={`Tasks for ${formatAustralianDate(calendarOverflow.dateValue, { weekday: "long", day: "numeric", month: "long" })}`}
+                style={{ left, top }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--tm-muted)]">
+                  {formatAustralianDate(calendarOverflow.dateValue, { weekday: "long", day: "numeric", month: "long" })}
+                </div>
+                {entries.map(({ task, profile, due }) => (
+                  <button
+                    key={`${profile.id}:${task.id}`}
+                    className="tm-choice mt-1 block w-full rounded-md border p-2 text-left hover:bg-white/70"
+                    type="button"
+                    onClick={() => router.push(`/p/${profile.id}`)}
+                  >
+                    <div className="truncate text-sm font-medium">{task.title}</div>
+                    <div className="mt-0.5 text-xs text-[color:var(--tm-muted)]">
+                      {profile.name}{due ? " · Due today" : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>,
+              document.body
+            );
+          })()}
+
         <AddTaskModal
           open={calendarTaskOpen}
           form={calendarTaskDraft}
@@ -4040,6 +4244,26 @@ export function OverviewClient({
           onSubmit={submitCalendarTask}
           onFormChange={(updater) => setCalendarTaskDraft((draft) => updater(draft))}
         />
+
+        <OverviewUtilityModal
+          open={Boolean(calendarRepeatDay)}
+          title={calendarRepeatDay ? `Repeat tasks · ${formatAustralianDate(calendarRepeatDay, { weekday: "long", day: "numeric", month: "long" })}` : "Repeat tasks"}
+          onClose={() => setCalendarRepeatDay(null)}
+        >
+          <div className="space-y-2">
+            {calendarRepeatDay && getOverviewRepeatEntries(orderedProfiles, calendarRepeatDay).map(({ task, profile }) => (
+              <button
+                key={`${profile.id}:${task.id}`}
+                className="tm-choice block w-full rounded-md border p-3 text-left hover:bg-white/70"
+                type="button"
+                onClick={() => router.push(`/p/${profile.id}`)}
+              >
+                <div className="font-medium">{task.title}</div>
+                <div className="mt-1 text-xs text-[color:var(--tm-muted)]">{profile.name}</div>
+              </button>
+            ))}
+          </div>
+        </OverviewUtilityModal>
 
         <TaskEditorModal
           open={Boolean(searchTaskToEdit && searchTaskEditForm)}

@@ -301,7 +301,7 @@ const progressTrackClass = "tm-progress-track overflow-hidden rounded-full";
 const progressFillClass = "tm-progress-fill rounded-full transition-[width]";
 const modalChoiceClass = "tm-choice flex cursor-pointer items-start gap-3 rounded-lg border p-3";
 const commandBarClass =
-  "sticky top-[57px] z-30 -mx-4 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-bg)]/95 px-4 py-2 backdrop-blur md:top-0 md:z-40 md:-mx-6 md:px-6";
+  "tm-card rounded-[12px] border p-3";
 const matrixHeaderCellClass =
   "sticky top-0 z-10 border-b border-[color:var(--tm-border)] bg-[color:var(--tm-card)] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]";
 const matrixCellClass = "px-3 py-2.5 align-top";
@@ -1130,24 +1130,13 @@ function buildCalendarDays(tasks: Task[], start: Date, end: Date, month: number)
 
 function getCalendarTasksForDate(
   tasks: Task[],
-  dateValue: string,
-  includeRecurring: boolean
+  dateValue: string
 ): CalendarTask[] {
   return tasks
     .filter((task) => {
       if (isTaskCompleted(task)) return false;
-
-      if (!isRecurringTask(task)) {
-        return toDateOnly(task.startDate) === dateValue || toDateOnly(task.dueAt) === dateValue;
-      }
-
-      if (!includeRecurring) return false;
-
-      // A task with an explicit repeat rule is displayed on its scheduled occurrence.
-      // Older series instances retain their own start date and should not appear every day.
-      return task.repeatEnabled || task.repeatPattern
-        ? isRecurringTaskDueOnDate(task, dateValue)
-        : toDateOnly(task.startDate) === dateValue;
+      return !isRecurringTask(task) &&
+        (toDateOnly(task.startDate) === dateValue || toDateOnly(task.dueAt) === dateValue);
     })
     .map((task) => ({
       task,
@@ -1157,6 +1146,20 @@ function getCalendarTasksForDate(
       if (left.isDueOnDay !== right.isDueOnDay) return left.isDueOnDay ? -1 : 1;
       return left.task.title.localeCompare(right.task.title);
     });
+}
+
+function getCalendarRepeatTasksForDate(tasks: Task[], dateValue: string): CalendarTask[] {
+  return tasks
+    .filter(
+      (task) =>
+        !isTaskCompleted(task) &&
+        isRecurringTask(task) &&
+        (task.repeatEnabled || task.repeatPattern
+          ? isRecurringTaskDueOnDate(task, dateValue)
+          : toDateOnly(task.startDate) === dateValue)
+    )
+    .map((task) => ({ task, isDueOnDay: toDateOnly(task.dueAt) === dateValue }))
+    .sort((left, right) => left.task.title.localeCompare(right.task.title));
 }
 
 function matchesTaskSearch(
@@ -3228,6 +3231,7 @@ export function TrackerClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [averageBasis, setAverageBasis] = useState<AverageBasis>("calendar-days");
   const [calendarShowRecurring, setCalendarShowRecurring] = useState(true);
+  const [calendarRepeatTasks, setCalendarRepeatTasks] = useState<CalendarTask[] | null>(null);
   const [calendarVisibleWeekdays, setCalendarVisibleWeekdays] = useState<boolean[]>(
     DEFAULT_VISIBLE_CALENDAR_WEEKDAYS
   );
@@ -4152,6 +4156,18 @@ export function TrackerClient({
           ? addDays(selectedDate, direction * 7)
           : addMonthsKeepingDay(selectedDate, direction);
     setSelectedDay(dateInputValue(nextDate));
+  }
+
+  function selectCalendarMonth(monthValue: string) {
+    const [year, month] = monthValue.split("-").map(Number);
+    if (!year || !month) return;
+
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    setSelectedDay(
+      dateInputValue(
+        new Date(year, month - 1, Math.min(selectedDate.getDate(), lastDayOfMonth))
+      )
+    );
   }
 
   function jumpToDay(dateValue: string) {
@@ -5307,51 +5323,51 @@ export function TrackerClient({
 
   return (
     <section className="space-y-4 text-[color:var(--tm-text)]">
-      <div className={commandBarClass}>
-        <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className={`${smallChipClass} px-3 py-1.5 uppercase tracking-[0.14em]`}>
-              {currentProfileName}
-            </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <h1 className="text-xl font-semibold tracking-tight">{currentProfileName}</h1>
+        <button
+          className={primaryButtonClass}
+          type="button"
+          onClick={openNewTaskDialog}
+        >
+          + Task
+        </button>
+      </div>
+      <div
+        className={
+          viewMode === "day"
+            ? commandBarClass
+            : `${commandBarClass} rounded-b-none border-b-0`
+        }
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
+            {VIEW_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                className={
+                  viewMode === option.value
+                    ? segmentedActiveTabClass
+                    : segmentedTabClass
+                }
+                type="button"
+                onClick={() => setViewMode(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className={`${segmentedTabSetClass} max-w-full overflow-x-auto`}>
-              {VIEW_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  className={
-                    viewMode === option.value
-                      ? segmentedActiveTabClass
-                      : segmentedTabClass
-                  }
-                  type="button"
-                  onClick={() => setViewMode(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(-1)}>
+              Prev
+            </button>
             <DateInput
               className={`${inputClass} min-w-0 flex-1 sm:flex-none sm:min-w-[11rem]`}
               value={selectedDay}
               onChange={(e) => setSelectedDay(e.target.value)}
             />
-            <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(-1)}>
-              Prev
-            </button>
             <button className={buttonClass} type="button" onClick={() => shiftSelectedDay(1)}>
               Next
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 md:flex-1 md:justify-end">
-            <button
-              className={`${primaryButtonClass} w-full sm:w-auto`}
-              type="button"
-              onClick={openNewTaskDialog}
-            >
-              + Task
             </button>
           </div>
         </div>
@@ -6350,18 +6366,26 @@ export function TrackerClient({
           )}
         </section>
       ) : (
-        <div className="space-y-4">
-          <section className={sectionCardClass}>
+        <div className="-mt-4 space-y-4">
+          <section className="tm-card rounded-b-[12px] rounded-t-none border-x border-b border-t-0 p-4 shadow-none">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--tm-border)] pb-4">
               <div>
                 <h2 className="text-lg font-semibold">
                   {viewMode === "week" ? "Week" : "Month"}
                 </h2>
-                <div className="tm-muted text-sm">
-                  {viewMode === "week"
-                    ? `${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`
-                    : formatMonthTitle(selectedDate)}
-                </div>
+                {viewMode === "week" ? (
+                  <div className="tm-muted text-sm">
+                    {`${formatLongDate(weekStartValue)} to ${formatLongDate(weekEndValue)}`}
+                  </div>
+                ) : (
+                  <input
+                    aria-label="Choose month"
+                    className={`${inputClass} mt-1 h-9 w-44 text-sm`}
+                    type="month"
+                    value={selectedDay.slice(0, 7)}
+                    onChange={(event) => selectCalendarMonth(event.target.value)}
+                  />
+                )}
               </div>
               <label className="tm-choice flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <input
@@ -6369,7 +6393,7 @@ export function TrackerClient({
                   type="checkbox"
                   onChange={(event) => setCalendarShowRecurring(event.target.checked)}
                 />
-                Include recurring
+                Repeat tasks
               </label>
             </div>
 
@@ -6407,9 +6431,11 @@ export function TrackerClient({
                     if (!calendarVisibleWeekdays[index]) return null;
                     const dayTasks = getCalendarTasksForDate(
                       visibleTasks,
-                      day.dateValue,
-                      calendarShowRecurring
+                      day.dateValue
                     );
+                    const repeatTasks = calendarShowRecurring
+                      ? getCalendarRepeatTasksForDate(visibleTasks, day.dateValue)
+                      : [];
                     return (
                       <div
                         key={day.key}
@@ -6466,6 +6492,18 @@ export function TrackerClient({
                               />
                             ))
                           )}
+                          {repeatTasks.length > 0 && (
+                            <button
+                              className="w-full rounded border border-sky-200 bg-sky-50 px-1.5 py-1 text-left text-xs font-medium text-sky-900 hover:bg-sky-100"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setCalendarRepeatTasks(repeatTasks);
+                              }}
+                            >
+                              {repeatTasks.length} repeat task{repeatTasks.length === 1 ? "" : "s"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -6484,9 +6522,11 @@ export function TrackerClient({
                     {monthDays.map((day) => {
                       const dayTasks = getCalendarTasksForDate(
                         visibleTasks,
-                        day.dateValue,
-                        calendarShowRecurring
+                        day.dateValue
                       );
+                      const repeatTasks = calendarShowRecurring
+                        ? getCalendarRepeatTasksForDate(visibleTasks, day.dateValue)
+                        : [];
                       const visibleDayTasks = dayTasks.slice(0, 3);
                       const moreCount = dayTasks.length - visibleDayTasks.length;
                       return (
@@ -6536,6 +6576,18 @@ export function TrackerClient({
                                 onOpen={() => openTaskEditor(entry.task)}
                               />
                             ))}
+                            {repeatTasks.length > 0 && (
+                              <button
+                                className="w-full rounded border border-sky-200 bg-sky-50 px-1 py-1 text-left text-xs font-medium text-sky-900 hover:bg-sky-100"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setCalendarRepeatTasks(repeatTasks);
+                                }}
+                              >
+                                {repeatTasks.length} repeat
+                              </button>
+                            )}
                             {moreCount > 0 && (
                               <button
                                 className="tm-muted w-full truncate px-1 text-left text-xs hover:underline"
@@ -7036,6 +7088,29 @@ export function TrackerClient({
             document.body
           );
         })()}
+
+      <Modal
+        open={Boolean(calendarRepeatTasks)}
+        title="Repeat tasks"
+        onClose={() => setCalendarRepeatTasks(null)}
+      >
+        <div className="space-y-2">
+          {calendarRepeatTasks?.map((entry) => (
+            <button
+              key={entry.task.id}
+              className="tm-choice block w-full rounded-md border p-3 text-left hover:bg-white/70"
+              type="button"
+              onClick={() => {
+                setCalendarRepeatTasks(null);
+                openTaskEditor(entry.task);
+              }}
+            >
+              <div className="font-medium">{entry.task.title}</div>
+              {entry.isDueOnDay && <div className="mt-1 text-xs text-amber-800">Due today</div>}
+            </button>
+          ))}
+        </div>
+      </Modal>
 
       <AddTaskModal
         open={newTaskOpen}
