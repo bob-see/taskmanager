@@ -111,6 +111,8 @@ Lost/Hatch is a separate owner-restricted feature. Its server page checks the au
 
 ## Data Access and Isolation
 
+The home weekly-summary API resolves the session email to a current user and loads only profiles owned by that user, including for administrators. Settings writes target that resolved user ID; client-supplied identity fields are rejected. Summary responses contain task titles/dates and profile context needed for drill-downs, omit notes and other-user identity data, and are private/no-store. Disabling the summary skips task reads. This endpoint does not alter tasks or grant profile access.
+
 TaskManager uses distinct concepts that must not be conflated:
 
 - **Ownership:** A user owns profiles; profiles own normal tasks, projects, time entries, and Sunday Check-ins. Queries must traverse that ownership relationship.

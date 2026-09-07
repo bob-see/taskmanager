@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { prisma } from "@/app/lib/prisma";
 import { AppShell } from "@/app/components/app-shell";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { canAccessLost } from "@/app/lost/access";
 import "./globals.css";
 

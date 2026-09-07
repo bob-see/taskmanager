@@ -29,6 +29,7 @@ model User {
   actedNotifications      Notification[]           @relation("NotificationActor")
   notificationPreferences NotificationPreference[]
   notificationPushEnabled Boolean                  @default(false)
+  weeklySummarySettings   Json?
   pushSubscriptions       PushSubscription[]
   workflows               Workflow[]
   workflowRuns            WorkflowRun[]

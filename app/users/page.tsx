@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { prisma } from "@/app/lib/prisma";
 import { getAdminGroupScope } from "@/app/api/users/visibility";
 

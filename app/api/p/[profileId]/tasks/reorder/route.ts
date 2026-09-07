@@ -1,6 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { TASK_ORDER_GAP } from "@/app/api/p/tasks-shared";
 import { Prisma } from "@prisma/client";
 

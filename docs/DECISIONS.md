@@ -31,6 +31,7 @@ Each ADR uses:
 | ADR-007 | Treat Browser Push as a Notification Delivery Channel | Accepted | 2026-07-11 |
 | ADR-008 | Use Migration-First Database Evolution | Accepted | 2026-07-11 |
 | ADR-009 | Use Repository-First Documentation | Accepted | 2026-07-11 |
+| ADR-010 | Weekly Summaries Recognise Progress and Explain Workload | Accepted | 2026-09-06 |
 
 ---
 
@@ -346,3 +347,38 @@ Repository-first documentation keeps guidance close to the implementation, makes
 ### Review Trigger
 
 Review when adding a new major document, generating a Playbook snapshot, or making a significant feature or architecture change.
+
+---
+
+## ADR-010: Weekly Summaries Recognise Progress and Explain Workload
+
+**Status:** Accepted
+**Date:** 2026-09-06
+
+### Context
+
+A home-page weekly summary should help users plan and reflect without making an expanding task list feel like failure. Completing four of five tasks and completing four while ten new tasks arrive represent different workloads.
+
+### Decision
+
+Lead with completed work, separate incoming work and future planning, and keep repeating occurrences in their own counters. Use quiet styling and optional detail rather than scores, streaks or headline percentages. Default to Monday/Friday briefings with account-level day, visibility and dismissal settings. Keep calendar weeks Monday–Sunday in Brisbane time.
+
+### Rationale
+
+Recognising progress while explaining incoming volume is more useful than treating remaining task count as performance. The home card offers a brief reflection; Overview remains the primary operational workspace. A single nullable settings field avoids browser-only preferences or a new scheduling service.
+
+### Consequences
+
+- Task drill-downs and profile breakdowns make counts inspectable.
+- Historical workload is reconstructed from current records and disclosed as changeable; it is not an audit ledger.
+- Repeat schedule estimates remain separate from actual outstanding occurrences.
+- Shared-database deployment requires the settings migration and normal verification.
+
+### Related Documents
+
+- [Architecture](./ARCHITECTURE.md#home-weekly-summary)
+- [Testing](./TESTING.md#weekly-summary-verification)
+
+### Review Trigger
+
+Review before adding historical snapshots, effort estimates, notifications or comparative performance scoring.

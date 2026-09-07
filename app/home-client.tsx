@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SundayCheckIn } from "@/app/components/sunday-check-in";
+import { WeeklySummaryPanel } from "@/app/components/weekly-summary";
 import {
   addDateOnlyDays,
   getBrisbaneSnapshot,
@@ -427,6 +428,8 @@ export function HomeClient({
             </div>
           </div>
         </section>
+
+        {!loading && <WeeklySummaryPanel key={profiles.map((profile) => `${profile.id}:${profile.name}`).join("|")} />}
 
         {routineProfile && (
           <div className="mt-4 w-full max-w-4xl sm:mt-5">

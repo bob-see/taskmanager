@@ -18,6 +18,7 @@ The project currently requires Node.js 22.13.0 or later. Its framework and datab
 - Recurring task occurrences that carry forward while outstanding and retain their future schedule.
 - Cross-profile Overview for filtering, grouping, sorting, and acting on current work.
 - Cross-profile task search across active and done work, with profile and project context.
+- Optional home-page weekly summaries that recognise progress, explain workload changes, and separate repeating work.
 - Delegated Tasks with participant-specific lifecycle actions, shared notes, and notifications.
 - Collaborative Spaces for member-managed matrix-style workflows.
 - In-app notifications plus Browser Push, including multiple device subscriptions.

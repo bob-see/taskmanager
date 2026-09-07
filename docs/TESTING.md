@@ -74,6 +74,16 @@ and can drift independently from it. The ownership tests exercise the production
 service/authentication seams but use in-memory adapters; none of the current files
 is a real Prisma database-integration, browser/UI, or end-to-end test.
 
+## Weekly Summary Verification
+
+`tests/weekly-summary.test.mjs` imports the production calculation and service modules. It covers the five-started/four-completed example, ten incoming tasks, starting-cohort attribution, future planning, archived-project handling, active/due/overdue overlap, Brisbane midnight, custom display days and dismissal identity, repeat occurrence projections/deduplication/pauses/intervals/month ends, profile totals, settings validation, unauthenticated access, account-scoped persistence through an in-memory adapter, disabled read suppression and failure propagation. A source guard verifies the Prisma adapter's ownership predicates. It does not establish real MariaDB or NextAuth integration.
+
+For browser checks, use fictional tasks with the home component and intercepted summary/profile endpoints, isolated from the configured database. Verify desktop and narrow mobile layouts; progress copy; expandable profile detail; counter dialogs and Escape/focus behaviour; custom days; dismissal and off/on persistence across reload; failed reads/saves and retries. No live database migration is implied by these checks.
+
+Verification on 6 September 2026: all 100 automated tests passed; changed-file ESLint and Prisma validation passed. Fictional-data browser checks passed at 1280 px and 390 px, including dialog dismissal, settings persistence across reload, request failures and overflow checks. `authOptions` now lives in `app/lib/auth-options.ts`, leaving the NextAuth route handler with only its supported `GET` and `POST` exports. The webpack production build passed its full compilation, generated-route type validation and static-page checks. The default Turbopack build still encounters a local worker-port restriction, so webpack is the verified production-build path in this environment.
+
+Before release, back up and apply `20260906120000_weekly_summary_settings` through the approved migration workflow. Confirm account settings survive a second-device login, perform a two-account isolation check against the deployed route, and compare a few counts to the underlying tasks. The offline migration diff and mocked service/browser tests cannot prove those live checks.
+
 ## Current Coverage Boundaries
 
 The current automated suite does not prove:

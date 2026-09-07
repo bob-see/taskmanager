@@ -7,7 +7,8 @@ This runbook owns TaskManager database backup, encrypted backup-file verificatio
 ## Current Operational Record
 
 - The first encrypted scheduled backup completed successfully on 5 August 2026 during the Brisbane 8:00 pm backup window. Its encrypted dump and manifest are stored together in the approved Google Drive **My Drive/TaskManager Backups** location.
-- The daily scheduled backup runs from this Mac using the local Keychain item described below. It creates an encrypted dump and its checksum manifest; no plaintext SQL is retained by the backup process.
+- The daily scheduled backup runs from this Mac at 8:00 pm Brisbane time through the local LaunchAgent `/Users/bobsee/Library/LaunchAgents/com.taskmanager.encrypted-database-backup.plist`. It creates an encrypted dump and its checksum manifest; no plaintext SQL is retained by the backup process.
+- The 7 September 2026 pre-migration backup completed with an encrypted dump and matching manifest in the approved Google Drive location. It is recent backup evidence, not a restore proof.
 - The next required evidence is an independent `npm run db:backup:verify` check and a restore rehearsal to an approved disposable MariaDB target. Do not treat a successful file creation alone as proof that production recovery works.
 - **Next week:** configure a Backblaze B2 copy of the encrypted dump and manifest, including approved retention, access controls and an upload/restore verification procedure. Keep the Google Drive copy until the Backblaze process is verified.
 
@@ -90,7 +91,9 @@ Railway provider backups should be enabled if available on the active plan, but 
 
 Do not rely on this schedule as a proven recovery capability until the first independent backup-file verification and restoration rehearsal have succeeded.
 
-Once approved, the scheduled job should:
+The installed macOS LaunchAgent runs `npm run db:backup:scheduled` at 8:00 pm Brisbane time. Its job label is `com.taskmanager.encrypted-database-backup`; standard output and errors are written to `/Users/bobsee/Library/Logs/TaskManagerBackup.log` and `/Users/bobsee/Library/Logs/TaskManagerBackup-error.log`. It runs only while the user is logged in.
+
+The scheduled job must:
 
 1. Run during the agreed Brisbane low-activity window.
 2. Inject the database URL and encryption passphrase through the scheduler's secret store.
@@ -99,7 +102,7 @@ Once approved, the scheduled job should:
 5. Alert the operator if creation, verification, transfer or retention cleanup fails.
 6. Never log credentials, passphrases, SQL, task content or user data.
 
-The storage destination and scheduler are deliberately not hard-coded in this repository. Select and approve them before enabling automation.
+The storage destination is configured by the local LaunchAgent, rather than stored in the repository. Changes to its schedule or destination require system-owner approval.
 
 For the current Mac-based 8:00 pm schedule, store the encryption passphrase as the macOS Keychain generic-password item named `TaskManager Backup Encryption` with account `taskmanager-backup`. `npm run db:backup:scheduled` reads that item only in memory, then invokes the normal backup command. It does not print, store or transmit the passphrase.
 

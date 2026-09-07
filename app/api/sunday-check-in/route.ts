@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { prisma } from "@/app/lib/prisma";
 import { isMissingDatabaseObjectError } from "@/app/lib/prisma-errors";
 import { buildSundayCheckInSummary } from "@/app/lib/routine-support-summary";

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { TrackerClient } from "@/app/p/[profileId]/tracker-client";
 import { getTrackerPageData } from "@/app/p/[profileId]/tracker-data";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { getBrisbaneDate } from "@/app/lib/date-time";
 
 type Props = {

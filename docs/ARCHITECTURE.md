@@ -74,6 +74,20 @@ Database evolution is migration-first. Shared Railway databases must not be chan
 
 ## Core Modules
 
+### Home Weekly Summary
+
+The home page includes an optional, progress-first weekly card above the profiles. It defaults to Monday planning and Friday reflection; account settings can change either day, turn the card off, or dismiss the current briefing. The latest briefing remains available until the next chosen day. Reporting weeks remain Monday–Sunday in Brisbane time, independent of display-day preferences. Friday reports the week so far; an older briefing retained across Monday identifies its reporting dates explicitly. Current active and overdue counts remain current, rather than pretending to be historical snapshots.
+
+`app/lib/weekly-summary.ts` owns deterministic period selection, metric buckets, repeat projections and neutral progress copy. `app/lib/weekly-summary-service.ts` owns the authenticated read/settings workflow; `/api/weekly-summary` supplies the Prisma adapter. Reads traverse only the session user's owned profiles and return selected task fields without notes or other users' identities. Responses use private/no-store caching. Disabled summaries skip task reads. Preferences live in nullable `User.weeklySummarySettings` JSON, with default-on behaviour for existing accounts and strict validation at writes. No cron, notifications or task mutations are involved.
+
+Ordinary task counts distinguish completed work, starts, active work, outstanding due dates and overdue work. Expanded workload detail reconstructs a starting list from surviving records created before Monday and not completed before Monday, with a start or due date by Sunday. Newly created work in that scope is separate from tasks added for later. Completions from the starting cohort are tracked independently so newly added completions cannot be credited to the original list. This is a current-record summary, not an immutable historical ledger: deletion, reopening, rescheduling, profile moves and backdated completion can change the reconstructed history. Open tasks in archived projects are excluded from workload; completed work still receives credit. Counts measure volume, not effort; no score, streak or headline percentage is used.
+
+Repeat work is excluded from ordinary counters. Completed and outstanding counts use saved occurrences, counting carried work once and respecting current pauses. Scheduled counts combine saved rows with bounded calendar estimates from the latest open occurrence per profile/series, deduplicated by occurrence date. The schedule drill-down labels estimates explicitly; estimates never become outstanding tasks. Paused dates are excluded. Completion timing and schedule edits can change estimates, because actual generation is completion-driven.
+
+The UI has compact totals, expandable profile/workload detail, task-list dialogs with profile links, and account settings available even when hidden or disabled. It refreshes on focus, visibility and Brisbane midnight, reports request failures without substituting zero counts, and retains unsaved settings after a failed save.
+
+Migration `20260906120000_weekly_summary_settings` adds one nullable JSON column to `user`. It was generated as an offline schema-to-schema diff because no disposable MariaDB/shadow database was available. Applying it to shared data requires the normal backup and approved migration deployment workflow; local compilation or mocked UI checks do not prove live persistence.
+
 ### Profiles
 
 Profiles are user-owned work contexts. They group tasks, projects, time entries, Sunday check-ins, and profile-level display preferences.

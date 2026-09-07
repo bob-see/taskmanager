@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { toDateOnly } from "@/app/timesheets/timesheet-utils";
 import { ReportsClient } from "@/app/reports/reports-client";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import {
   formatBestPeriodLabel,
   getTaskDetailReport,

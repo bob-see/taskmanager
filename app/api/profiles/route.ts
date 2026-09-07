@@ -1,7 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { createActivityLog } from "@/app/lib/activity-log";
 import { isMissingDatabaseObjectError } from "@/app/lib/prisma-errors";
 

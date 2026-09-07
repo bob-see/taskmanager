@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/lib/auth-options";
 import { requireSpaceMember } from "@/app/api/spaces/shared";
 import { prisma } from "@/app/lib/prisma";
 import { PrintButton } from "./print-button";
