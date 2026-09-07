@@ -6,6 +6,7 @@ export {
   TIMESHEET_ROUNDING_MODES,
   calculateLoggedMinutes,
   diffMinutes,
+  getDailyRoundedProfileMinutes,
   isTimesheetRoundingMode,
   roundMinutes,
   type TimesheetRoundingMode,

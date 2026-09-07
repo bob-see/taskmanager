@@ -199,7 +199,7 @@ The profile/timesheet interfaces use local `Date` operations and Monday-start we
 
 ## Timesheet and Timer Testing
 
-Manual and future automated checks should cover current-week default selection, previous/next week navigation, manual create/update/delete under the owning profile, invalid time ranges, notes/source validation, active versus completed entries, and report totals. Verify exact, nearest-15, and up-15 duration rounding at below/above-half and exact-quarter boundaries.
+Manual and future automated checks should cover current-week default selection, previous/next week navigation, manual create/update/delete under the owning profile, invalid time ranges, notes/source validation, active versus completed entries, and report totals. Verify exact, nearest-15, and up-15 duration rounding at below/above-half and exact-quarter boundaries. For rounded totals, confirm a day's actual time is rounded once and its profile allocations add back to that daily total.
 
 For timers, test start, stop, no-active-timer response, same-user duplicate start,
 separate-user simultaneous timers, notes, duration, selected rounding, activity

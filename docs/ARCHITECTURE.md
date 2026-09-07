@@ -218,6 +218,7 @@ Responsibilities:
 
 - Record manual and timer-sourced time entries.
 - Support week navigation and current-week workflows.
+- Round displayed totals once per day and apportion the rounded total across profiles.
 - Feed reporting views.
 
 Relationships:

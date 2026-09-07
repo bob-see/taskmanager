@@ -6,6 +6,7 @@ import {
   calculateLoggedMinutes,
   formatDuration,
   formatHours,
+  getDailyRoundedProfileMinutes,
   getWeekDays,
   parseDateOnly,
   toDateOnly,
@@ -366,41 +367,45 @@ export function TimesheetsClient({
     return map;
   }, [entries]);
 
+  const dailyProfileTotals = useMemo(() => {
+    return new Map(
+      weekDays.map((day) => {
+        const dayEntries = entries.filter((entry) => getEntryDayKey(entry) === day.key);
+        return [
+          day.key,
+          getDailyRoundedProfileMinutes(
+            dayEntries.map((entry) => ({
+              profileId: entry.profileId,
+              durationMinutes: getActualDurationMinutes(entry),
+            })),
+            roundingMode
+          ),
+        ];
+      })
+    );
+  }, [entries, roundingMode, weekDays]);
+
   const profileTotals = useMemo(() => {
     return new Map(
       profiles.map((profile) => [
         profile.id,
         weekDays.reduce((sum, day) => {
-          const dayEntries = entriesByProfileDay.get(`${profile.id}:${day.key}`) ?? [];
-          return (
-            sum +
-            dayEntries.reduce(
-              (entrySum, entry) => entrySum + getEffectiveLoggedMinutes(entry, roundingMode),
-              0
-            )
-          );
+          return sum + (dailyProfileTotals.get(day.key)?.get(profile.id) ?? 0);
         }, 0),
       ])
     );
-  }, [entriesByProfileDay, profiles, roundingMode, weekDays]);
+  }, [dailyProfileTotals, profiles, weekDays]);
 
   const dayTotals = useMemo(() => {
     return new Map(
       weekDays.map((day) => [
         day.key,
         profiles.reduce((sum, profile) => {
-          const dayEntries = entriesByProfileDay.get(`${profile.id}:${day.key}`) ?? [];
-          return (
-            sum +
-            dayEntries.reduce(
-              (entrySum, entry) => entrySum + getEffectiveLoggedMinutes(entry, roundingMode),
-              0
-            )
-          );
+          return sum + (dailyProfileTotals.get(day.key)?.get(profile.id) ?? 0);
         }, 0),
       ])
     );
-  }, [entriesByProfileDay, profiles, roundingMode, weekDays]);
+  }, [dailyProfileTotals, profiles, weekDays]);
 
   const overallWeekTotal = useMemo(
     () => Array.from(dayTotals.values()).reduce((sum, value) => sum + value, 0),
@@ -434,10 +439,6 @@ export function TimesheetsClient({
     ? calculateLoggedMinutes(new Date(activeTimer.startTime), new Date(now), "exact").durationMinutes
     : 0;
 
-  const runningTimerLoggedMinutes = activeTimer && now !== null
-    ? calculateLoggedMinutes(new Date(activeTimer.startTime), new Date(now), roundingMode).loggedMinutes
-    : 0;
-
   const activityEntries = useMemo(() => {
     const completedEntries = entries
       .filter((entry) => getEntryDayKey(entry) === selectedActivityDate)
@@ -453,38 +454,45 @@ export function TimesheetsClient({
   }, [activeTimer, entries, selectedActivityDate]);
 
   const todaySplitRows = useMemo(() => {
-    const totals = new Map<string, { profileName: string; minutes: number }>();
-
-    for (const entry of entries) {
-      if (getEntryDayKey(entry) !== selectedActivityDate) continue;
-
-      const existing = totals.get(entry.profileId) ?? {
-        profileName: entry.profileName,
-        minutes: 0,
-      };
-      existing.minutes += getEffectiveLoggedMinutes(entry, roundingMode);
-      totals.set(entry.profileId, existing);
-    }
+    const dayEntries = entries
+      .filter((entry) => getEntryDayKey(entry) === selectedActivityDate)
+      .map((entry) => ({
+        profileId: entry.profileId,
+        durationMinutes: getActualDurationMinutes(entry),
+      }));
 
     if (activeTimer && getEntryDayKey(activeTimer) === selectedActivityDate) {
-      const existing = totals.get(activeTimer.profileId) ?? {
-        profileName: activeTimer.profileName,
-        minutes: 0,
-      };
-      existing.minutes += runningTimerLoggedMinutes;
-      totals.set(activeTimer.profileId, existing);
+      dayEntries.push({
+        profileId: activeTimer.profileId,
+        durationMinutes: runningTimerMinutes,
+      });
     }
 
-    return Array.from(totals.entries())
-      .map(([profileId, value]) => ({ profileId, ...value }))
+    const roundedByProfile = getDailyRoundedProfileMinutes(dayEntries, roundingMode);
+    return Array.from(roundedByProfile.entries())
+      .map(([profileId, minutes]) => ({
+        profileId,
+        profileName:
+          profiles.find((profile) => profile.id === profileId)?.name ??
+          (activeTimer?.profileId === profileId ? activeTimer.profileName : "Profile"),
+        minutes,
+      }))
       .filter((row) => row.minutes > 0)
       .sort((left, right) => right.minutes - left.minutes || left.profileName.localeCompare(right.profileName));
-  }, [activeTimer, entries, roundingMode, runningTimerLoggedMinutes, selectedActivityDate]);
+  }, [activeTimer, entries, profiles, roundingMode, runningTimerMinutes, selectedActivityDate]);
 
   const todayTotalMinutes = useMemo(
     () => todaySplitRows.reduce((sum, row) => sum + row.minutes, 0),
     [todaySplitRows]
   );
+
+  const todayActualMinutes = useMemo(() => {
+    const completedMinutes = activityEntries.reduce(
+      (sum, entry) => sum + (entry.endTime ? getActualDurationMinutes(entry) : 0),
+      0
+    );
+    return completedMinutes + (activeTimer ? runningTimerMinutes : 0);
+  }, [activeTimer, activityEntries, runningTimerMinutes]);
 
   const longestActivityMinutes = useMemo(() => {
     return activityEntries.reduce((longest, entry) => {
@@ -946,7 +954,9 @@ export function TimesheetsClient({
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Weekly totals</h2>
               <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-                {loading ? "Refreshing week…" : "Click a day or weekly total to inspect the underlying entries."}
+                {loading
+                  ? "Refreshing week…"
+                  : "Each day is rounded once, then apportioned across profiles. Click a day or weekly total to inspect the underlying entries."}
               </p>
             </div>
             <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
@@ -973,10 +983,7 @@ export function TimesheetsClient({
                   <tr key={profile.id} className="border-b border-[color:var(--tm-border)]">
                     <td className="px-3 py-3 font-medium">{profile.name}</td>
                     {weekDays.map((day) => {
-                      const minutes = (entriesByProfileDay.get(`${profile.id}:${day.key}`) ?? []).reduce(
-                        (sum, entry) => sum + getEffectiveLoggedMinutes(entry, roundingMode),
-                        0
-                      );
+                      const minutes = dailyProfileTotals.get(day.key)?.get(profile.id) ?? 0;
 
                       return (
                         <td key={day.key} className="px-3 py-3">
@@ -1100,7 +1107,7 @@ export function TimesheetsClient({
                                 Actual {formatDuration(actualMinutes)}
                               </span>
                               <span className="tm-chip rounded-full border px-2 py-0.5">
-                                Logged {formatDuration(roundedMinutes)}
+                                Entry-rounded {formatDuration(roundedMinutes)}
                               </span>
                               <span className="tm-chip rounded-full border px-2 py-0.5">
                                 {roundingMode}
@@ -1145,10 +1152,10 @@ export function TimesheetsClient({
               <h2 className="text-lg font-semibold tracking-tight">
                 Today&apos;s Activity · {formatDateHeading(selectedActivityDate)} ·{" "}
                 {activityEntries.length} {activityEntries.length === 1 ? "session" : "sessions"} ·{" "}
-                {formatDuration(todayTotalMinutes)}
+                {formatDuration(todayTotalMinutes)} logged
               </h2>
               <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-                Chronological start and stop activity for the selected date.
+                {formatDuration(todayActualMinutes)} actual; the displayed total is rounded once for the day.
               </p>
             </div>
             {activityEntries.length > 0 && (
