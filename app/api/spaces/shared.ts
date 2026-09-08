@@ -48,8 +48,8 @@ export async function getCurrentUserOr401() {
     return { error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
+  const user = await prisma.user.findFirst({
+    where: { email: session.user.email, archivedAt: null },
     select: { id: true, email: true, role: true },
   });
 

@@ -9,7 +9,9 @@ export async function GET() {
   if (currentUser.error) return currentUser.error;
 
   const users = await prisma.user.findMany({
-    where: await scopedVisibleUserWhere(currentUser.user),
+    where: {
+      AND: [await scopedVisibleUserWhere(currentUser.user), { archivedAt: null }],
+    },
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: {
       id: true,

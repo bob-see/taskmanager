@@ -9,6 +9,7 @@ import { getAdminGroupScope } from "@/app/api/users/visibility";
 type SearchParams = Promise<{
   error?: string;
   success?: string;
+  view?: string;
 }>;
 
 const inputClass =
@@ -17,6 +18,8 @@ const buttonClass =
   "tm-button inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm disabled:opacity-50";
 const primaryButtonClass =
   "tm-button-primary inline-flex h-10 items-center justify-center rounded-[10px] border px-3 text-sm disabled:opacity-50";
+const archiveButtonClass =
+  "inline-flex h-10 items-center justify-center rounded-[10px] border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-3 text-sm font-semibold text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)] transition hover:border-emerald-700/40 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)] disabled:cursor-not-allowed disabled:opacity-50";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -25,8 +28,8 @@ async function requireAdmin() {
 
   const email = session.user.email;
 
-  const user = await prisma.user.findUnique({
-    where: { email },
+  const user = await prisma.user.findFirst({
+    where: { email, archivedAt: null },
     select: { id: true, role: true },
   });
 
@@ -83,6 +86,10 @@ function readStringArray(formData: FormData, key: string) {
 function usersRedirect(params: Record<string, string>) {
   const searchParams = new URLSearchParams(params);
   redirect(`/users?${searchParams.toString()}`);
+}
+
+function usersHref(view: "active" | "archived") {
+  return view === "archived" ? "/users?view=archived" : "/users";
 }
 
 function isPrismaError(error: unknown, code: string) {
@@ -176,6 +183,43 @@ async function resetPassword(formData: FormData) {
 
   revalidatePath("/users");
   usersRedirect({ success: "password-reset" });
+}
+
+async function archiveUser(formData: FormData) {
+  "use server";
+
+  const admin = await requireAdmin();
+  if (!admin) return notFound();
+
+  const userId = readString(formData, "userId");
+  if (!userId) usersRedirect({ error: "missing-user-id" });
+  if (userId === admin.id) usersRedirect({ error: "cannot-archive-self" });
+
+  await ensureUserInAdminScope(admin, userId);
+
+  const archivedAt = new Date();
+  const archived = await prisma.$transaction(async (tx) => {
+    const archivedUser = await tx.user.updateMany({
+      where: { id: userId, archivedAt: null },
+      data: { archivedAt },
+    });
+    if (archivedUser.count !== 1) return false;
+
+    await tx.delegatedTask.updateMany({
+      where: {
+        assignedToUserId: userId,
+        status: { in: ["PENDING", "ACCEPTED", "IN_PROGRESS"] },
+      },
+      data: { status: "USER_ARCHIVED" },
+    });
+    return true;
+  });
+
+  if (!archived) usersRedirect({ error: "user-not-active" });
+
+  revalidatePath("/users");
+  revalidatePath("/delegated/assigned-by-me");
+  usersRedirect({ success: "user-archived" });
 }
 
 async function createGroup(formData: FormData) {
@@ -354,12 +398,15 @@ function messageFor(error?: string, success?: string) {
   if (error === "missing-group-id") return "Choose a valid group before continuing.";
   if (error === "forbidden-scope") return "You can only manage users and groups in your own group.";
   if (error === "missing-user-id") return "Choose a user before updating groups.";
+  if (error === "cannot-archive-self") return "You cannot archive your own account.";
+  if (error === "user-not-active") return "That user is already archived or no longer available.";
   if (success === "created") return "User created.";
   if (success === "password-reset") return "Password reset.";
   if (success === "group-created") return "Group created.";
   if (success === "group-updated") return "Group updated.";
   if (success === "group-deleted") return "Group deleted.";
   if (success === "groups-updated") return "User groups updated.";
+  if (success === "user-archived") return "User archived. They can no longer sign in.";
   return null;
 }
 
@@ -384,15 +431,22 @@ export default async function UsersPage({
     resolvedSearchParams.success
   );
   const isError = Boolean(resolvedSearchParams.error);
+  const isArchivedView = resolvedSearchParams.view === "archived";
 
   const scoped = isScopedAdmin(admin);
   const scopedGroupId = scoped ? admin.groupIds[0] : undefined;
+  const archiveWhere = { archivedAt: isArchivedView ? { not: null } : null };
 
   const [users, groups] = await Promise.all([
     prisma.user.findMany({
-      where: scopedGroupId
-        ? { groupMemberships: { some: { groupId: scopedGroupId } } }
-        : undefined,
+      where: {
+        AND: [
+          archiveWhere,
+          ...(scopedGroupId
+            ? [{ groupMemberships: { some: { groupId: scopedGroupId } } }]
+            : []),
+        ],
+      },
       orderBy: [{ createdAt: "asc" }, { email: "asc" }],
       select: {
         id: true,
@@ -400,6 +454,7 @@ export default async function UsersPage({
         email: true,
         role: true,
         createdAt: true,
+        archivedAt: true,
         groupMemberships: {
           where: scopedGroupId ? { groupId: scopedGroupId } : undefined,
           include: {
@@ -419,7 +474,11 @@ export default async function UsersPage({
       include: {
         _count: {
           select: {
-            memberships: true,
+            memberships: {
+              where: {
+                user: archiveWhere,
+              },
+            },
           },
         },
       },
@@ -459,7 +518,7 @@ export default async function UsersPage({
             {user.email} · joined {formatCreatedAt(user.createdAt)}
           </div>
         </div>
-        <details className="relative shrink-0 self-start sm:self-auto">
+        {!isArchivedView ? <details className="relative shrink-0 self-start sm:self-auto">
           <summary className="tm-button flex h-8 cursor-pointer list-none items-center rounded-[9px] border px-2.5 text-xs [&::-webkit-details-marker]:hidden">
             Actions
           </summary>
@@ -509,8 +568,15 @@ export default async function UsersPage({
                 Reset password
               </button>
             </form>
+            <div className="my-3 border-t border-[color:var(--tm-border)]" />
+            <form action={archiveUser}>
+              <input type="hidden" name="userId" value={user.id} />
+              <button type="submit" className={`w-full ${archiveButtonClass}`}>
+                Archive user
+              </button>
+            </form>
           </div>
-        </details>
+        </details> : null}
       </div>
     );
   }
@@ -577,9 +643,24 @@ export default async function UsersPage({
             </div>
           </details>
           <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
-          {users.length} {users.length === 1 ? "user" : "users"}
+            {users.length} {isArchivedView ? "archived" : "active"}
           </div>
         </div>
+      </div>
+
+      <div className="tm-tabset mt-5 inline-flex w-fit rounded-full border p-1 text-sm">
+        <a
+          className={`tm-tab rounded-full px-3 py-1.5 ${!isArchivedView ? "tm-tab-active" : ""}`}
+          href={usersHref("active")}
+        >
+          Active
+        </a>
+        <a
+          className={`tm-tab rounded-full px-3 py-1.5 ${isArchivedView ? "tm-tab-active" : ""}`}
+          href={usersHref("archived")}
+        >
+          Archived
+        </a>
       </div>
 
       {message ? (

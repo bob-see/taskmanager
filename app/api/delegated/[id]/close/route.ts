@@ -58,9 +58,13 @@ export async function POST(_req: Request, ctx: Ctx) {
     );
   }
 
-  if (delegatedTask.status !== "COMPLETED" && delegatedTask.status !== "DECLINED") {
+  if (
+    delegatedTask.status !== "COMPLETED" &&
+    delegatedTask.status !== "DECLINED" &&
+    delegatedTask.status !== "USER_ARCHIVED"
+  ) {
     return Response.json(
-      { error: "Only completed or declined delegated tasks can be closed" },
+      { error: "Only completed, declined or user-archived delegated tasks can be closed" },
       { status: 409 }
     );
   }
@@ -72,7 +76,7 @@ export async function POST(_req: Request, ctx: Ctx) {
         where: {
           id: delegatedTask.id,
           assignedByUserId: currentUser.id,
-          status: { in: ["COMPLETED", "DECLINED"] },
+          status: { in: ["COMPLETED", "DECLINED", "USER_ARCHIVED"] },
         },
         data: {
           status: "CLOSED",
@@ -93,6 +97,8 @@ export async function POST(_req: Request, ctx: Ctx) {
           content:
             delegatedTask.status === "DECLINED"
               ? `${formatUserName(currentUser)} closed this declined delegated task.`
+              : delegatedTask.status === "USER_ARCHIVED"
+                ? `${formatUserName(currentUser)} closed this delegated task after the assigned user was archived.`
               : `${formatUserName(currentUser)} closed this delegated task.`,
         },
       });
@@ -131,7 +137,7 @@ export async function POST(_req: Request, ctx: Ctx) {
   } catch (error) {
     if (error instanceof Error && error.message === "STALE_DELEGATED_TASK") {
       return Response.json(
-        { error: "Only completed or declined delegated tasks can be closed" },
+        { error: "Only completed, declined or user-archived delegated tasks can be closed" },
         { status: 409 }
       );
     }

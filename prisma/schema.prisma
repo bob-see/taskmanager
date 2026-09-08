@@ -14,6 +14,7 @@ model User {
   email        String   @unique @db.VarChar(191)
   passwordHash String
   role         String   @default("user") @db.VarChar(32)
+  archivedAt   DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -251,6 +252,7 @@ enum DelegatedTaskStatus {
   COMPLETED
   CLOSED
   DECLINED
+  USER_ARCHIVED
 }
 
 model DelegatedTask {

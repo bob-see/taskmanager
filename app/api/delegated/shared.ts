@@ -68,10 +68,11 @@ export async function validateDelegationReceiver(
       id: true,
       name: true,
       email: true,
+      archivedAt: true,
     },
   });
 
-  if (!receiver) {
+  if (!receiver || receiver.archivedAt) {
     return {
       error: Response.json({ error: "Assigned user not found" }, { status: 404 }),
     };

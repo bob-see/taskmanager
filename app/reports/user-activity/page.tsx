@@ -216,8 +216,8 @@ export default async function UserActivityPage({
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return notFound();
 
-  const admin = await prisma.user.findUnique({
-    where: { email: session.user.email },
+  const admin = await prisma.user.findFirst({
+    where: { email: session.user.email, archivedAt: null },
     select: { id: true, role: true },
   });
   if (admin?.role !== "admin") return notFound();
@@ -227,7 +227,9 @@ export default async function UserActivityPage({
   const range = getDateRange(period, params.from, params.to);
 
   const users = await prisma.user.findMany({
-    where: await scopedVisibleUserWhere(admin),
+    where: {
+      AND: [await scopedVisibleUserWhere(admin), { archivedAt: null }],
+    },
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: { id: true, name: true, email: true },
   });

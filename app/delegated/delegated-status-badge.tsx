@@ -4,7 +4,8 @@ export type DelegatedTaskStatus =
   | "IN_PROGRESS"
   | "COMPLETED"
   | "CLOSED"
-  | "DECLINED";
+  | "DECLINED"
+  | "USER_ARCHIVED";
 
 const statusStyles: Record<DelegatedTaskStatus, string> = {
   PENDING: "border-amber-200 bg-amber-50 text-amber-800",
@@ -13,6 +14,7 @@ const statusStyles: Record<DelegatedTaskStatus, string> = {
   COMPLETED: "border-teal-300 bg-teal-50 text-teal-900 shadow-sm",
   CLOSED: "border-slate-200 bg-slate-50 text-slate-600",
   DECLINED: "border-slate-200 bg-slate-50 text-slate-600",
+  USER_ARCHIVED: "border-amber-200 bg-amber-50 text-amber-900",
 };
 
 const statusLabels: Record<DelegatedTaskStatus, string> = {
@@ -22,6 +24,7 @@ const statusLabels: Record<DelegatedTaskStatus, string> = {
   COMPLETED: "Awaiting review",
   CLOSED: "Closed",
   DECLINED: "Declined",
+  USER_ARCHIVED: "User Archived",
 };
 
 export function DelegatedStatusBadge({ status }: { status: DelegatedTaskStatus }) {

@@ -17,6 +17,7 @@ export async function GET() {
             not: currentUser.user.id,
           },
         },
+        { archivedAt: null },
       ],
     },
     orderBy: [{ name: "asc" }, { email: "asc" }],
