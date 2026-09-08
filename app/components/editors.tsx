@@ -110,6 +110,7 @@ type TaskEditorModalProps = {
   showProjectField?: boolean;
   showRepeatFields?: boolean;
   onClose: () => void;
+  onSaveAndMarkDone?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (updater: (prev: EditTaskFormState) => EditTaskFormState) => void;
 };
@@ -919,29 +920,43 @@ function TaskFormActions({
   submitLabel,
   submitDisabled,
   onClose,
+  onSaveAndMarkDone,
 }: {
   saving: boolean;
   submitLabel: string;
   submitDisabled?: boolean;
   onClose: () => void;
+  onSaveAndMarkDone?: () => void;
 }) {
   return (
-    <div className="-mx-5 mt-4 flex shrink-0 justify-end gap-2 border-t border-[color:var(--tm-border)] px-5 pt-4">
-      <button
-        className={`${buttonClass} px-4 disabled:opacity-50`}
-        disabled={saving}
-        type="button"
-        onClick={onClose}
-      >
-        Cancel
-      </button>
-      <button
-        className={`${primaryButtonClass} px-4 disabled:opacity-50`}
-        disabled={saving || submitDisabled}
-        type="submit"
-      >
-        {submitLabel}
-      </button>
+    <div className="-mx-5 mt-4 flex shrink-0 items-center justify-between gap-2 border-t border-[color:var(--tm-border)] px-5 pt-4">
+      {onSaveAndMarkDone ? (
+        <button
+          className="inline-flex h-10 items-center justify-center rounded-[10px] border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-4 text-sm font-semibold text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)] transition hover:border-emerald-700/40 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={saving || submitDisabled}
+          type="button"
+          onClick={onSaveAndMarkDone}
+        >
+          Save &amp; Mark Done
+        </button>
+      ) : <span />}
+      <div className="flex items-center gap-2">
+        <button
+          className={`${buttonClass} px-4 disabled:opacity-50`}
+          disabled={saving}
+          type="button"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+        <button
+          className={`${primaryButtonClass} px-4 disabled:opacity-50`}
+          disabled={saving || submitDisabled}
+          type="submit"
+        >
+          {submitLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -965,6 +980,7 @@ export function TaskEditorModal({
   showProjectField = true,
   showRepeatFields = true,
   onClose,
+  onSaveAndMarkDone,
   onSubmit,
   onFormChange,
 }: TaskEditorModalProps) {
@@ -990,6 +1006,7 @@ export function TaskEditorModal({
             saving={saving}
             submitLabel="Save & Close"
             onClose={onClose}
+            onSaveAndMarkDone={onSaveAndMarkDone}
           />
         </form>
       )}

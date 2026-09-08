@@ -4983,8 +4983,11 @@ export function TrackerClient({
     setDiscardTarget(null);
   }
 
-  async function submitTaskEditor(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function submitTaskEditor(
+    e?: React.FormEvent<HTMLFormElement>,
+    markDone = false
+  ) {
+    e?.preventDefault();
     if (!editTaskId || !editTaskForm) return;
 
     const pendingNoteText = editTaskForm.notes.trim();
@@ -5054,6 +5057,9 @@ export function TrackerClient({
           editTaskForm.repeatEnabled && editTaskForm.repeatPaused
             ? editTaskForm.repeatPauseNote.trim() || null
             : null,
+        ...(markDone
+          ? { completed: true, completedOn: getBrisbaneDate(new Date()) }
+          : {}),
       });
       setEditTaskId(null);
       setEditTaskForm(null);
@@ -7661,6 +7667,7 @@ export function TrackerClient({
         showRepeatFields={!Boolean(editTask?.workflowRunId)}
         onClose={closeTaskEditor}
         onSubmit={submitTaskEditor}
+        onSaveAndMarkDone={() => void submitTaskEditor(undefined, true)}
         onFormChange={(updater) =>
           setEditTaskForm((prev) => (prev ? updater(prev) : prev))
         }

@@ -2147,8 +2147,11 @@ function ProfileCard({
     return (await res.json()) as OverviewProject;
   }
 
-  async function submitTaskEditor(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitTaskEditor(
+    event?: React.FormEvent<HTMLFormElement>,
+    markDone = false
+  ) {
+    event?.preventDefault();
     if (!editTaskId || !editTaskForm) return;
 
     const pendingNoteText = editTaskForm.notes.trim();
@@ -2218,6 +2221,9 @@ function ProfileCard({
           editTaskForm.repeatEnabled && editTaskForm.repeatPaused
             ? editTaskForm.repeatPauseNote.trim() || null
             : null,
+        ...(markDone
+          ? { completed: true, completedOn: getBrisbaneDate(new Date()) }
+          : {}),
       });
       const savedTask = response.task;
 
@@ -2269,6 +2275,39 @@ function ProfileCard({
               overdue: Math.max(0, prev.overdue + (nextOverdue ? 1 : -1)),
             }));
           }
+        }
+
+        if (markDone) {
+          const actionDate = getBrisbaneDate(new Date());
+          const createdTask = response.createdTask
+            ? normalizeOverviewTask({
+                ...response.createdTask,
+                startDate: toDateOnly(response.createdTask.startDate),
+                dueAt: toDateOnly(response.createdTask.dueAt),
+                completedOn: toDateOnly(response.createdTask.completedOn),
+                projectName: response.createdTask.projectId
+                  ? projectNameById.get(response.createdTask.projectId) ?? null
+                  : null,
+              })
+            : null;
+
+          setOpenTasks((prev) => {
+            const withoutCompleted = prev.filter((item) => item.id !== editTaskId);
+            if (!createdTask) return withoutCompleted;
+            return [
+              createdTask,
+              ...withoutCompleted.filter((item) => item.id !== createdTask.id),
+            ];
+          });
+          setCounts((prev) => ({
+            ...prev,
+            open: createdTask ? prev.open : Math.max(0, prev.open - 1),
+            done: prev.done + 1,
+            overdue: Math.max(
+              0,
+              prev.overdue - (isTaskOverdue(nextDueAt, actionDate) ? 1 : 0)
+            ),
+          }));
         }
 
         const newCategory = savedTask.category?.trim();
@@ -3246,6 +3285,7 @@ function ProfileCard({
         projectOptions={projectOptions}
         onClose={closeTaskEditor}
         onSubmit={submitTaskEditor}
+        onSaveAndMarkDone={() => void submitTaskEditor(undefined, true)}
         onFormChange={(updater) =>
           setEditTaskForm((prev) => (prev ? updater(prev) : prev))
         }
@@ -3720,8 +3760,11 @@ export function OverviewClient({
     setSearchTaskEditForm(createEditTaskForm(task));
   }
 
-  async function submitSearchTaskEditor(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitSearchTaskEditor(
+    event?: React.FormEvent<HTMLFormElement>,
+    markDone = false
+  ) {
+    event?.preventDefault();
     if (!searchTaskToEdit || !searchTaskEditForm) return;
 
     setSearchTaskEditSaving(true);
@@ -3772,6 +3815,9 @@ export function OverviewClient({
               searchTaskEditForm.repeatEnabled && searchTaskEditForm.repeatPaused
                 ? searchTaskEditForm.repeatPauseNote.trim() || null
                 : null,
+            ...(markDone
+              ? { completed: true, completedOn: getBrisbaneDate(new Date()) }
+              : {}),
           }),
         }
       );
@@ -4278,6 +4324,7 @@ export function OverviewClient({
             setSearchTaskEditForm(null);
           }}
           onSubmit={submitSearchTaskEditor}
+          onSaveAndMarkDone={() => void submitSearchTaskEditor(undefined, true)}
           onFormChange={(updater) =>
             setSearchTaskEditForm((prev) => (prev ? updater(prev) : prev))
           }
