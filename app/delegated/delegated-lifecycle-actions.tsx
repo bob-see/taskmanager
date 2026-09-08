@@ -16,6 +16,9 @@ const actionLabels: Record<DelegatedLifecycleAction, string> = {
   close: "Close Task",
 };
 
+const closeButtonClass =
+  "inline-flex h-9 items-center justify-center rounded-[10px] border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-3 text-sm font-semibold text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)] transition hover:border-emerald-700/40 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)] disabled:cursor-not-allowed disabled:opacity-60";
+
 export function DelegatedLifecycleActions({
   delegatedTaskId,
   action,
@@ -50,7 +53,11 @@ export function DelegatedLifecycleActions({
     <div className="space-y-2">
       <button
         type="button"
-        className="tm-button-primary inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm disabled:opacity-60"
+        className={
+          action === "close"
+            ? closeButtonClass
+            : "tm-button-primary inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-sm disabled:opacity-60"
+        }
         disabled={saving}
         onClick={submit}
       >

@@ -167,7 +167,7 @@ export default async function AssignedByMePage({ searchParams }: PageProps) {
         }
         userColumnLabel="Assigned To"
         renderActions={(item) =>
-          item.status === "COMPLETED" ? (
+          item.status === "COMPLETED" || item.status === "DECLINED" ? (
             <DelegatedLifecycleActions delegatedTaskId={item.id} action="close" />
           ) : null
         }
