@@ -69,7 +69,7 @@ const priorityChipClass =
 const updatingChipClass =
   "inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100/90 px-2 py-0.5 text-[11px] font-semibold text-slate-800";
 
-export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pendingTaskIds = [], priorityOverrides = {}, onToggleTask, onTogglePriority, onOpenEditTask, onOpenTaskContextMenu }: { profileId: string; selectedDay: string; showDone?: boolean; pendingTaskIds?: string[]; priorityOverrides?: Record<string, boolean>; onToggleTask: (taskId: string, completed: boolean) => void; onTogglePriority: (taskId: string, nextValue: boolean) => Promise<void>; onOpenEditTask: (taskId: string) => void; onOpenTaskContextMenu: (event: MouseEvent<HTMLButtonElement>, taskId: string) => void }) {
+export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pendingTaskIds = [], completedTaskIds = [], priorityOverrides = {}, onToggleTask, onTogglePriority, onOpenEditTask, onOpenTaskContextMenu }: { profileId: string; selectedDay: string; showDone?: boolean; pendingTaskIds?: string[]; completedTaskIds?: string[]; priorityOverrides?: Record<string, boolean>; onToggleTask: (taskId: string, completed: boolean) => void; onTogglePriority: (taskId: string, nextValue: boolean) => Promise<void>; onOpenEditTask: (taskId: string) => void; onOpenTaskContextMenu: (event: MouseEvent<HTMLButtonElement>, taskId: string) => void }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [pendingPriorityTaskIds, setPendingPriorityTaskIds] = useState<string[]>([]);
@@ -111,7 +111,7 @@ export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pen
   const visibleRuns = runs.filter((run) => {
     const hasVisibleTask = run.tasks.some((task) => {
       if (showDone) return Boolean(task.completedAt);
-      return !task.completedAt && calendarDate(task.startDate) <= selectedDay;
+      return !task.completedAt && !completedTaskIds.includes(task.id) && calendarDate(task.startDate) <= selectedDay;
     });
     return hasVisibleTask;
   });
@@ -123,7 +123,7 @@ export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pen
       {visibleRuns.map((run) => {
         const visibleTasks = showDone
           ? run.tasks.filter((task) => Boolean(task.completedAt))
-          : run.tasks.filter((task) => !task.completedAt && calendarDate(task.startDate) <= selectedDay);
+          : run.tasks.filter((task) => !task.completedAt && !completedTaskIds.includes(task.id) && calendarDate(task.startDate) <= selectedDay);
         const completed = run.tasks.filter((task) => Boolean(task.completedAt)).length;
         const progress = run.tasks.length === 0 ? 100 : Math.round((completed / run.tasks.length) * 100);
         const isCollapsed = collapsed[run.id] ?? false;

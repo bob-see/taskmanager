@@ -206,6 +206,7 @@ type SnoozePreset = "tomorrow" | "next-business-day" | "next-week";
 type RepeatPausePreset = "tomorrow" | "next-week" | "custom" | "indefinite";
 type TaskPendingAction = "complete" | "update" | "delete";
 const MIN_TASK_PENDING_MS = 500;
+const MAX_VISIBLE_COMPLETION_MS = 2_000;
 
 const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
   { value: "day", label: "Day" },
@@ -4421,14 +4422,31 @@ export function TrackerClient({
       prev.includes(taskId) ? prev : [...prev, taskId]
     );
 
+    const originalTask = tasks.find((task) => task.id === taskId);
+    let completedOptimistically = false;
     try {
       const completedOn = completed ? getBrisbaneDate(new Date()) : null;
-      await updateTask(taskId, {
+      const update = updateTask(taskId, {
         completed,
         completedOn,
-      }, { pendingStartedAt });
+      });
+      const finishedWithinCap = await Promise.race([
+        update.then(() => true),
+        wait(MAX_VISIBLE_COMPLETION_MS).then(() => false),
+      ]);
+      if (!finishedWithinCap && completed && originalTask) {
+        completedOptimistically = true;
+        setTasks((prev) => prev.map((task) => task.id === taskId
+          ? { ...task, completedAt: new Date().toISOString(), completedOn }
+          : task));
+      }
+      await update;
+    } catch (err) {
+      if (completedOptimistically && originalTask) {
+        setTasks((prev) => prev.map((task) => task.id === taskId ? originalTask : task));
+      }
+      throw err;
     } finally {
-      await waitForMinimumPendingTime(pendingStartedAt);
       completionPendingTaskIdsRef.current.delete(taskId);
       setCompletionPendingTaskIds((prev) => prev.filter((id) => id !== taskId));
       finishTaskPendingAction(taskId);
@@ -6335,6 +6353,7 @@ export function TrackerClient({
                 selectedDay={selectedDay}
                 showDone={taskView === "done"}
                 pendingTaskIds={Object.keys(pendingTaskActions)}
+                completedTaskIds={tasks.filter((task) => Boolean(task.completedAt)).map((task) => task.id)}
                 priorityOverrides={Object.fromEntries(
                   tasks
                     .filter((task) => task.workflowRunId)

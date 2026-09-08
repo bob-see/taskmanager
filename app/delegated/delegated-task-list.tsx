@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { DelegatedTaskNotes, type DelegatedTaskNote } from "./delegated-task-notes";
 import { DelegatedSenderBadge } from "./delegated-task-indicators";
 import { DelegatedStatusBadge, type DelegatedTaskStatus } from "./delegated-status-badge";
+import { DelegatedListVisibility } from "./delegated-list-visibility";
 
 export type DelegatedTaskListItem = {
   id: string;
@@ -52,6 +53,7 @@ export function DelegatedTaskList({
   const columnCount = renderActions ? 6 : 5;
 
   return (
+    <DelegatedListVisibility taskIds={items.map((item) => item.id)}>
     <section className="mt-6 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
@@ -113,5 +115,6 @@ export function DelegatedTaskList({
         </table>
       </div>
     </section>
+    </DelegatedListVisibility>
   );
 }

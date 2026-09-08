@@ -27,9 +27,20 @@ export function DelegatedLifecycleActions({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function submit() {
+  async function submit(event: React.MouseEvent<HTMLButtonElement>) {
     setError("");
     setSaving(true);
+    const taskRow = event.currentTarget.closest("tr");
+    const activityRow = taskRow?.nextElementSibling as HTMLTableRowElement | null;
+    let hidden = false;
+    const hideAfterCap = action === "close"
+      ? window.setTimeout(() => {
+          hidden = true;
+          taskRow?.classList.add("hidden");
+          activityRow?.classList.add("hidden");
+          window.dispatchEvent(new CustomEvent("delegated-task-visibility", { detail: { taskId: delegatedTaskId, hidden: true } }));
+        }, 2_000)
+      : null;
 
     try {
       const res = await fetch(`/api/delegated/${delegatedTaskId}/${action}`, {
@@ -41,8 +52,20 @@ export function DelegatedLifecycleActions({
         throw new Error(data?.error ?? "Could not update delegated task");
       }
 
+      if (hideAfterCap) window.clearTimeout(hideAfterCap);
+      if (action === "close" && !hidden) {
+        taskRow?.classList.add("hidden");
+        activityRow?.classList.add("hidden");
+        window.dispatchEvent(new CustomEvent("delegated-task-visibility", { detail: { taskId: delegatedTaskId, hidden: true } }));
+      }
       router.refresh();
     } catch (err) {
+      if (hideAfterCap) window.clearTimeout(hideAfterCap);
+      if (hidden) {
+        taskRow?.classList.remove("hidden");
+        activityRow?.classList.remove("hidden");
+        window.dispatchEvent(new CustomEvent("delegated-task-visibility", { detail: { taskId: delegatedTaskId, hidden: false } }));
+      }
       setError(err instanceof Error ? err.message : "Could not update delegated task");
     } finally {
       setSaving(false);
