@@ -23,6 +23,15 @@ export async function PATCH(req: Request) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
+  if (body?.backfillFinancialYear === true) {
+    const now = new Date();
+    const startYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+    const start = toLocalDayStart(parseDateOnly(`${startYear}-07-01`));
+    const end = toLocalDayStart(parseDateOnly(`${startYear + 1}-07-01`));
+    const entries = await prisma.timeEntry.findMany({ where: { profile: { userId: user.id }, entryDate: { gte: start, lt: end }, endTime: { not: null } }, select: { entryDate: true }, distinct: ["entryDate"] });
+    await prisma.workLocationDay.createMany({ data: entries.map((entry) => ({ userId: user.id, date: entry.entryDate, isWfh: true })), skipDuplicates: true });
+    return Response.json({ count: entries.length });
+  }
   if ("defaultDays" in body) {
     const defaultDays = parseDefaultDays(body.defaultDays);
     if (!defaultDays) return Response.json({ error: "defaultDays must contain weekday numbers from 0 to 6" }, { status: 400 });

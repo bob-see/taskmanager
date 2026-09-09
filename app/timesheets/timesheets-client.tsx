@@ -202,6 +202,9 @@ export function TimesheetsClient({
   const [wfhDays, setWfhDays] = useState(initialWfhDays);
   const [savingWfh, setSavingWfh] = useState<string | null>(null);
   const [wfhSettingsOpen, setWfhSettingsOpen] = useState(false);
+  const [wfhReport, setWfhReport] = useState<{ financialYear: string; rows: Array<{ profileId: string; profileName: string; wfhMinutes: number; officeMinutes: number; totalMinutes: number }> } | null>(null);
+  const [wfhReportLoading, setWfhReportLoading] = useState(false);
+  const [wfhReportProfiles, setWfhReportProfiles] = useState<string[]>(initialProfiles.map((profile) => profile.id));
   const [selectedWeekStart, setSelectedWeekStart] = useState(initialWeekStart);
   const [roundingMode, setRoundingMode] = useState<TimesheetRoundingMode>("nearest-15");
   const [detailSelection, setDetailSelection] = useState<DetailSelection>(null);
@@ -393,6 +396,15 @@ export function TimesheetsClient({
     } finally {
       setSavingWfh(null);
     }
+  }
+
+  async function loadWfhReport() {
+    setWfhReportLoading(true);
+    try { const res = await fetch(`/api/timesheets/wfh-report?year=${new Date().getMonth() < 6 ? new Date().getFullYear() - 1 : new Date().getFullYear()}`); if (!res.ok) throw new Error("Could not load WFH report"); setWfhReport(await res.json()); } catch (error) { alert(error instanceof Error ? error.message : "Could not load WFH report"); } finally { setWfhReportLoading(false); }
+  }
+  async function backfillWfhFinancialYear() {
+    setWfhReportLoading(true);
+    try { const res = await fetch("/api/timesheets/wfh", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ backfillFinancialYear: true }) }); if (!res.ok) throw new Error("Could not mark financial-year days as WFH"); await loadWfhReport(); } catch (error) { alert(error instanceof Error ? error.message : "Could not mark financial-year days as WFH"); } finally { setWfhReportLoading(false); }
   }
 
   const entriesByProfileWeek = useMemo(() => {
@@ -1015,6 +1027,17 @@ export function TimesheetsClient({
               </div>
             </form>
           </article>
+        </section>
+
+        <section className="mt-6 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-lg font-semibold tracking-tight">Financial Year WFH Report</h2><p className="mt-1 text-sm text-[color:var(--tm-muted)]">Select the work profiles to include, then generate the current Australian financial-year summary.</p></div>
+            <div className="flex gap-2"><button type="button" className={buttonClass} disabled={wfhReportLoading} onClick={() => void backfillWfhFinancialYear()}>Mark logged days WFH</button><button type="button" className={primaryButtonClass} disabled={wfhReportLoading} onClick={() => void loadWfhReport()}>{wfhReportLoading ? "Generating…" : "Generate report"}</button></div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {profiles.map((profile) => <label key={profile.id} className="tm-choice flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input type="checkbox" checked={wfhReportProfiles.includes(profile.id)} onChange={(event) => setWfhReportProfiles((current) => event.target.checked ? [...current, profile.id] : current.filter((id) => id !== profile.id))} />{profile.name}</label>)}
+          </div>
+          {wfhReport && (() => { const rows = wfhReport.rows.filter((row) => wfhReportProfiles.includes(row.profileId)); const totals = rows.reduce((sum, row) => ({ wfh: sum.wfh + row.wfhMinutes, office: sum.office + row.officeMinutes, total: sum.total + row.totalMinutes }), { wfh: 0, office: 0, total: 0 }); return <div className="mt-4 overflow-x-auto"><p className="mb-3 text-sm font-medium">{wfhReport.financialYear}</p><table className="w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Profile</th><th className="p-2 text-right">WFH</th><th className="p-2 text-right">Office</th><th className="p-2 text-right">Total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.profileId} className="border-b"><td className="p-2">{row.profileName}</td><td className="p-2 text-right">{formatHours(row.wfhMinutes)}</td><td className="p-2 text-right">{formatHours(row.officeMinutes)}</td><td className="p-2 text-right">{formatHours(row.totalMinutes)}</td></tr>)}<tr className="font-semibold"><td className="p-2">Collective total</td><td className="p-2 text-right">{formatHours(totals.wfh)}</td><td className="p-2 text-right">{formatHours(totals.office)}</td><td className="p-2 text-right">{formatHours(totals.total)}</td></tr></tbody></table></div>; })()}
         </section>
 
         <section className="mt-6 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
