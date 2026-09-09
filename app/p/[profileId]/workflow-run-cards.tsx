@@ -110,7 +110,7 @@ export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pen
 
   const visibleRuns = runs.filter((run) => {
     const hasVisibleTask = run.tasks.some((task) => {
-      if (showDone) return Boolean(task.completedAt);
+      if (showDone) return task.completedAt !== null && calendarDate(task.completedOn ?? task.completedAt) === selectedDay;
       return !task.completedAt && !completedTaskIds.includes(task.id) && calendarDate(task.startDate) <= selectedDay;
     });
     return hasVisibleTask;
@@ -122,7 +122,7 @@ export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pen
     <div className="space-y-3">
       {visibleRuns.map((run) => {
         const visibleTasks = showDone
-          ? run.tasks.filter((task) => Boolean(task.completedAt))
+          ? run.tasks.filter((task) => task.completedAt !== null && calendarDate(task.completedOn ?? task.completedAt) === selectedDay)
           : run.tasks.filter((task) => !task.completedAt && !completedTaskIds.includes(task.id) && calendarDate(task.startDate) <= selectedDay);
         const completed = run.tasks.filter((task) => Boolean(task.completedAt)).length;
         const progress = run.tasks.length === 0 ? 100 : Math.round((completed / run.tasks.length) * 100);

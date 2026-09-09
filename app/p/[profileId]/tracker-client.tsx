@@ -157,7 +157,6 @@ type TaskView =
   | "paused"
   | "done"
   | "archived";
-type DoneRange = "today" | "week" | "month" | "all";
 type SortMode = "start-date" | "due-date" | "manual";
 type TaskSortColumn = "title" | "category" | "due" | "notes";
 type SortDirection = "asc" | "desc";
@@ -225,12 +224,6 @@ const TASK_VIEW_OPTIONS: Array<{ value: TaskView; label: string }> = [
   { value: "archived", label: "Archived" },
 ];
 
-const DONE_RANGE_OPTIONS: Array<{ value: DoneRange; label: string }> = [
-  { value: "today", label: "Today" },
-  { value: "week", label: "This Week" },
-  { value: "month", label: "This Month" },
-  { value: "all", label: "All" },
-];
 const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
   { value: "manual", label: "Manual" },
   { value: "start-date", label: "Start date" },
@@ -3218,7 +3211,6 @@ export function TrackerClient({
   const [selectedDay, setSelectedDay] = useState(initialDate);
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [taskView, setTaskView] = useState<TaskView>("active");
-  const [doneRange, setDoneRange] = useState<DoneRange>("today");
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [sortColumn, setSortColumn] = useState<TaskSortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
@@ -3371,7 +3363,6 @@ export function TrackerClient({
     setEditingCategoryValue("");
     setSelectedDay(clientDate);
     setTaskView("active");
-    setDoneRange("today");
     setSortMode("manual");
     setSortColumn(null);
     setSortDirection(null);
@@ -3708,24 +3699,7 @@ export function TrackerClient({
     [openTasks, sortMode]
   );
 
-  const doneTasks = visibleTasks.filter((task) => {
-    if (!task.completedOn) return false;
-
-    const completedDate = toDateOnly(task.completedOn);
-
-    switch (doneRange) {
-      case "today":
-        return completedDate === selectedDay;
-      case "week":
-        return completedDate >= weekStartValue && completedDate <= weekEndValue;
-      case "month":
-        return completedDate >= monthStartValue && completedDate <= monthEndValue;
-      case "all":
-        return true;
-      default:
-        return false;
-    }
-  });
+  const doneTasks = visibleTasks.filter((task) => isTaskCompletedOnDate(task, selectedDay));
 
   function isTaskVisibleInDayView(task: Task) {
     if (!task.projectId) return true;
@@ -5718,22 +5692,6 @@ export function TrackerClient({
             </div>
           ) : (
             <>
-              {taskView === "done" && (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  <select
-                    className={`${inputClass} py-1 text-sm`}
-                    value={doneRange}
-                    onChange={(e) => setDoneRange(e.target.value as DoneRange)}
-                  >
-                    {DONE_RANGE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value} className="text-black">
-                        Done: {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               <div className="tm-muted mb-4 text-sm">
                 Showing {dayViewTasks.length} {TASK_VIEW_OPTIONS.find((option) => option.value === taskView)?.label.toLowerCase()} task
                 {dayViewTasks.length === 1 ? "" : "s"}.
@@ -6683,22 +6641,6 @@ export function TrackerClient({
                     ))}
                   </select>
                 </label>
-                {taskView === "done" && (
-                  <label className="flex items-center gap-2 text-sm">
-                    <span className="tm-muted">Range</span>
-                    <select
-                      className={`${inputClass} min-w-[10rem]`}
-                      value={doneRange}
-                      onChange={(e) => setDoneRange(e.target.value as DoneRange)}
-                    >
-                      {DONE_RANGE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value} className="text-black">
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
               </div>
             </div>
 
