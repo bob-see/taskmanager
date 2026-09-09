@@ -201,7 +201,7 @@ export function TimesheetsClient({
   const [wfhDefaultDays, setWfhDefaultDays] = useState(initialWfhDefaultDays);
   const [wfhDays, setWfhDays] = useState(initialWfhDays);
   const [savingWfh, setSavingWfh] = useState<string | null>(null);
-  const [wfhSettingsOpen, setWfhSettingsOpen] = useState(false);
+  const [reportSettingsOpen, setReportSettingsOpen] = useState(false);
   const [wfhReport, setWfhReport] = useState<{ financialYear: string; rows: Array<{ profileId: string; profileName: string; wfhMinutes: number; officeMinutes: number; totalMinutes: number }> } | null>(null);
   const [wfhReportLoading, setWfhReportLoading] = useState(false);
   const [wfhReportProfiles, setWfhReportProfiles] = useState<string[]>(initialProfiles.map((profile) => profile.id));
@@ -769,22 +769,6 @@ export function TimesheetsClient({
             </div>
           </div>
 
-          <div className="relative">
-            <button type="button" aria-label="WFH settings" aria-expanded={wfhSettingsOpen} className={`${buttonClass} text-[22px] leading-none`} onClick={() => setWfhSettingsOpen((open) => !open)}>⚙</button>
-            {wfhSettingsOpen && (
-              <div className="tm-menu absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border p-2 shadow-2xl">
-                <p className="px-2 py-1 text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Auto WFH days</p>
-                <p className="px-2 pb-2 text-xs text-[color:var(--tm-muted)]">These preselect the weekly WFH row.</p>
-                {[1, 2, 3, 4, 5, 6, 0].map((day, index) => (
-                  <label key={day} className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-white/70">
-                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][index]}
-                    <input type="checkbox" checked={wfhDefaultDays.includes(day)} disabled={savingWfh === "defaults"} onChange={(event) => void updateWfhDefaults(day, event.target.checked)} />
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
               Rounding
@@ -929,7 +913,7 @@ export function TimesheetsClient({
                       : 0;
 
                     return (
-                      <div key={row.profileId} className="grid grid-cols-[minmax(72px,1fr)_minmax(0,2fr)_auto] items-center gap-2 text-sm">
+                      <div key={row.profileId} className="grid grid-cols-[7rem_minmax(0,1fr)_5rem] items-center gap-2 text-sm">
                         <span className="min-w-0 truncate font-medium">{row.profileName}</span>
                         <div className="h-2 overflow-hidden rounded-full bg-white/55">
                           <div
@@ -937,7 +921,7 @@ export function TimesheetsClient({
                             style={{ width: `${percentage}%`, backgroundColor: colour.bar }}
                           />
                         </div>
-                        <span className="shrink-0 text-[color:var(--tm-muted)]">
+                        <span className="shrink-0 text-right text-[color:var(--tm-muted)]">
                           {formatDuration(row.minutes)}
                         </span>
                       </div>
@@ -1032,7 +1016,25 @@ export function TimesheetsClient({
         <section className="mt-6 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-lg font-semibold tracking-tight">Financial Year WFH Report</h2><p className="mt-1 text-sm text-[color:var(--tm-muted)]">Select the work profiles to include, then generate the current Australian financial-year summary.</p></div>
-            <div className="flex gap-2"><button type="button" className={buttonClass} disabled={wfhReportLoading} onClick={() => void backfillWfhFinancialYear()}>Mark logged days WFH</button><button type="button" className={primaryButtonClass} disabled={wfhReportLoading} onClick={() => void loadWfhReport()}>{wfhReportLoading ? "Generating…" : "Generate report"}</button></div>
+            <div className="relative flex gap-2">
+              <button type="button" className={primaryButtonClass} disabled={wfhReportLoading} onClick={() => void loadWfhReport()}>{wfhReportLoading ? "Generating…" : "Generate report"}</button>
+              <button type="button" aria-label="Financial year report settings" aria-expanded={reportSettingsOpen} className={`${buttonClass} text-[22px] leading-none`} onClick={() => setReportSettingsOpen((open) => !open)}>⚙</button>
+              {reportSettingsOpen && (
+                <div className="tm-menu absolute right-0 top-full z-20 mt-2 w-64 rounded-lg border p-2 shadow-2xl">
+                  <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">WFH settings</p>
+                  <button type="button" className="w-full rounded-md px-2 py-2 text-left text-sm hover:bg-white/70" disabled={wfhReportLoading} onClick={() => { setReportSettingsOpen(false); void backfillWfhFinancialYear(); }}>Mark this FY&apos;s logged days WFH</button>
+                  <div className="my-2 border-t border-[color:var(--tm-border)]" />
+                  <p className="px-2 py-1 text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Auto WFH days</p>
+                  <p className="px-2 pb-2 text-xs text-[color:var(--tm-muted)]">These preselect the weekly WFH row.</p>
+                  {[1, 2, 3, 4, 5, 6, 0].map((day, index) => (
+                    <label key={day} className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-white/70">
+                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][index]}
+                      <input type="checkbox" checked={wfhDefaultDays.includes(day)} disabled={savingWfh === "defaults"} onChange={(event) => void updateWfhDefaults(day, event.target.checked)} />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {profiles.map((profile) => <label key={profile.id} className="tm-choice flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input type="checkbox" checked={wfhReportProfiles.includes(profile.id)} onChange={(event) => setWfhReportProfiles((current) => event.target.checked ? [...current, profile.id] : current.filter((id) => id !== profile.id))} />{profile.name}</label>)}
@@ -1060,7 +1062,7 @@ export function TimesheetsClient({
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[920px] text-sm">
               <thead>
-                <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                <tr className="border-b border-[color:var(--tm-border)] text-center text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                   <th className="px-3 py-2">Profile</th>
                   {weekDays.map((day) => (
                     <th key={day.key} className="px-3 py-2">
@@ -1073,25 +1075,25 @@ export function TimesheetsClient({
               </thead>
               <tbody>
                 <tr className="border-b border-[color:var(--tm-border)] bg-emerald-50/35">
-                  <td className="px-3 py-2 font-medium text-emerald-950">WFH</td>
+                  <td className="px-3 py-2 text-center font-medium text-emerald-950">WFH</td>
                   {weekDays.map((day) => (
                     <td key={day.key} className="px-3 py-2 text-center">
                       <input aria-label={`Working from home on ${formatDateHeading(day.key)}`} type="checkbox" checked={isWfhDay(day.key)} disabled={savingWfh === day.key} onChange={(event) => void updateWfhDay(day.key, event.target.checked)} />
                     </td>
                   ))}
-                  <td className="px-3 py-2 text-xs text-[color:var(--tm-muted)]">Whole day</td>
+                  <td className="px-3 py-2 text-center text-xs text-[color:var(--tm-muted)]">Whole day</td>
                 </tr>
                 {profiles.map((profile) => (
                   <tr key={profile.id} className="border-b border-[color:var(--tm-border)]">
-                    <td className="px-3 py-3 font-medium">{profile.name}</td>
+                    <td className="px-3 py-3 text-center font-medium">{profile.name}</td>
                     {weekDays.map((day) => {
                       const minutes = dailyProfileTotals.get(day.key)?.get(profile.id) ?? 0;
 
                       return (
-                        <td key={day.key} className="px-3 py-3">
+                        <td key={day.key} className="px-3 py-3 text-center">
                           <button
                             type="button"
-                            className={`w-full rounded-[10px] px-2 py-2 text-left transition ${
+                            className={`w-full rounded-[10px] px-2 py-2 text-center transition ${
                               detailSelection?.profileId === profile.id &&
                               detailSelection?.dayKey === day.key
                                 ? "bg-white shadow-sm ring-1 ring-[color:var(--tm-border)]"
@@ -1112,10 +1114,10 @@ export function TimesheetsClient({
                         </td>
                       );
                     })}
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 text-center">
                       <button
                         type="button"
-                        className={`w-full rounded-[10px] px-2 py-2 text-left transition ${
+                        className={`w-full rounded-[10px] px-2 py-2 text-center transition ${
                           detailSelection?.profileId === profile.id &&
                           detailSelection?.dayKey === "week"
                             ? "bg-white shadow-sm ring-1 ring-[color:var(--tm-border)]"
@@ -1145,13 +1147,13 @@ export function TimesheetsClient({
                   </tr>
                 ))}
                 <tr className="bg-white/40">
-                  <td className="px-3 py-3 font-semibold">Totals</td>
+                  <td className="px-3 py-3 text-center font-semibold">Totals</td>
                   {weekDays.map((day) => (
-                    <td key={day.key} className="px-3 py-3 font-semibold">
+                    <td key={day.key} className="px-3 py-3 text-center font-semibold">
                       {dayTotals.get(day.key) ? formatHours(dayTotals.get(day.key) ?? 0) : "—"}
                     </td>
                   ))}
-                  <td className="px-3 py-3 font-semibold">{formatHours(overallWeekTotal)}</td>
+                  <td className="px-3 py-3 text-center font-semibold">{formatHours(overallWeekTotal)}</td>
                 </tr>
               </tbody>
             </table>
