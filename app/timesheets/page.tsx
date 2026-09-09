@@ -21,7 +21,7 @@ export default async function TimesheetsPage() {
   const weekStart = toDateOnly(startOfWeek(parseDateOnly(initialDate)));
   const { weekStartDate, weekEndDate } = getWeekRange(weekStart);
 
-  const [profiles, entries, activeTimer] = await Promise.all([
+  const [profiles, entries, activeTimer, user, wfhDays] = await Promise.all([
     prisma.profile.findMany({
       where: {
         user: {
@@ -66,6 +66,11 @@ export default async function TimesheetsPage() {
       },
       select: timeEntrySelect,
     }),
+    prisma.user.findUnique({ where: { email }, select: { id: true, wfhDefaultDays: true } }),
+    prisma.workLocationDay.findMany({
+      where: { user: { email }, date: { gte: weekStartDate, lt: weekEndDate } },
+      select: { date: true, isWfh: true },
+    }),
   ]);
 
   return (
@@ -75,6 +80,8 @@ export default async function TimesheetsPage() {
       initialProfiles={profiles}
       initialEntries={entries.map(serializeTimeEntry)}
       initialActiveTimer={activeTimer ? serializeTimeEntry(activeTimer) : null}
+      initialWfhDefaultDays={Array.isArray(user?.wfhDefaultDays) ? user.wfhDefaultDays.filter((day): day is number => typeof day === "number" && Number.isInteger(day) && day >= 0 && day <= 6) : []}
+      initialWfhDays={wfhDays.map((day) => ({ date: toDateOnly(day.date), isWfh: day.isWfh }))}
     />
   );
 }

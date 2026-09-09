@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   const weekStart = parseWeekStartParam(searchParams.get("weekStart"));
   const { weekStartDate, weekEndDate } = getWeekRange(weekStart);
 
-  const [profiles, entries, activeTimer] = await Promise.all([
+  const [profiles, entries, activeTimer, user, wfhDays] = await Promise.all([
     prisma.profile.findMany({
       where: {
         userId: currentUser.user.id,
@@ -63,6 +63,11 @@ export async function GET(req: Request) {
       },
       select: timeEntrySelect,
     }),
+    prisma.user.findUnique({ where: { id: currentUser.user.id }, select: { wfhDefaultDays: true } }),
+    prisma.workLocationDay.findMany({
+      where: { userId: currentUser.user.id, date: { gte: weekStartDate, lt: weekEndDate } },
+      select: { date: true, isWfh: true },
+    }),
   ]);
 
   return Response.json({
@@ -70,5 +75,7 @@ export async function GET(req: Request) {
     profiles,
     entries: entries.map(serializeTimeEntry),
     activeTimer: activeTimer ? serializeTimeEntry(activeTimer) : null,
+    wfhDefaultDays: Array.isArray(user?.wfhDefaultDays) ? user.wfhDefaultDays.filter((day): day is number => typeof day === "number" && Number.isInteger(day) && day >= 0 && day <= 6) : [],
+    wfhDays: wfhDays.map((day) => ({ date: day.date.toISOString().slice(0, 10), isWfh: day.isWfh })),
   });
 }

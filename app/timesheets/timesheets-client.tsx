@@ -44,6 +44,8 @@ type TimesheetEntry = {
   updatedAt: string;
 };
 
+type WfhDay = { date: string; isWfh: boolean };
+
 type DetailSelection =
   | {
       profileId: string;
@@ -71,6 +73,8 @@ type TimesheetsClientProps = {
   initialProfiles: TimesheetProfile[];
   initialEntries: TimesheetEntry[];
   initialActiveTimer: TimesheetEntry | null;
+  initialWfhDefaultDays: number[];
+  initialWfhDays: WfhDay[];
 };
 
 const inputClass =
@@ -187,11 +191,17 @@ export function TimesheetsClient({
   initialProfiles,
   initialEntries,
   initialActiveTimer,
+  initialWfhDefaultDays,
+  initialWfhDays,
 }: TimesheetsClientProps) {
   const [currentDateValue, setCurrentDateValue] = useState(initialDate);
   const [profiles, setProfiles] = useState(initialProfiles);
   const [entries, setEntries] = useState(initialEntries);
   const [activeTimer, setActiveTimer] = useState<TimesheetEntry | null>(initialActiveTimer);
+  const [wfhDefaultDays, setWfhDefaultDays] = useState(initialWfhDefaultDays);
+  const [wfhDays, setWfhDays] = useState(initialWfhDays);
+  const [savingWfh, setSavingWfh] = useState<string | null>(null);
+  const [wfhSettingsOpen, setWfhSettingsOpen] = useState(false);
   const [selectedWeekStart, setSelectedWeekStart] = useState(initialWeekStart);
   const [roundingMode, setRoundingMode] = useState<TimesheetRoundingMode>("nearest-15");
   const [detailSelection, setDetailSelection] = useState<DetailSelection>(null);
@@ -295,11 +305,15 @@ export function TimesheetsClient({
         profiles: TimesheetProfile[];
         entries: TimesheetEntry[];
         activeTimer: TimesheetEntry | null;
+        wfhDefaultDays: number[];
+        wfhDays: WfhDay[];
       };
 
       setProfiles(data.profiles);
       setEntries(data.entries);
       setActiveTimer(data.activeTimer);
+      setWfhDefaultDays(data.wfhDefaultDays);
+      setWfhDays(data.wfhDays);
       setSelectedWeekStart(data.weekStart);
       setTimerForm((prev) => ({
         ...prev,
@@ -347,6 +361,39 @@ export function TimesheetsClient({
 
     return map;
   }, [entries]);
+
+  const wfhOverrides = useMemo(() => new Map(wfhDays.map((day) => [day.date, day.isWfh])), [wfhDays]);
+  function isWfhDay(date: string) {
+    return wfhOverrides.get(date) ?? wfhDefaultDays.includes(parseDateOnly(date).getDay());
+  }
+
+  async function updateWfhDay(date: string, isWfh: boolean) {
+    if (savingWfh) return;
+    setSavingWfh(date);
+    try {
+      const res = await fetch("/api/timesheets/wfh", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, isWfh }) });
+      if (!res.ok) throw new Error("Could not save WFH day");
+      setWfhDays((current) => [...current.filter((day) => day.date !== date), { date, isWfh }]);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not save WFH day");
+    } finally {
+      setSavingWfh(null);
+    }
+  }
+
+  async function updateWfhDefaults(day: number, isWfh: boolean) {
+    const next = isWfh ? [...new Set([...wfhDefaultDays, day])].sort() : wfhDefaultDays.filter((value) => value !== day);
+    setSavingWfh("defaults");
+    try {
+      const res = await fetch("/api/timesheets/wfh", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ defaultDays: next }) });
+      if (!res.ok) throw new Error("Could not save WFH defaults");
+      setWfhDefaultDays(next);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not save WFH defaults");
+    } finally {
+      setSavingWfh(null);
+    }
+  }
 
   const entriesByProfileWeek = useMemo(() => {
     const map = new Map<string, TimesheetEntry[]>();
@@ -411,6 +458,11 @@ export function TimesheetsClient({
     () => Array.from(dayTotals.values()).reduce((sum, value) => sum + value, 0),
     [dayTotals]
   );
+  const wfhWeekTotal = useMemo(
+    () => weekDays.reduce((sum, day) => sum + (isWfhDay(day.key) ? dayTotals.get(day.key) ?? 0 : 0), 0),
+    [dayTotals, weekDays, wfhDays, wfhDefaultDays]
+  );
+  const officeWeekTotal = overallWeekTotal - wfhWeekTotal;
 
   const selectedEntries = useMemo(() => {
     if (!detailSelection) {
@@ -700,9 +752,25 @@ export function TimesheetsClient({
             >
               Next week
             </button>
-            <div className="rounded-[10px] border border-[color:var(--tm-border)] bg-white/70 px-3 py-2 text-sm">
+            <div className="rounded-[12px] border border-amber-800/20 bg-[linear-gradient(135deg,rgba(255,252,244,0.96),rgba(245,226,190,0.72))] px-4 py-2 text-sm font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_2px_5px_rgba(120,78,24,0.08)]">
               Week of {formatDateHeading(selectedWeekStart)}
             </div>
+          </div>
+
+          <div className="relative">
+            <button type="button" aria-label="WFH settings" aria-expanded={wfhSettingsOpen} className={`${buttonClass} text-[22px] leading-none`} onClick={() => setWfhSettingsOpen((open) => !open)}>⚙</button>
+            {wfhSettingsOpen && (
+              <div className="tm-menu absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border p-2 shadow-2xl">
+                <p className="px-2 py-1 text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Auto WFH days</p>
+                <p className="px-2 pb-2 text-xs text-[color:var(--tm-muted)]">These preselect the weekly WFH row.</p>
+                {[1, 2, 3, 4, 5, 6, 0].map((day, index) => (
+                  <label key={day} className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-white/70">
+                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][index]}
+                    <input type="checkbox" checked={wfhDefaultDays.includes(day)} disabled={savingWfh === "defaults"} onChange={(event) => void updateWfhDefaults(day, event.target.checked)} />
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -959,8 +1027,10 @@ export function TimesheetsClient({
                   : "Each day is rounded once, then apportioned across profiles. Click a day or weekly total to inspect the underlying entries."}
               </p>
             </div>
-            <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1 text-sm font-medium">
-              Overall {formatHours(overallWeekTotal)}
+            <div className="flex flex-wrap justify-end gap-2 text-sm font-medium">
+              <div className="rounded-full border border-emerald-700/20 bg-emerald-50/60 px-3 py-1">WFH {formatHours(wfhWeekTotal)}</div>
+              <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1">Office {formatHours(officeWeekTotal)}</div>
+              <div className="rounded-full border border-[color:var(--tm-border)] bg-white/70 px-3 py-1">Overall {formatHours(overallWeekTotal)}</div>
             </div>
           </div>
 
@@ -979,6 +1049,15 @@ export function TimesheetsClient({
                 </tr>
               </thead>
               <tbody>
+                <tr className="border-b border-[color:var(--tm-border)] bg-emerald-50/35">
+                  <td className="px-3 py-2 font-medium text-emerald-950">WFH</td>
+                  {weekDays.map((day) => (
+                    <td key={day.key} className="px-3 py-2 text-center">
+                      <input aria-label={`Working from home on ${formatDateHeading(day.key)}`} type="checkbox" checked={isWfhDay(day.key)} disabled={savingWfh === day.key} onChange={(event) => void updateWfhDay(day.key, event.target.checked)} />
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-xs text-[color:var(--tm-muted)]">Whole day</td>
+                </tr>
                 {profiles.map((profile) => (
                   <tr key={profile.id} className="border-b border-[color:var(--tm-border)]">
                     <td className="px-3 py-3 font-medium">{profile.name}</td>
