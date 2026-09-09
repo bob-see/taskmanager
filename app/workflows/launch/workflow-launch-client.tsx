@@ -27,6 +27,8 @@ type Workflow = {
 type Profile = { id: string; name: string };
 type Override = { startDate: string; dueDate: string; notes: string; isPriority: boolean };
 
+const completedActionClassName = "inline-flex min-h-10 items-center justify-center rounded-[10px] border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-4 py-2 text-sm font-semibold text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)] transition hover:border-emerald-700/40 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]";
+
 function createOverrides(workflow: Workflow, date: string): Record<string, Override> {
   return Object.fromEntries(workflow.tasks.map((task) => {
     const dates = calculateWorkflowDates(date, task);
@@ -51,6 +53,9 @@ export function WorkflowLaunchClient() {
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ id: string; launchName: string; workflowNameSnapshot: string; tasks: { title: string; startDate: string; dueAt: string | null }[] } | null>(null);
+  const selectedProfile = profiles.find((profile) => profile.id === profileId);
+  const launchedFromProfile = requestedProfileId !== null;
+  const profileHref = profileId ? `/p/${encodeURIComponent(profileId)}` : "/workflows";
 
   useEffect(() => {
     void Promise.all([
@@ -145,7 +150,20 @@ export function WorkflowLaunchClient() {
       <ol className="tm-card mt-6 space-y-2 rounded-2xl p-5">
         {result.tasks.map((task) => <li key={`${task.title}-${task.startDate}`} className="flex justify-between gap-4 border-b border-[color:var(--tm-border)] py-2 text-sm last:border-0"><span>{task.title}</span><span className="text-[color:var(--tm-muted)]">{task.startDate}{task.dueAt ? ` → ${task.dueAt.slice(0, 10)}` : ""}</span></li>)}
       </ol>
-      <div className="mt-5 flex gap-2"><Link href="/workflows" className="tm-button-primary inline-flex items-center rounded-[10px] border px-4 py-2 text-sm">Back to Workflows</Link><button type="button" className="tm-button-secondary" onClick={() => setResult(null)}>Launch again</button></div>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {launchedFromProfile ? (
+          <>
+            <Link href={profileHref} className={completedActionClassName}>Back to {selectedProfile?.name ?? "Profile"}</Link>
+            <Link href="/workflows" className="tm-button-secondary">Go to Workflows</Link>
+          </>
+        ) : (
+          <>
+            <Link href="/workflows" className={completedActionClassName}>Back to Workflows</Link>
+            <Link href={profileHref} className="tm-button-secondary">Go to {selectedProfile?.name ?? "Profile"}</Link>
+          </>
+        )}
+        <button type="button" className="tm-button-secondary" onClick={() => setResult(null)}>Launch again</button>
+      </div>
     </main>
   );
 
