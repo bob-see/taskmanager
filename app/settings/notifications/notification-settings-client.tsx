@@ -32,11 +32,6 @@ type SubscriptionStatus =
 type NotificationSettingsClientProps = {
   initialNotificationPushEnabled: boolean;
   initialPreferences: NotificationPreference[];
-  initialDailyTaskDigestSettings: {
-    time: string;
-    timeZone: string;
-    daysOfWeek: number[];
-  };
 };
 
 const labels: Record<string, string> = {
@@ -133,7 +128,6 @@ async function readSavedSubscriptions() {
 export function NotificationSettingsClient({
   initialNotificationPushEnabled,
   initialPreferences,
-  initialDailyTaskDigestSettings,
 }: NotificationSettingsClientProps) {
   const [notificationPushEnabled, setNotificationPushEnabled] = useState(
     initialNotificationPushEnabled
@@ -142,13 +136,6 @@ export function NotificationSettingsClient({
   const [savedPreferences, setSavedPreferences] = useState(initialPreferences);
   const [savedNotificationPushEnabled, setSavedNotificationPushEnabled] = useState(
     initialNotificationPushEnabled
-  );
-  const [dailyTaskDigestSettings, setDailyTaskDigestSettings] = useState(() => ({
-    ...initialDailyTaskDigestSettings,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || initialDailyTaskDigestSettings.timeZone,
-  }));
-  const [savedDailyTaskDigestSettings, setSavedDailyTaskDigestSettings] = useState(
-    initialDailyTaskDigestSettings
   );
   const [pushStatus, setPushStatus] = useState<SubscriptionStatus>("loading");
   const [subscriptionCount, setSubscriptionCount] = useState(0);
@@ -164,32 +151,27 @@ export function NotificationSettingsClient({
       JSON.stringify({
         notificationPushEnabled,
         preferences,
-        dailyTaskDigestSettings,
       }) !==
       JSON.stringify({
         notificationPushEnabled: savedNotificationPushEnabled,
         preferences: savedPreferences,
-        dailyTaskDigestSettings: savedDailyTaskDigestSettings,
       }),
     [
       notificationPushEnabled,
       preferences,
       savedNotificationPushEnabled,
       savedPreferences,
-      dailyTaskDigestSettings,
-      savedDailyTaskDigestSettings,
     ]
   );
 
   const saveNotificationSettings = useCallback(
-    async (nextPushEnabled = notificationPushEnabled, nextPreferences = preferences, nextDailyTaskDigestSettings = dailyTaskDigestSettings) => {
+    async (nextPushEnabled = notificationPushEnabled, nextPreferences = preferences) => {
       const res = await fetch("/api/notifications/preferences", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           notificationPushEnabled: nextPushEnabled,
           preferences: nextPreferences,
-          dailyTaskDigestSettings: nextDailyTaskDigestSettings,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -202,11 +184,9 @@ export function NotificationSettingsClient({
       setSavedNotificationPushEnabled(data.notificationPushEnabled);
       setPreferences(data.preferences);
       setSavedPreferences(data.preferences);
-      setDailyTaskDigestSettings(data.dailyTaskDigestSettings);
-      setSavedDailyTaskDigestSettings(data.dailyTaskDigestSettings);
       return data;
     },
-    [notificationPushEnabled, preferences, dailyTaskDigestSettings]
+    [notificationPushEnabled, preferences]
   );
 
   const refreshPushStatus = useCallback(async () => {
@@ -534,26 +514,10 @@ export function NotificationSettingsClient({
         <div className="border-b border-[color:var(--tm-border)] p-4 md:p-5">
           <h2 className="text-base font-semibold">Daily Task Digest</h2>
           <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
-            One helpful morning overview of your own tasks. Delegated tasks remain controlled separately below.
+            One helpful overview of your own tasks at 8:30 am Brisbane time, Monday to Friday. Delegated tasks remain controlled separately below.
           </p>
         </div>
-        <div className="grid gap-4 p-4 md:grid-cols-2 md:p-5">
-          <label className="text-sm font-medium">
-            Delivery time
-            <input
-              className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2"
-              type="time"
-              value={dailyTaskDigestSettings.time}
-              onChange={(event) => setDailyTaskDigestSettings((current) => ({ ...current, time: event.target.value }))}
-            />
-          </label>
-          <div className="text-sm">
-            <p className="font-medium">Timezone</p>
-            <p className="mt-2 rounded-[10px] border border-[color:var(--tm-border)] px-3 py-2 text-[color:var(--tm-muted)]">
-              {dailyTaskDigestSettings.timeZone}
-            </p>
-            <p className="mt-2 text-xs text-[color:var(--tm-muted)]">Taken from this device when you save. Weekdays only for now.</p>
-          </div>
+        <div className="p-4 md:p-5">
           <label className={toggleClass(dailyDigestPushEnabled)}>
             <input
               type="checkbox"

@@ -1,9 +1,7 @@
-export const DEFAULT_DAILY_TASK_DIGEST_TIME = "08:30";
 export const DEFAULT_DAILY_TASK_DIGEST_DAYS = [1, 2, 3, 4, 5] as const;
+export const DAILY_TASK_DIGEST_TIME_ZONE = "Australia/Brisbane";
 
 export type DailyTaskDigestSettings = {
-  time: string;
-  timeZone: string;
   daysOfWeek: number[];
 };
 
@@ -32,7 +30,6 @@ export type DailyTaskDigest = {
   }>;
 };
 
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const weekdayByName: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -43,42 +40,12 @@ const weekdayByName: Record<string, number> = {
   Sat: 6,
 };
 
-export function isValidTimeZone(value: unknown): value is string {
-  if (typeof value !== "string" || !value.trim()) return false;
-  try {
-    new Intl.DateTimeFormat("en-AU", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function normaliseDailyTaskDigestSettings(
-  value: unknown,
-  fallbackTimeZone = "Australia/Brisbane"
-): DailyTaskDigestSettings {
+export function normaliseDailyTaskDigestSettings(value: unknown): DailyTaskDigestSettings {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  const time = typeof input.time === "string" && TIME_RE.test(input.time)
-    ? input.time
-    : DEFAULT_DAILY_TASK_DIGEST_TIME;
-  const timeZone = isValidTimeZone(input.timeZone) ? input.timeZone : fallbackTimeZone;
   const daysOfWeek = Array.isArray(input.daysOfWeek)
     ? [...new Set(input.daysOfWeek.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6))].sort()
     : [...DEFAULT_DAILY_TASK_DIGEST_DAYS];
-  return { time, timeZone, daysOfWeek };
-}
-
-export function parseDailyTaskDigestSettings(value: unknown): DailyTaskDigestSettings | null {
-  if (!value || typeof value !== "object") return null;
-  const input = value as Record<string, unknown>;
-  if (
-    typeof input.time !== "string" ||
-    !TIME_RE.test(input.time) ||
-    !isValidTimeZone(input.timeZone) ||
-    !Array.isArray(input.daysOfWeek) ||
-    input.daysOfWeek.some((day) => !Number.isInteger(day) || day < 0 || day > 6)
-  ) return null;
-  return normaliseDailyTaskDigestSettings(input, input.timeZone);
+  return { daysOfWeek };
 }
 
 export function getLocalDigestSnapshot(now: Date, timeZone: string) {
@@ -100,19 +67,15 @@ export function getLocalDigestSnapshot(now: Date, timeZone: string) {
   };
 }
 
-export function isDailyTaskDigestDue(
+export function getDailyTaskDigestSnapshot(now: Date) {
+  return getLocalDigestSnapshot(now, DAILY_TASK_DIGEST_TIME_ZONE);
+}
+
+export function isDailyTaskDigestScheduledToday(
   now: Date,
-  settings: DailyTaskDigestSettings,
-  graceMinutes = 5
+  settings: DailyTaskDigestSettings
 ) {
-  const snapshot = getLocalDigestSnapshot(now, settings.timeZone);
-  const [hour, minute] = settings.time.split(":").map(Number);
-  const scheduledMinute = hour * 60 + minute;
-  return (
-    settings.daysOfWeek.includes(snapshot.dayOfWeek) &&
-    snapshot.minuteOfDay >= scheduledMinute &&
-    snapshot.minuteOfDay < scheduledMinute + graceMinutes
-  );
+  return settings.daysOfWeek.includes(getDailyTaskDigestSnapshot(now).dayOfWeek);
 }
 
 function dateKey(value: Date) {

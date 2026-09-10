@@ -51,11 +51,11 @@ preferences.
 
 ## Daily Task Digest
 
-The scheduled `/api/cron/daily-task-digest` route runs every five minutes via
-`vercel.json`. It authenticates with `CRON_SECRET`, then evaluates each user's
-saved timezone and chosen local delivery time (default 8:30 am). The default
-schedule is Monday to Friday; settings are stored as JSON with `daysOfWeek`, so
-weekend selection can be added without another schema change.
+The scheduled `/api/cron/daily-task-digest` route runs once a day at 8:30 am
+Brisbane time (10:30 pm UTC) via `vercel.json`. This is compatible with Vercel
+Hobby's one-daily-cron limit. The default schedule is Monday to Friday; the
+existing JSON settings retain `daysOfWeek`, so an optional weekend preference
+can be added later without another schema change.
 
 The digest includes incomplete tasks in profiles owned by that user, including
 workflow-generated tasks. It deliberately excludes every task with a delegated

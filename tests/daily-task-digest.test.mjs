@@ -3,8 +3,8 @@ import test from "node:test";
 import {
   buildDailyTaskDigest,
   formatDailyTaskDigestBody,
-  getLocalDigestSnapshot,
-  isDailyTaskDigestDue,
+  getDailyTaskDigestSnapshot,
+  isDailyTaskDigestScheduledToday,
   normaliseDailyTaskDigestSettings,
 } from "../app/lib/daily-task-digest.ts";
 
@@ -34,27 +34,23 @@ test("daily digest includes owned eligible tasks once and excludes delegated or 
   );
 });
 
-test("weekday scheduling honours the configured local timezone and five-minute scheduler window", () => {
+test("weekday scheduling uses the shared Brisbane 8:30 am schedule", () => {
   const settings = normaliseDailyTaskDigestSettings({
-    time: "08:30",
-    timeZone: "America/Los_Angeles",
     daysOfWeek: [1, 2, 3, 4, 5],
   });
-  const mondayAtTime = new Date("2026-09-14T15:32:00.000Z"); // Monday 8:32 am PDT
-  const sundayAtTime = new Date("2026-09-13T15:32:00.000Z");
+  const mondayAtTime = new Date("2026-09-13T22:30:00.000Z"); // Monday 8:30 am AEST
+  const sundayAtTime = new Date("2026-09-12T22:30:00.000Z");
 
-  assert.deepEqual(getLocalDigestSnapshot(mondayAtTime, settings.timeZone), {
+  assert.deepEqual(getDailyTaskDigestSnapshot(mondayAtTime), {
     date: "2026-09-14",
-    minuteOfDay: 8 * 60 + 32,
+    minuteOfDay: 8 * 60 + 30,
     dayOfWeek: 1,
   });
-  assert.equal(isDailyTaskDigestDue(mondayAtTime, settings), true);
-  assert.equal(isDailyTaskDigestDue(new Date("2026-09-14T15:35:00.000Z"), settings), false);
-  assert.equal(isDailyTaskDigestDue(sundayAtTime, settings), false);
+  assert.equal(isDailyTaskDigestScheduledToday(mondayAtTime, settings), true);
+  assert.equal(isDailyTaskDigestScheduledToday(sundayAtTime, settings), false);
 });
 
-test("date selection follows the user's timezone rather than the server calendar", () => {
+test("digest dates follow Brisbane rather than the server calendar", () => {
   const now = new Date("2026-09-10T00:30:00.000Z");
-  assert.equal(getLocalDigestSnapshot(now, "Australia/Brisbane").date, "2026-09-10");
-  assert.equal(getLocalDigestSnapshot(now, "America/Los_Angeles").date, "2026-09-09");
+  assert.equal(getDailyTaskDigestSnapshot(now).date, "2026-09-10");
 });

@@ -37,7 +37,6 @@ export default async function NotificationSettingsPage() {
       <NotificationSettingsClient
         initialNotificationPushEnabled={settings.notificationPushEnabled}
         initialPreferences={settings.preferences}
-        initialDailyTaskDigestSettings={settings.dailyTaskDigestSettings}
       />
     </main>
   );

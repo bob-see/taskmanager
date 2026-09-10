@@ -1,10 +1,6 @@
 import type { NotificationType, Prisma, PrismaClient } from "@prisma/client";
 import { deliverWebPushNotification } from "@/app/lib/push-delivery";
 import { prisma } from "@/app/lib/prisma";
-import {
-  normaliseDailyTaskDigestSettings,
-  type DailyTaskDigestSettings,
-} from "@/app/lib/daily-task-digest";
 
 export const configurableNotificationTypes = [
   "DELEGATED_TASK_RECEIVED",
@@ -177,7 +173,7 @@ export async function getNotificationPreferences(
   const [user, preferences] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
-      select: { notificationPushEnabled: true, dailyTaskDigestSettings: true },
+      select: { notificationPushEnabled: true },
     }),
     db.notificationPreference.findMany({
       where: {
@@ -198,9 +194,6 @@ export async function getNotificationPreferences(
 
   return {
     notificationPushEnabled: user?.notificationPushEnabled ?? false,
-    dailyTaskDigestSettings: normaliseDailyTaskDigestSettings(
-      user?.dailyTaskDigestSettings
-    ),
     preferences: configurableNotificationTypes.map((notificationType) => {
       const preference = preferencesByType.get(notificationType);
       return {
@@ -217,7 +210,6 @@ export async function saveNotificationPreferences(
   input: {
     notificationPushEnabled: boolean;
     preferences: NotificationPreferenceValue[];
-    dailyTaskDigestSettings?: DailyTaskDigestSettings;
   },
   db: NotificationDatabase = prisma
 ) {
@@ -230,9 +222,6 @@ export async function saveNotificationPreferences(
     where: { id: userId },
     data: {
       notificationPushEnabled: input.notificationPushEnabled,
-      ...(input.dailyTaskDigestSettings
-        ? { dailyTaskDigestSettings: input.dailyTaskDigestSettings }
-        : {}),
     },
     select: { id: true },
   });

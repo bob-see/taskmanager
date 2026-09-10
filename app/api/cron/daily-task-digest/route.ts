@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import {
   buildDailyTaskDigest,
   formatDailyTaskDigestBody,
-  getLocalDigestSnapshot,
-  isDailyTaskDigestDue,
+  getDailyTaskDigestSnapshot,
+  isDailyTaskDigestScheduledToday,
   normaliseDailyTaskDigestSettings,
 } from "@/app/lib/daily-task-digest";
 import { deliverWebPushNotification } from "@/app/lib/push-delivery";
@@ -54,10 +54,10 @@ export async function GET(req: Request) {
 
   for (const user of users) {
     const settings = normaliseDailyTaskDigestSettings(user.dailyTaskDigestSettings);
-    if (!isDailyTaskDigestDue(now, settings)) continue;
+    if (!isDailyTaskDigestScheduledToday(now, settings)) continue;
     result.due += 1;
 
-    const snapshot = getLocalDigestSnapshot(now, settings.timeZone);
+    const snapshot = getDailyTaskDigestSnapshot(now);
     const digestDate = dateOnlyToUtcDate(snapshot.date);
     const tasks = await prisma.task.findMany({
       where: {
