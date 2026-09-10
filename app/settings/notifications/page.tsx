@@ -29,14 +29,15 @@ export default async function NotificationSettingsPage() {
           Notifications
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-[color:var(--tm-muted)]">
-          Choose which delegated task events appear in the notification centre
-          and manage browser notification subscriptions for this device.
+          Set a calm daily task digest, choose which delegated task events appear
+          in the notification centre, and manage browser notification subscriptions.
         </p>
       </div>
 
       <NotificationSettingsClient
         initialNotificationPushEnabled={settings.notificationPushEnabled}
         initialPreferences={settings.preferences}
+        initialDailyTaskDigestSettings={settings.dailyTaskDigestSettings}
       />
     </main>
   );

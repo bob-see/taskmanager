@@ -32,6 +32,11 @@ type SubscriptionStatus =
 type NotificationSettingsClientProps = {
   initialNotificationPushEnabled: boolean;
   initialPreferences: NotificationPreference[];
+  initialDailyTaskDigestSettings: {
+    time: string;
+    timeZone: string;
+    daysOfWeek: number[];
+  };
 };
 
 const labels: Record<string, string> = {
@@ -41,6 +46,7 @@ const labels: Record<string, string> = {
   DELEGATED_TASK_NOTE_ADDED: "Task note",
   DELEGATED_TASK_COMPLETED: "Task completed",
   DELEGATED_TASK_CLOSED: "Task closed",
+  DAILY_TASK_DIGEST: "Daily task digest",
 };
 
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
@@ -127,6 +133,7 @@ async function readSavedSubscriptions() {
 export function NotificationSettingsClient({
   initialNotificationPushEnabled,
   initialPreferences,
+  initialDailyTaskDigestSettings,
 }: NotificationSettingsClientProps) {
   const [notificationPushEnabled, setNotificationPushEnabled] = useState(
     initialNotificationPushEnabled
@@ -135,6 +142,13 @@ export function NotificationSettingsClient({
   const [savedPreferences, setSavedPreferences] = useState(initialPreferences);
   const [savedNotificationPushEnabled, setSavedNotificationPushEnabled] = useState(
     initialNotificationPushEnabled
+  );
+  const [dailyTaskDigestSettings, setDailyTaskDigestSettings] = useState(() => ({
+    ...initialDailyTaskDigestSettings,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || initialDailyTaskDigestSettings.timeZone,
+  }));
+  const [savedDailyTaskDigestSettings, setSavedDailyTaskDigestSettings] = useState(
+    initialDailyTaskDigestSettings
   );
   const [pushStatus, setPushStatus] = useState<SubscriptionStatus>("loading");
   const [subscriptionCount, setSubscriptionCount] = useState(0);
@@ -150,27 +164,32 @@ export function NotificationSettingsClient({
       JSON.stringify({
         notificationPushEnabled,
         preferences,
+        dailyTaskDigestSettings,
       }) !==
       JSON.stringify({
         notificationPushEnabled: savedNotificationPushEnabled,
         preferences: savedPreferences,
+        dailyTaskDigestSettings: savedDailyTaskDigestSettings,
       }),
     [
       notificationPushEnabled,
       preferences,
       savedNotificationPushEnabled,
       savedPreferences,
+      dailyTaskDigestSettings,
+      savedDailyTaskDigestSettings,
     ]
   );
 
   const saveNotificationSettings = useCallback(
-    async (nextPushEnabled = notificationPushEnabled, nextPreferences = preferences) => {
+    async (nextPushEnabled = notificationPushEnabled, nextPreferences = preferences, nextDailyTaskDigestSettings = dailyTaskDigestSettings) => {
       const res = await fetch("/api/notifications/preferences", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           notificationPushEnabled: nextPushEnabled,
           preferences: nextPreferences,
+          dailyTaskDigestSettings: nextDailyTaskDigestSettings,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -183,9 +202,11 @@ export function NotificationSettingsClient({
       setSavedNotificationPushEnabled(data.notificationPushEnabled);
       setPreferences(data.preferences);
       setSavedPreferences(data.preferences);
+      setDailyTaskDigestSettings(data.dailyTaskDigestSettings);
+      setSavedDailyTaskDigestSettings(data.dailyTaskDigestSettings);
       return data;
     },
-    [notificationPushEnabled, preferences]
+    [notificationPushEnabled, preferences, dailyTaskDigestSettings]
   );
 
   const refreshPushStatus = useCallback(async () => {
@@ -446,6 +467,9 @@ export function NotificationSettingsClient({
     pushStatus === "unsubscribed" ||
     pushStatus === "failed";
   const canDisable = pushStatus === "subscribed";
+  const dailyDigestPushEnabled = preferences.find(
+    (preference) => preference.notificationType === "DAILY_TASK_DIGEST"
+  )?.pushEnabled ?? false;
 
   return (
     <div className="space-y-6">
@@ -508,13 +532,49 @@ export function NotificationSettingsClient({
 
       <section className="tm-card rounded-[14px] border shadow-sm">
         <div className="border-b border-[color:var(--tm-border)] p-4 md:p-5">
+          <h2 className="text-base font-semibold">Daily Task Digest</h2>
+          <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
+            One helpful morning overview of your own tasks. Delegated tasks remain controlled separately below.
+          </p>
+        </div>
+        <div className="grid gap-4 p-4 md:grid-cols-2 md:p-5">
+          <label className="text-sm font-medium">
+            Delivery time
+            <input
+              className="tm-input mt-2 w-full rounded-[10px] border px-3 py-2"
+              type="time"
+              value={dailyTaskDigestSettings.time}
+              onChange={(event) => setDailyTaskDigestSettings((current) => ({ ...current, time: event.target.value }))}
+            />
+          </label>
+          <div className="text-sm">
+            <p className="font-medium">Timezone</p>
+            <p className="mt-2 rounded-[10px] border border-[color:var(--tm-border)] px-3 py-2 text-[color:var(--tm-muted)]">
+              {dailyTaskDigestSettings.timeZone}
+            </p>
+            <p className="mt-2 text-xs text-[color:var(--tm-muted)]">Taken from this device when you save. Weekdays only for now.</p>
+          </div>
+          <label className={toggleClass(dailyDigestPushEnabled)}>
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={dailyDigestPushEnabled}
+              onChange={(event) => setPushEnabled("DAILY_TASK_DIGEST", event.target.checked)}
+            />
+            Daily digest Push
+          </label>
+        </div>
+      </section>
+
+      <section className="tm-card rounded-[14px] border shadow-sm">
+        <div className="border-b border-[color:var(--tm-border)] p-4 md:p-5">
           <h2 className="text-base font-semibold">Delegated Tasks</h2>
           <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
             Delegated task events use these settings for both in-app and Push notifications.
           </p>
         </div>
         <div className="divide-y divide-[color:var(--tm-border)]">
-          {preferences.map((preference) => (
+          {preferences.filter((preference) => preference.notificationType !== "DAILY_TASK_DIGEST").map((preference) => (
             <div
               key={preference.notificationType}
               className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center md:p-5"

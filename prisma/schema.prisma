@@ -30,9 +30,11 @@ model User {
   actedNotifications      Notification[]           @relation("NotificationActor")
   notificationPreferences NotificationPreference[]
   notificationPushEnabled Boolean                  @default(false)
+  dailyTaskDigestSettings Json?
   weeklySummarySettings   Json?
   wfhDefaultDays          Json?
   pushSubscriptions       PushSubscription[]
+  dailyTaskDigests        DailyTaskDigest[]
   workLocationDays        WorkLocationDay[]
   workflows               Workflow[]
   workflowRuns            WorkflowRun[]
@@ -50,6 +52,23 @@ enum NotificationType {
   DELEGATED_TASK_NOTE_ADDED
   DELEGATED_TASK_COMPLETED
   DELEGATED_TASK_CLOSED
+  DAILY_TASK_DIGEST
+}
+
+model DailyTaskDigest {
+  id          String   @id @default(cuid()) @db.VarChar(36)
+  userId      String   @db.VarChar(36)
+  digestDate  DateTime @db.Date
+  claimedAt   DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, digestDate])
+  @@index([deliveredAt, claimedAt])
+  @@map("dailytaskdigest")
 }
 
 model Notification {

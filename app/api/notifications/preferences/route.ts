@@ -5,6 +5,7 @@ import {
   saveNotificationPreferences,
   type NotificationPreferenceValue,
 } from "@/app/lib/notifications";
+import { parseDailyTaskDigestSettings } from "@/app/lib/daily-task-digest";
 import {
   getNotificationUserOr401,
   notificationResponseHeaders,
@@ -74,6 +75,16 @@ export async function PATCH(req: Request) {
     );
   }
 
+  const dailyTaskDigestSettings = parseDailyTaskDigestSettings(
+    "dailyTaskDigestSettings" in body ? body.dailyTaskDigestSettings : undefined
+  );
+  if (!dailyTaskDigestSettings) {
+    return Response.json(
+      { error: "Choose a valid daily digest time and timezone" },
+      { status: 400, headers: notificationResponseHeaders }
+    );
+  }
+
   const saved = await saveNotificationPreferences(currentUser.user.id, {
     notificationPushEnabled: readBoolean(
       "notificationPushEnabled" in body
@@ -82,6 +93,7 @@ export async function PATCH(req: Request) {
       false
     ),
     preferences,
+    dailyTaskDigestSettings,
   });
 
   return Response.json(saved, { headers: notificationResponseHeaders });

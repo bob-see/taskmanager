@@ -1,6 +1,6 @@
 # Push Notifications
 
-TaskManager supports Browser Push for delegated task notifications.
+TaskManager supports Browser Push for delegated task notifications and a weekday daily task digest.
 
 ## Architecture
 
@@ -48,6 +48,25 @@ Delegated events currently covered:
 No separate notification system exists. Non-delegated application events do not
 send push unless they are later routed through the dispatcher with push
 preferences.
+
+## Daily Task Digest
+
+The scheduled `/api/cron/daily-task-digest` route runs every five minutes via
+`vercel.json`. It authenticates with `CRON_SECRET`, then evaluates each user's
+saved timezone and chosen local delivery time (default 8:30 am). The default
+schedule is Monday to Friday; settings are stored as JSON with `daysOfWeek`, so
+weekend selection can be added without another schema change.
+
+The digest includes incomplete tasks in profiles owned by that user, including
+workflow-generated tasks. It deliberately excludes every task with a delegated
+task record. Each digest groups starting-today, due-today and overdue work,
+while deduplicating a task that belongs to more than one state. A durable
+`DailyTaskDigest` row prevents duplicate sends for a user/date; failed provider
+deliveries can be retried after the claim lease expires.
+
+Add `CRON_SECRET` to the deployment environment. Vercel sends this secret as
+the Bearer token for scheduled invocations. A notification opens
+`/overview?focus=today`, which selects the existing Today overview filter.
 
 ## Environment Variables
 

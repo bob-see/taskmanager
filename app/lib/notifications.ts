@@ -1,6 +1,10 @@
 import type { NotificationType, Prisma, PrismaClient } from "@prisma/client";
 import { deliverWebPushNotification } from "@/app/lib/push-delivery";
 import { prisma } from "@/app/lib/prisma";
+import {
+  normaliseDailyTaskDigestSettings,
+  type DailyTaskDigestSettings,
+} from "@/app/lib/daily-task-digest";
 
 export const configurableNotificationTypes = [
   "DELEGATED_TASK_RECEIVED",
@@ -9,6 +13,7 @@ export const configurableNotificationTypes = [
   "DELEGATED_TASK_NOTE_ADDED",
   "DELEGATED_TASK_COMPLETED",
   "DELEGATED_TASK_CLOSED",
+  "DAILY_TASK_DIGEST",
 ] as const satisfies readonly NotificationType[];
 
 const notificationSelect = {
@@ -172,7 +177,7 @@ export async function getNotificationPreferences(
   const [user, preferences] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
-      select: { notificationPushEnabled: true },
+      select: { notificationPushEnabled: true, dailyTaskDigestSettings: true },
     }),
     db.notificationPreference.findMany({
       where: {
@@ -193,6 +198,9 @@ export async function getNotificationPreferences(
 
   return {
     notificationPushEnabled: user?.notificationPushEnabled ?? false,
+    dailyTaskDigestSettings: normaliseDailyTaskDigestSettings(
+      user?.dailyTaskDigestSettings
+    ),
     preferences: configurableNotificationTypes.map((notificationType) => {
       const preference = preferencesByType.get(notificationType);
       return {
@@ -209,6 +217,7 @@ export async function saveNotificationPreferences(
   input: {
     notificationPushEnabled: boolean;
     preferences: NotificationPreferenceValue[];
+    dailyTaskDigestSettings?: DailyTaskDigestSettings;
   },
   db: NotificationDatabase = prisma
 ) {
@@ -219,7 +228,12 @@ export async function saveNotificationPreferences(
 
   await db.user.update({
     where: { id: userId },
-    data: { notificationPushEnabled: input.notificationPushEnabled },
+    data: {
+      notificationPushEnabled: input.notificationPushEnabled,
+      ...(input.dailyTaskDigestSettings
+        ? { dailyTaskDigestSettings: input.dailyTaskDigestSettings }
+        : {}),
+    },
     select: { id: true },
   });
 

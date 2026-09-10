@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
@@ -3489,6 +3489,7 @@ export function OverviewClient({
   initialDate,
 }: OverviewClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentDateValue, setCurrentDateValue] = useState(initialDate);
   const [calendarView, setCalendarView] = useState<OverviewCalendarView>("day");
   const [calendarSelectedDay, setCalendarSelectedDay] = useState(initialDate);
@@ -3644,6 +3645,12 @@ export function OverviewClient({
 
     setOverviewOptionsLoaded(true);
   }, [userPreferenceKey]);
+
+  useEffect(() => {
+    if (searchParams.get("focus") === "today") {
+      setSelectedFilter("today");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !overviewOptionsLoaded) {
