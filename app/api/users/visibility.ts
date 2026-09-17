@@ -1,13 +1,13 @@
 import { prisma } from "@/app/lib/prisma";
+import {
+  isAdminUser,
+  resolveAdminGroupScope,
+  type GroupScopedUser,
+} from "@/app/lib/admin-group-scope";
 
-type VisibilityUser = {
-  id: string;
-  role?: string | null;
-};
+type VisibilityUser = GroupScopedUser & { id: string };
 
-export function isAdminUser(user: VisibilityUser) {
-  return user.role === "admin";
-}
+export { isAdminUser };
 
 /**
  * A one-group admin is scoped to that group. Admins with zero or multiple
@@ -16,7 +16,7 @@ export function isAdminUser(user: VisibilityUser) {
 export async function getAdminGroupScope(
   user: VisibilityUser
 ): Promise<string[] | null> {
-  if (!isAdminUser(user)) return [];
+  if (!isAdminUser(user)) return null;
 
   const memberships = await prisma.userGroup.findMany({
     where: { userId: user.id },
@@ -24,7 +24,7 @@ export async function getAdminGroupScope(
   });
   const groupIds = memberships.map((membership) => membership.groupId);
 
-  return groupIds.length === 1 ? groupIds : null;
+  return resolveAdminGroupScope(user, groupIds);
 }
 
 export async function scopedVisibleUserWhere(currentUser: VisibilityUser) {
