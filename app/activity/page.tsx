@@ -156,22 +156,22 @@ export default async function ActivityPage({
         </form>
       ) : null}
 
-      <section className="mt-6 tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
+      <section className="mt-6 tm-card overflow-hidden rounded-[14px] border shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
-              <tr className="border-b border-[color:var(--tm-border)] text-left text-xs uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
-                <th className="px-3 py-2">When</th>
+              <tr className="border-b border-[color:var(--tm-border)] bg-white/25 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                <th className="px-5 py-2">When</th>
                 {isAdmin ? <th className="px-3 py-2">User</th> : null}
                 <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Description</th>
+                <th className="px-5 py-2">Description</th>
               </tr>
             </thead>
             <tbody>
               {typedLogs.length === 0 ? (
                 <tr>
                   <td
-                    className="px-3 py-4 text-[color:var(--tm-muted)]"
+                    className="px-5 py-4 text-[color:var(--tm-muted)]"
                     colSpan={isAdmin ? 4 : 3}
                   >
                     No activity found.
@@ -183,20 +183,20 @@ export default async function ActivityPage({
 
                   return (
                     <tr key={log.id} className="tm-table-row border-b last:border-0">
-                      <td className="px-3 py-3 text-[color:var(--tm-muted)]">
+                      <td className="whitespace-nowrap px-5 py-2.5 text-[color:var(--tm-muted)]">
                         {formatCreatedAt(log.createdAt)}
                       </td>
                       {isAdmin ? (
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-2.5">
                           {user ? `${user.name} (${user.email})` : log.userId}
                         </td>
                       ) : null}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-2.5">
                         <span className="tm-chip inline-flex rounded-full border px-2.5 py-1 text-xs font-medium">
                           {formatActivityType(log.type)}
                         </span>
                       </td>
-                      <td className="px-3 py-3">{log.description}</td>
+                      <td className="px-5 py-2.5">{log.description}</td>
                     </tr>
                   );
                 })

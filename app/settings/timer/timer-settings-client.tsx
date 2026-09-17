@@ -31,12 +31,13 @@ export function TimerSettingsClient({ initialEnabled }: { initialEnabled: boolea
   }
 
   return (
-    <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-base font-semibold">Floating timer widget</h2>
-          <p className="mt-1 max-w-2xl text-sm text-[color:var(--tm-muted)]">Shows your active profile and elapsed time, lets you start or stop it, and lets you switch profiles without a gap.</p>
-        </div>
+    <section className="tm-card overflow-hidden rounded-[14px] border shadow-sm">
+      <div className="hidden grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] gap-4 border-b border-[color:var(--tm-border)] bg-white/25 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid md:px-5">
+        <span>Setting</span><span>Description</span><span>Status</span>
+      </div>
+      <div className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] md:items-center md:gap-4 md:px-5">
+        <h2 className="text-sm font-semibold">Floating timer widget</h2>
+        <p className="text-sm leading-5 text-[color:var(--tm-muted)]">Shows your active profile and elapsed time, lets you start or stop it, and lets you switch profiles without a gap.</p>
         <button
           type="button"
           className={enabled ? "tm-button-primary inline-flex h-10 items-center rounded-[10px] border px-4 text-sm disabled:opacity-50" : "tm-button inline-flex h-10 items-center rounded-[10px] border px-4 text-sm disabled:opacity-50"}
@@ -46,7 +47,7 @@ export function TimerSettingsClient({ initialEnabled }: { initialEnabled: boolea
           {saving ? "Saving…" : enabled ? "Widget on" : "Widget off"}
         </button>
       </div>
-      {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="border-t border-[color:var(--tm-border)] px-4 py-3 text-sm text-red-700 md:px-5">{error}</p> : null}
     </section>
   );
 }

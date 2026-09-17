@@ -229,14 +229,19 @@ export function WorkflowsClient({ workflowId }: { workflowId?: string }) {
                   : "Create your first Workflow to turn a repeatable process into a ready-to-launch task bundle."}
             </div>
           ) : null}
-          {workflows.map((workflow) => (
-            <article key={workflow.id} className="tm-card rounded-2xl p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <Link href={`/workflows/${workflow.id}`} className="inline-block min-w-0 cursor-pointer rounded border border-transparent px-1 py-0.5 text-left text-lg font-semibold text-[color:var(--tm-text)] transition-colors hover:border-amber-700/20 hover:bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]">{workflow.name}</Link>
-                  <p className="mt-1 text-sm text-[color:var(--tm-muted)]">{workflow.category || "No category"} · {workflow.tasks.length} tasks</p>
-                </div>
-                <div className="relative">
+          {workflows.length > 0 ? <div className="tm-card overflow-hidden rounded-2xl border">
+            <div className="hidden grid-cols-[minmax(11rem,1.2fr)_minmax(7rem,.75fr)_minmax(14rem,1.6fr)_5.5rem_6.5rem_4rem_auto] gap-4 border-b border-[color:var(--tm-border)] bg-white/25 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] lg:grid">
+              <span>Name</span><span>Category</span><span>Description</span><span>Active</span><span>Complete</span><span>Tasks</span><span className="text-right">Actions</span>
+            </div>
+            {workflows.map((workflow) => (
+              <article key={workflow.id} className="grid gap-2 border-b border-[color:var(--tm-border)] px-5 py-3 last:border-b-0 lg:grid-cols-[minmax(11rem,1.2fr)_minmax(7rem,.75fr)_minmax(14rem,1.6fr)_5.5rem_6.5rem_4rem_auto] lg:items-center lg:gap-4">
+                <div><Link href={`/workflows/${workflow.id}`} className="inline-block min-w-0 rounded px-1 py-0.5 text-sm font-semibold text-[color:var(--tm-text)] transition-colors hover:bg-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500">{workflow.name}</Link></div>
+                <p className="text-sm text-[color:var(--tm-muted)]">{workflow.category || "—"}</p>
+                <p className="line-clamp-2 text-sm leading-5 text-[color:var(--tm-muted)]">{workflow.description || "—"}</p>
+                <p className="text-sm font-semibold tabular-nums">{workflow.runs?.filter((run) => !isRunComplete(run)).length ?? "—"}</p>
+                <p className="text-sm font-semibold tabular-nums">{workflow.runs?.filter((run) => isRunComplete(run)).length ?? "—"}</p>
+                <p className="text-sm font-semibold tabular-nums">{workflow.tasks.length}</p>
+                <div className="relative lg:justify-self-end">
                   <button type="button" aria-haspopup="menu" aria-expanded={workflowListActionsOpen === workflow.id} className="tm-button inline-flex h-9 items-center rounded-[10px] border px-3 text-sm" onClick={() => setWorkflowListActionsOpen((current) => current === workflow.id ? null : workflow.id)}>Actions</button>
                   {workflowListActionsOpen === workflow.id ? <div role="menu" className="tm-menu absolute right-0 top-11 z-20 min-w-36 overflow-hidden rounded-lg border py-1 text-left shadow-2xl">
                     <Link href={`/workflows/${workflow.id}`} role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => setWorkflowListActionsOpen(null)}>Open</Link>
@@ -246,15 +251,9 @@ export function WorkflowsClient({ workflowId }: { workflowId?: string }) {
                     </button>
                   </div> : null}
                 </div>
-              </div>
-              {workflow.description ? <p className="mt-3 text-sm leading-6 text-[color:var(--tm-muted)]">{workflow.description}</p> : null}
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-xl border border-[color:var(--tm-border)] bg-white/35 px-3 py-2"><div className="text-xs text-[color:var(--tm-muted)]">Active runs</div><div className="mt-1 text-lg font-semibold">{workflow.runs?.filter((run) => !isRunComplete(run)).length ?? "—"}</div></div>
-                <div className="rounded-xl border border-[color:var(--tm-border)] bg-white/35 px-3 py-2"><div className="text-xs text-[color:var(--tm-muted)]">Completed runs</div><div className="mt-1 text-lg font-semibold">{workflow.runs?.filter((run) => isRunComplete(run)).length ?? "—"}</div></div>
-                <div className="rounded-xl border border-[color:var(--tm-border)] bg-white/35 px-3 py-2"><div className="text-xs text-[color:var(--tm-muted)]">Tasks</div><div className="mt-1 text-lg font-semibold">{workflow.tasks.length}</div></div>
-              </div>
-            </article>
-          ))}
+              </article>
+            ))}
+          </div> : null}
         </section> : null}
 
         {detailMode && detailWorkflow && detailWorkflow.runs ? (() => {

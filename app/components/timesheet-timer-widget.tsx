@@ -135,15 +135,15 @@ export function TimesheetTimerWidget({ profiles }: { profiles: Profile[] }) {
   }
 
   return (
-    <aside className="fixed bottom-4 right-4 z-50 w-[min(18rem,calc(100vw-2rem))] rounded-[14px] border border-amber-700/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] p-3 shadow-[0_14px_36px_rgba(65,48,22,0.22)] backdrop-blur md:bottom-6 md:right-6">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]">Timer</span>
-        {activeTimer ? <span className="font-mono text-lg font-semibold tabular-nums">{formatDuration(elapsed)}</span> : <span className="text-sm text-[color:var(--tm-muted)]">Ready</span>}
+    <aside className="fixed bottom-3 right-3 z-50 w-[min(13.5rem,calc(100vw-1.5rem))] rounded-[11px] border border-amber-700/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] p-[9px] shadow-[0_10px_27px_rgba(65,48,22,0.22)] backdrop-blur md:bottom-[18px] md:right-[18px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--tm-muted)]">Timer</span>
+        {activeTimer ? <span className="font-mono text-base font-semibold tabular-nums">{formatDuration(elapsed)}</span> : <span className="text-xs text-[color:var(--tm-muted)]">Ready</span>}
       </div>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-1.5 flex items-center gap-1.5">
         <select
           aria-label="Timer profile"
-          className="tm-input min-w-0 flex-1 rounded-[10px] border px-2 py-2 text-sm"
+          className="tm-input min-w-0 flex-1 rounded-[8px] border px-2 py-1.5 text-xs"
           value={activeTimer?.profileId ?? selectedProfileId}
           disabled={busy || profiles.length === 0}
           onChange={(event) => void switchProfile(event.target.value)}
@@ -152,7 +152,7 @@ export function TimesheetTimerWidget({ profiles }: { profiles: Profile[] }) {
         </select>
         <button
           type="button"
-          className={`tm-button-primary inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border disabled:opacity-50 ${activeTimer ? "text-2xl" : "text-sm"}`}
+          className={`tm-button-primary inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border disabled:opacity-50 ${activeTimer ? "text-lg" : "text-xs"}`}
           disabled={busy || (!activeTimer && !selectedProfileId)}
           onClick={() => void (activeTimer ? stopTimer() : startTimer())}
           aria-label={activeTimer ? "Stop timer" : "Start timer"}
@@ -161,7 +161,7 @@ export function TimesheetTimerWidget({ profiles }: { profiles: Profile[] }) {
           {busy ? "…" : activeTimer ? "■" : "▶"}
         </button>
       </div>
-      {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+      {error ? <p className="mt-1.5 text-[10px] text-red-700">{error}</p> : null}
     </aside>
   );
 }

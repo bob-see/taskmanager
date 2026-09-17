@@ -452,7 +452,7 @@ export function NotificationSettingsClient({
   )?.pushEnabled ?? false;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <section className="tm-card rounded-[14px] border p-4 shadow-sm md:p-5">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
           <div>
@@ -510,14 +510,14 @@ export function NotificationSettingsClient({
         </div>
       </section>
 
-      <section className="tm-card rounded-[14px] border shadow-sm">
-        <div className="border-b border-[color:var(--tm-border)] p-4 md:p-5">
+      <section className="tm-card overflow-hidden rounded-[14px] border shadow-sm">
+        <div className="border-b border-[color:var(--tm-border)] px-4 py-3 md:px-5">
           <h2 className="text-base font-semibold">Daily Task Digest</h2>
           <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
             One helpful overview of your own tasks at 8:30 am Brisbane time, Monday to Friday. Delegated tasks remain controlled separately below.
           </p>
         </div>
-        <div className="p-4 md:p-5">
+        <div className="px-4 py-3 md:px-5">
           <label className={toggleClass(dailyDigestPushEnabled)}>
             <input
               type="checkbox"
@@ -530,18 +530,22 @@ export function NotificationSettingsClient({
         </div>
       </section>
 
-      <section className="tm-card rounded-[14px] border shadow-sm">
-        <div className="border-b border-[color:var(--tm-border)] p-4 md:p-5">
+      <section className="tm-card overflow-hidden rounded-[14px] border shadow-sm">
+        <div className="border-b border-[color:var(--tm-border)] px-4 py-3 md:px-5">
           <h2 className="text-base font-semibold">Delegated Tasks</h2>
           <p className="mt-1 text-sm text-[color:var(--tm-muted)]">
             Delegated task events use these settings for both in-app and Push notifications.
           </p>
         </div>
+        <div className="hidden grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-[color:var(--tm-border)] bg-white/25 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] sm:grid md:px-5">
+          <span>Event</span>
+          <span>Delivery</span>
+        </div>
         <div className="divide-y divide-[color:var(--tm-border)]">
           {preferences.filter((preference) => preference.notificationType !== "DAILY_TASK_DIGEST").map((preference) => (
             <div
               key={preference.notificationType}
-              className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center md:p-5"
+              className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center md:px-5"
             >
               <div>
                 <p className="text-sm font-medium">
