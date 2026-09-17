@@ -202,6 +202,7 @@ export function TimesheetsClient({
   const [wfhDays, setWfhDays] = useState(initialWfhDays);
   const [savingWfh, setSavingWfh] = useState<string | null>(null);
   const [reportSettingsOpen, setReportSettingsOpen] = useState(false);
+  const [csvOptionsOpen, setCsvOptionsOpen] = useState(false);
   const [wfhReport, setWfhReport] = useState<{ financialYear: string; rows: Array<{ profileId: string; profileName: string; wfhMinutes: number; officeMinutes: number; totalMinutes: number }> } | null>(null);
   const [wfhReportLoading, setWfhReportLoading] = useState(false);
   const [wfhReportProfiles, setWfhReportProfiles] = useState<string[]>(initialProfiles.map((profile) => profile.id));
@@ -225,6 +226,11 @@ export function TimesheetsClient({
   const currentDateValueRef = useRef(initialDate);
 
   const weekDays = useMemo(() => getWeekDays(selectedWeekStart), [selectedWeekStart]);
+  const availableExportYears = useMemo(() => {
+    const [year, month] = currentDateValue.split("-").map(Number);
+    const currentFinancialYear = month < 7 ? year - 1 : year;
+    return Array.from({ length: currentFinancialYear - 2025 + 1 }, (_, index) => currentFinancialYear - index);
+  }, [currentDateValue]);
   const roundingOptions: Array<{ value: TimesheetRoundingMode; label: string }> = [
     { value: "exact", label: "Exact" },
     { value: "nearest-15", label: "Nearest 15 min" },
@@ -1018,11 +1024,15 @@ export function TimesheetsClient({
             <div><h2 className="text-lg font-semibold tracking-tight">Financial Year WFH Report</h2><p className="mt-1 text-sm text-[color:var(--tm-muted)]">Select the work profiles to include, then generate the current Australian financial-year summary.</p></div>
             <div className="relative flex gap-2">
               <button type="button" className={primaryButtonClass} disabled={wfhReportLoading} onClick={() => void loadWfhReport()}>{wfhReportLoading ? "Generating…" : "Generate report"}</button>
-              <button type="button" aria-label="Financial year report settings" aria-expanded={reportSettingsOpen} className={`${buttonClass} text-[22px] leading-none`} onClick={() => setReportSettingsOpen((open) => !open)}>⚙</button>
+              <button type="button" aria-label="Financial year report settings" aria-expanded={reportSettingsOpen} className={`${buttonClass} text-[22px] leading-none`} onClick={() => { setReportSettingsOpen((open) => !open); setCsvOptionsOpen(false); }}>⚙</button>
               {reportSettingsOpen && (
                 <div className="tm-menu absolute right-0 top-full z-20 mt-2 w-64 rounded-lg border p-2 shadow-2xl">
                   <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">WFH settings</p>
                   <button type="button" className="w-full rounded-md px-2 py-2 text-left text-sm hover:bg-white/70" disabled={wfhReportLoading} onClick={() => { setReportSettingsOpen(false); void backfillWfhFinancialYear(); }}>Mark this FY&apos;s logged days WFH</button>
+                  <div className="my-2 border-t border-[color:var(--tm-border)]" />
+                  <p className="px-2 py-1 text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Timesheet export</p>
+                  <button type="button" className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-white/70" aria-expanded={csvOptionsOpen} onClick={() => setCsvOptionsOpen((open) => !open)}>Download CSV <span aria-hidden="true">{csvOptionsOpen ? "⌃" : "⌄"}</span></button>
+                  {csvOptionsOpen && <div className="mb-1 ml-2 border-l border-[color:var(--tm-border)] pl-2">{availableExportYears.map((year) => <a key={year} className="block rounded-md px-2 py-2 text-sm hover:bg-white/70" href={`/api/timesheets/export?year=${year}`} onClick={() => { setCsvOptionsOpen(false); setReportSettingsOpen(false); }}>{`${String(year).slice(-2)}–${String(year + 1).slice(-2)}`}</a>)}</div>}
                   <div className="my-2 border-t border-[color:var(--tm-border)]" />
                   <p className="px-2 py-1 text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">Auto WFH days</p>
                   <p className="px-2 pb-2 text-xs text-[color:var(--tm-muted)]">These preselect the weekly WFH row.</p>
