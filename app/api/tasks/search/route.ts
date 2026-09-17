@@ -57,6 +57,8 @@ export async function GET(req: Request) {
         { category: { contains: query } },
         { profile: { name: { contains: query } } },
         { project: { name: { contains: query } } },
+        { workflowRun: { workflowNameSnapshot: { contains: query } } },
+        { workflowRun: { launchName: { contains: query } } },
         { noteHistory: { some: { content: { contains: query } } } },
       ],
     },
@@ -93,6 +95,12 @@ export async function GET(req: Request) {
       },
       profile: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
+      workflowRun: {
+        select: {
+          workflowNameSnapshot: true,
+          launchName: true,
+        },
+      },
     },
   });
 

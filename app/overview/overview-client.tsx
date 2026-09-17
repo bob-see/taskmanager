@@ -133,6 +133,7 @@ type TaskSearchResult = {
   noteHistory: TaskNoteHistoryEntry[];
   profile: { id: string; name: string };
   project: { id: string; name: string } | null;
+  workflowRun: { workflowNameSnapshot: string; launchName: string } | null;
 };
 
 type TaskPendingAction = "complete" | "update" | "delete";
@@ -4073,6 +4074,11 @@ export function OverviewClient({
                           </button>
                           {task.isPriority && (
                             <span className="ml-2 text-xs text-rose-700">Priority</span>
+                          )}
+                          {task.workflowRun && (
+                            <span className="ml-2 text-xs text-[color:var(--tm-muted)]">
+                              Workflow: {task.workflowRun.workflowNameSnapshot}
+                            </span>
                           )}
                         </td>
                         <td className="px-2 py-3">
