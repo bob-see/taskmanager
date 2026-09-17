@@ -3,6 +3,7 @@ import { AppSidebar } from "@/app/components/app-sidebar";
 import { ServiceWorkerRegistration } from "@/app/components/service-worker-registration";
 import { HatchStatusWidget } from "@/app/lost/hatch-status-widget";
 import { LostTimerProvider } from "@/app/lost/lost-timer-provider";
+import { TimesheetTimerWidget } from "@/app/components/timesheet-timer-widget";
 
 type ShellProfile = {
   id: string;
@@ -13,6 +14,7 @@ type ShellUser = {
   name?: string | null;
   email?: string | null;
   role?: string | null;
+  timerWidgetEnabled?: boolean;
 };
 
 type DelegatedCounts = {
@@ -44,6 +46,7 @@ export function AppShell({
       />
       <div className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
       {showLostAccess ? <HatchStatusWidget /> : null}
+      {currentUser.timerWidgetEnabled ? <TimesheetTimerWidget profiles={profiles} /> : null}
       <ServiceWorkerRegistration />
     </div>
   );

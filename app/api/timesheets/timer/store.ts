@@ -111,6 +111,12 @@ export const prismaTimerStore: OwnedTimerStore<SelectedTimeEntry> = {
       }
 
       return operation(lockedTimerStore(tx));
+    }, {
+      // The owner row lock serialises start/stop/switch requests. On the hosted
+      // database it can legitimately wait longer than Prisma's five-second
+      // default before recording the accompanying activity entry.
+      maxWait: 10_000,
+      timeout: 20_000,
     });
   },
 };

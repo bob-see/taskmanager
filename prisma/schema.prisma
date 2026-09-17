@@ -33,6 +33,7 @@ model User {
   dailyTaskDigestSettings Json?
   weeklySummarySettings   Json?
   wfhDefaultDays          Json?
+  timerWidgetEnabled      Boolean                  @default(false)
   pushSubscriptions       PushSubscription[]
   dailyTaskDigests        DailyTaskDigest[]
   workLocationDays        WorkLocationDay[]

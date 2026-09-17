@@ -169,3 +169,80 @@ export async function stopOwnedTimer<Entry extends { id: string }>(
     return entry;
   });
 }
+
+export async function switchOwnedTimer<Entry extends { id: string }>(
+  store: OwnedTimerStore<Entry>,
+  input: {
+    userId: string;
+    profileId: string;
+    switchTime: Date;
+    entryDate: Date;
+    roundingMode: TimerRoundingMode;
+    calculateLoggedMinutes: (
+      startTime: Date,
+      endTime: Date,
+      roundingMode: TimerRoundingMode
+    ) => { durationMinutes: number; loggedMinutes: number };
+  }
+) {
+  return store.withOwnerLock(input.userId, async (lockedStore) => {
+    const nextProfile = await lockedStore.findOwnedProfile(input.userId, input.profileId);
+    if (!nextProfile) {
+      throw new TimerOperationError("Profile not found", 404);
+    }
+
+    const activeTimer = await lockedStore.findActiveTimer(input.userId);
+    if (!activeTimer) {
+      throw new TimerOperationError("No active timer", 404);
+    }
+    if (activeTimer.profileId === nextProfile.id) {
+      throw new TimerOperationError(`Timer is already running for ${nextProfile.name}`, 409);
+    }
+
+    const { durationMinutes, loggedMinutes } = input.calculateLoggedMinutes(
+      activeTimer.startTime,
+      input.switchTime,
+      input.roundingMode
+    );
+    const completedTimer = await lockedStore.completeActiveTimer({
+      userId: input.userId,
+      timerId: activeTimer.id,
+      data: {
+        entryDate: input.entryDate,
+        endTime: input.switchTime,
+        durationMinutes,
+        loggedMinutes,
+        roundingMode: input.roundingMode,
+        notes: null,
+      },
+    });
+    if (!completedTimer) {
+      throw new TimerOperationError("No active timer", 404);
+    }
+
+    await lockedStore.recordActivity({
+      userId: input.userId,
+      profileId: activeTimer.profileId,
+      timeEntryId: completedTimer.id,
+      type: "time_entry.update",
+      description: `Switched timer to ${nextProfile.name}`,
+    });
+
+    const nextTimer = await lockedStore.createTimer({
+      userId: input.userId,
+      profileId: nextProfile.id,
+      entryDate: input.entryDate,
+      startTime: input.switchTime,
+      notes: null,
+    });
+    await lockedStore.recordActivity({
+      userId: input.userId,
+      profileId: nextProfile.id,
+      timeEntryId: nextTimer.id,
+      type: "time_entry.create",
+      description: `Switched timer from ${activeTimer.profileName}`,
+    });
+
+    return { completedTimer, nextTimer };
+  });
+}

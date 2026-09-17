@@ -37,7 +37,7 @@ export function HatchStatusWidget() {
   return (
     <Link
       href="/lost"
-      className={`fixed bottom-4 right-4 z-40 inline-flex items-center gap-1 rounded-[8px] border bg-[linear-gradient(180deg,#26271f_0%,#11130f_62%,#080908_100%)] px-2 py-1.5 font-mono shadow-[0_16px_34px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-black/70 transition hover:scale-[1.02] ${
+      className={`fixed left-1/2 top-4 z-40 inline-flex -translate-x-1/2 items-center gap-1 rounded-[8px] border bg-[linear-gradient(180deg,#26271f_0%,#11130f_62%,#080908_100%)] px-2 py-1.5 font-mono shadow-[0_16px_34px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-black/70 transition hover:scale-[1.02] md:left-[calc(50%+9rem)] ${
         failure
           ? "border-red-300/45 shadow-[0_0_24px_rgba(248,113,113,0.25),inset_0_1px_0_rgba(255,255,255,0.08)]"
           : finalMinute

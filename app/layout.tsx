@@ -92,6 +92,7 @@ export default async function RootLayout({
         name: true,
         email: true,
         role: true,
+        timerWidgetEnabled: true,
       },
     }),
   ]);
@@ -126,6 +127,7 @@ export default async function RootLayout({
             name: currentUser?.name ?? session.user.name,
             email: currentUser?.email ?? email,
             role: currentUser?.role,
+            timerWidgetEnabled: currentUser?.timerWidgetEnabled ?? false,
           }}
           delegatedCounts={{
             assignedToMe: delegatedCounts[0],

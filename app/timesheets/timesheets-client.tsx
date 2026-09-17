@@ -624,8 +624,10 @@ export function TimesheetsClient({
       const started = (await res.json()) as TimesheetEntry;
       setActiveTimer(started);
       setTimerForm((prev) => ({ ...prev, notes: "" }));
+      window.dispatchEvent(new Event("taskmanager:timesheet-timer-changed"));
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not start timer");
+      await loadWeekData(selectedWeekStart);
     } finally {
       setSavingTimer(false);
     }
@@ -651,8 +653,34 @@ export function TimesheetsClient({
 
       setActiveTimer(null);
       await loadWeekData(selectedWeekStart);
+      window.dispatchEvent(new Event("taskmanager:timesheet-timer-changed"));
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not stop timer");
+    } finally {
+      setSavingTimer(false);
+    }
+  }
+
+  async function handleSwitchTimer(profileId: string) {
+    if (!activeTimer || activeTimer.profileId === profileId || savingTimer) return;
+
+    setSavingTimer(true);
+    try {
+      const res = await fetch("/api/timesheets/timer/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId, roundingMode }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? "Could not switch timer profile");
+
+      setActiveTimer(body.activeTimer as TimesheetEntry);
+      setTimerForm((prev) => ({ ...prev, profileId }));
+      await loadWeekData(selectedWeekStart);
+      window.dispatchEvent(new Event("taskmanager:timesheet-timer-changed"));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not switch timer profile");
+      await loadWeekData(selectedWeekStart);
     } finally {
       setSavingTimer(false);
     }
@@ -820,26 +848,32 @@ export function TimesheetsClient({
 
             {activeTimer ? (
               <div className="mt-4 rounded-[12px] border border-amber-700/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium">{activeTimer.profileName}</div>
-                    <div className="mt-1 text-sm text-[color:var(--tm-muted)]">
-                      Started {formatTimerStarted(activeTimer.startTime)}
-                    </div>
-                    {activeTimer.notes && (
-                      <div className="mt-2 text-sm text-[color:var(--tm-muted)]">
-                        {activeTimer.notes}
-                      </div>
-                    )}
+                <div className="relative flex flex-col gap-3 sm:block">
+                  <div className="flex items-center justify-between gap-3">
+                    <select
+                      aria-label="Active timer profile"
+                      className="tm-input h-10 rounded-[10px] border px-2 text-sm font-medium"
+                      value={activeTimer.profileId}
+                      disabled={savingTimer}
+                      onChange={(event) => void handleSwitchTimer(event.target.value)}
+                    >
+                      {profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>{profile.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className={primaryButtonClass}
+                      onClick={() => void handleStopTimer()}
+                      disabled={savingTimer}
+                    >
+                      {savingTimer ? "Stopping…" : "Stop timer"}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className={primaryButtonClass}
-                    onClick={() => void handleStopTimer()}
-                    disabled={savingTimer}
-                  >
-                    {savingTimer ? "Stopping…" : "Stop timer"}
-                  </button>
+                  <div className="text-center text-sm text-[color:var(--tm-muted)] sm:pointer-events-none sm:absolute sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2">
+                    <div>Started {formatTimerStarted(activeTimer.startTime)}</div>
+                    {activeTimer.notes && <div className="mt-1">{activeTimer.notes}</div>}
+                  </div>
                 </div>
               </div>
             ) : (

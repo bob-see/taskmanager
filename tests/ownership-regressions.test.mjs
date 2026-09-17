@@ -11,6 +11,7 @@ import {
   requireAuthenticatedTimesheetUser,
   startOwnedTimer,
   stopOwnedTimer,
+  switchOwnedTimer,
 } from "../app/lib/timesheet-timer-core.ts";
 import { getBrisbaneCalendarDate } from "../app/lib/date-time.ts";
 import { calculateLoggedMinutes } from "../app/lib/timesheet-duration.ts";
@@ -105,6 +106,7 @@ function createTimerStore() {
   const state = {
     profiles: [
       { id: "profile-a", userId: "user-1", name: "Alpha" },
+      { id: "profile-c", userId: "user-1", name: "Charlie" },
       { id: "profile-b", userId: "user-2", name: "Beta" },
     ],
     entries: [],
@@ -214,6 +216,17 @@ function stopTimer(store, userId, endTime) {
   });
 }
 
+function switchTimer(store, userId, profileId, switchTime) {
+  return switchOwnedTimer(store, {
+    userId,
+    profileId,
+    switchTime,
+    entryDate: getBrisbaneCalendarDate(switchTime),
+    roundingMode: "exact",
+    calculateLoggedMinutes,
+  });
+}
+
 test("timesheet reads and timer mutations reject an unauthenticated user", async () => {
   const result = await requireAuthenticatedTimesheetUser(async () => null);
   assert.equal(result.error.status, 401);
@@ -297,6 +310,42 @@ test("timer stop uses the Brisbane stop date and real elapsed instants", async (
     state.entries.filter((item) => item.profileId === "profile-a").length,
     1
   );
+});
+
+test("switching a timer finalises the current profile and starts the next one atomically", async () => {
+  const { state, store, activeFor } = createTimerStore();
+  await startTimer(store, "user-1", "profile-a", new Date("2026-07-17T13:30:00.000Z"));
+
+  const result = await switchTimer(
+    store,
+    "user-1",
+    "profile-c",
+    new Date("2026-07-17T14:15:00.000Z")
+  );
+
+  assert.equal(result.completedTimer.profileId, "profile-a");
+  assert.equal(result.completedTimer.durationMinutes, 45);
+  assert.equal(result.nextTimer.profileId, "profile-c");
+  assert.equal(result.nextTimer.startTime.toISOString(), "2026-07-17T14:15:00.000Z");
+  assert.equal(activeFor("user-1").id, result.nextTimer.id);
+  assert.equal(state.entries.length, 2);
+  assert.equal(state.activities.length, 3);
+});
+
+test("switching rejects another user's or the already active profile without changing the timer", async () => {
+  const { state, store, activeFor } = createTimerStore();
+  await startTimer(store, "user-1", "profile-a", new Date("2026-07-17T13:30:00.000Z"));
+
+  await assert.rejects(
+    switchTimer(store, "user-1", "profile-b", new Date("2026-07-17T14:15:00.000Z")),
+    (error) => error instanceof TimerOperationError && error.status === 404
+  );
+  await assert.rejects(
+    switchTimer(store, "user-1", "profile-a", new Date("2026-07-17T14:15:00.000Z")),
+    (error) => error instanceof TimerOperationError && error.status === 409
+  );
+  assert.equal(activeFor("user-1").profileId, "profile-a");
+  assert.equal(state.entries.length, 1);
 });
 
 test("concurrent and repeated timer stops finalise once without duplicate entries", async () => {

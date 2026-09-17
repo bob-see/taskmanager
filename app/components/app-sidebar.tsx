@@ -125,6 +125,8 @@ export function AppSidebar({
             ? "Users"
             : pathname === "/settings/notifications"
               ? "Notifications"
+              : pathname === "/settings/timer"
+                ? "Timer"
             : pathname === "/lost"
               ? "Hatch Countdown"
               : pathname === "/reports" || pathname.startsWith("/reports/")
@@ -295,6 +297,13 @@ export function AppSidebar({
                 onClick={onNavigate}
               >
                 Notifications
+              </Link>
+              <Link
+                href="/settings/timer"
+                className={itemClassName(pathname === "/settings/timer")}
+                onClick={onNavigate}
+              >
+                Timer
               </Link>
             </nav>
           </section>
