@@ -44,7 +44,15 @@ export function AppShell({
         currentUser={currentUser}
         delegatedCounts={delegatedCounts}
       />
-      <div className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div>
+      <div
+        className={`min-w-0 flex-1 ${
+          currentUser.timerWidgetEnabled
+            ? "pb-[calc(9rem+env(safe-area-inset-bottom))] md:pb-[calc(10rem+env(safe-area-inset-bottom))]"
+            : "pb-[env(safe-area-inset-bottom)]"
+        }`}
+      >
+        {children}
+      </div>
       {showLostAccess ? <HatchStatusWidget /> : null}
       {currentUser.timerWidgetEnabled ? <TimesheetTimerWidget profiles={profiles} /> : null}
       <ServiceWorkerRegistration />
