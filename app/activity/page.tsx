@@ -158,12 +158,15 @@ export default async function ActivityPage({
 
       <section className="mt-6 tm-card overflow-hidden rounded-[14px] border shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[760px] table-fixed text-sm">
+            <colgroup>
+              {isAdmin ? <><col className="w-[15%]" /><col className="w-[25%]" /><col className="w-[18%]" /><col className="w-[42%]" /></> : <><col className="w-[20%]" /><col className="w-[22%]" /><col className="w-[58%]" /></>}
+            </colgroup>
             <thead>
               <tr className="border-b border-[color:var(--tm-border)] bg-white/25 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
                 <th className="px-5 py-2">When</th>
                 {isAdmin ? <th className="px-3 py-2">User</th> : null}
-                <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2 text-center">Type</th>
                 <th className="px-5 py-2">Description</th>
               </tr>
             </thead>
@@ -191,8 +194,8 @@ export default async function ActivityPage({
                           {user ? `${user.name} (${user.email})` : log.userId}
                         </td>
                       ) : null}
-                      <td className="px-3 py-2.5">
-                        <span className="tm-chip inline-flex rounded-full border px-2.5 py-1 text-xs font-medium">
+                      <td className="px-3 py-2.5 text-center">
+                        <span title={formatActivityType(log.type)} className="tm-chip inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap">
                           {formatActivityType(log.type)}
                         </span>
                       </td>

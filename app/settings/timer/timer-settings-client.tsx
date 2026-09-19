@@ -32,20 +32,29 @@ export function TimerSettingsClient({ initialEnabled }: { initialEnabled: boolea
 
   return (
     <section className="tm-card overflow-hidden rounded-[14px] border shadow-sm">
-      <div className="hidden grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] gap-4 border-b border-[color:var(--tm-border)] bg-white/25 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] md:grid md:px-5">
-        <span>Setting</span><span>Description</span><span>Status</span>
-      </div>
-      <div className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] md:items-center md:gap-4 md:px-5">
-        <h2 className="text-sm font-semibold">Floating timer widget</h2>
-        <p className="text-sm leading-5 text-[color:var(--tm-muted)]">Shows your active profile and elapsed time, lets you start or stop it, and lets you switch profiles without a gap.</p>
-        <button
-          type="button"
-          className={enabled ? "tm-button-primary inline-flex h-10 items-center rounded-[10px] border px-4 text-sm disabled:opacity-50" : "tm-button inline-flex h-10 items-center rounded-[10px] border px-4 text-sm disabled:opacity-50"}
-          disabled={saving}
-          onClick={() => void updateEnabled(!enabled)}
-        >
-          {saving ? "Saving…" : enabled ? "Widget on" : "Widget off"}
-        </button>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] table-fixed text-sm">
+          <colgroup><col className="w-[28%]" /><col className="w-[52%]" /><col className="w-[20%]" /></colgroup>
+          <thead>
+            <tr className="border-b border-[color:var(--tm-border)] bg-white/25 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+              <th className="px-5 py-2">Setting</th><th className="px-3 py-2">Description</th><th className="px-5 py-2 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="px-5 py-3 text-sm font-semibold">Floating timer widget</td>
+              <td className="px-3 py-3 text-sm leading-5 text-[color:var(--tm-muted)]">Shows your active profile and elapsed time, lets you start or stop it, and lets you switch profiles without a gap.</td>
+              <td className="px-5 py-3 text-center"><button
+                type="button"
+                className={enabled ? "tm-button-primary inline-flex h-10 items-center rounded-[10px] border px-4 text-sm disabled:opacity-50" : "tm-button inline-flex h-10 items-center rounded-[10px] border px-4 text-sm disabled:opacity-50"}
+                disabled={saving}
+                onClick={() => void updateEnabled(!enabled)}
+              >
+                {saving ? "Saving…" : enabled ? "Widget on" : "Widget off"}
+              </button></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       {error ? <p className="border-t border-[color:var(--tm-border)] px-4 py-3 text-sm text-red-700 md:px-5">{error}</p> : null}
     </section>

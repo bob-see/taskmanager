@@ -230,29 +230,42 @@ export function WorkflowsClient({ workflowId }: { workflowId?: string }) {
             </div>
           ) : null}
           {workflows.length > 0 ? <div className="tm-card overflow-hidden rounded-2xl border">
-            <div className="hidden grid-cols-[minmax(11rem,1.2fr)_minmax(7rem,.75fr)_minmax(14rem,1.6fr)_5.5rem_6.5rem_4rem_auto] gap-4 border-b border-[color:var(--tm-border)] bg-white/25 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)] lg:grid">
-              <span>Name</span><span>Category</span><span>Description</span><span>Active</span><span>Complete</span><span>Tasks</span><span className="text-right">Actions</span>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[20%]" /><col className="w-[13%]" /><col className="w-[29%]" />
+                  <col className="w-[8%]" /><col className="w-[9%]" /><col className="w-[7%]" /><col className="w-[14%]" />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-[color:var(--tm-border)] bg-white/25 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--tm-muted)]">
+                    <th className="px-5 py-2">Name</th><th className="px-3 py-2">Category</th><th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2 text-center">Active</th><th className="px-3 py-2 text-center">Complete</th><th className="px-3 py-2 text-center">Tasks</th><th className="px-5 py-2 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workflows.map((workflow) => (
+                    <tr key={workflow.id} className="tm-table-row border-b border-[color:var(--tm-border)] last:border-b-0">
+                      <td className="px-5 py-3"><Link href={`/workflows/${workflow.id}`} className="rounded text-sm font-semibold text-[color:var(--tm-text)] transition-colors hover:bg-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500">{workflow.name}</Link></td>
+                      <td className="truncate px-3 py-3 text-[color:var(--tm-muted)]">{workflow.category || "—"}</td>
+                      <td className="px-3 py-3 text-[color:var(--tm-muted)]"><span className="line-clamp-2 leading-5">{workflow.description || "—"}</span></td>
+                      <td className="px-3 py-3 text-center font-semibold tabular-nums">{workflow.runs?.filter((run) => !isRunComplete(run)).length ?? "—"}</td>
+                      <td className="px-3 py-3 text-center font-semibold tabular-nums">{workflow.runs?.filter((run) => isRunComplete(run)).length ?? "—"}</td>
+                      <td className="px-3 py-3 text-center font-semibold tabular-nums">{workflow.tasks.length}</td>
+                      <td className="px-5 py-3 text-center"><div className="relative inline-block text-left">
+                        <button type="button" aria-haspopup="menu" aria-expanded={workflowListActionsOpen === workflow.id} className="tm-button inline-flex h-9 items-center rounded-[10px] border px-3 text-sm" onClick={() => setWorkflowListActionsOpen((current) => current === workflow.id ? null : workflow.id)}>Actions</button>
+                        {workflowListActionsOpen === workflow.id ? <div role="menu" className="tm-menu absolute right-0 top-11 z-20 min-w-36 overflow-hidden rounded-lg border py-1 text-left shadow-2xl">
+                          <Link href={`/workflows/${workflow.id}`} role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => setWorkflowListActionsOpen(null)}>Open</Link>
+                          {!archived ? <Link href={`/workflows/launch?workflowId=${workflow.id}`} role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => setWorkflowListActionsOpen(null)}>Launch</Link> : null}
+                          <button type="button" role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => { setWorkflowListActionsOpen(null); void changeStatus(workflow, archived ? "restore" : "archive"); }}>
+                            {archived ? "Restore" : "Archive"}
+                          </button>
+                        </div> : null}
+                      </div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {workflows.map((workflow) => (
-              <article key={workflow.id} className="grid gap-2 border-b border-[color:var(--tm-border)] px-5 py-3 last:border-b-0 lg:grid-cols-[minmax(11rem,1.2fr)_minmax(7rem,.75fr)_minmax(14rem,1.6fr)_5.5rem_6.5rem_4rem_auto] lg:items-center lg:gap-4">
-                <div><Link href={`/workflows/${workflow.id}`} className="inline-block min-w-0 rounded px-1 py-0.5 text-sm font-semibold text-[color:var(--tm-text)] transition-colors hover:bg-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500">{workflow.name}</Link></div>
-                <p className="text-sm text-[color:var(--tm-muted)]">{workflow.category || "—"}</p>
-                <p className="line-clamp-2 text-sm leading-5 text-[color:var(--tm-muted)]">{workflow.description || "—"}</p>
-                <p className="text-sm font-semibold tabular-nums">{workflow.runs?.filter((run) => !isRunComplete(run)).length ?? "—"}</p>
-                <p className="text-sm font-semibold tabular-nums">{workflow.runs?.filter((run) => isRunComplete(run)).length ?? "—"}</p>
-                <p className="text-sm font-semibold tabular-nums">{workflow.tasks.length}</p>
-                <div className="relative lg:justify-self-end">
-                  <button type="button" aria-haspopup="menu" aria-expanded={workflowListActionsOpen === workflow.id} className="tm-button inline-flex h-9 items-center rounded-[10px] border px-3 text-sm" onClick={() => setWorkflowListActionsOpen((current) => current === workflow.id ? null : workflow.id)}>Actions</button>
-                  {workflowListActionsOpen === workflow.id ? <div role="menu" className="tm-menu absolute right-0 top-11 z-20 min-w-36 overflow-hidden rounded-lg border py-1 text-left shadow-2xl">
-                    <Link href={`/workflows/${workflow.id}`} role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => setWorkflowListActionsOpen(null)}>Open</Link>
-                    {!archived ? <Link href={`/workflows/launch?workflowId=${workflow.id}`} role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => setWorkflowListActionsOpen(null)}>Launch</Link> : null}
-                    <button type="button" role="menuitem" className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/70" onClick={() => { setWorkflowListActionsOpen(null); void changeStatus(workflow, archived ? "restore" : "archive"); }}>
-                      {archived ? "Restore" : "Archive"}
-                    </button>
-                  </div> : null}
-                </div>
-              </article>
-            ))}
           </div> : null}
         </section> : null}
 
