@@ -4,6 +4,7 @@ import {
   AUTHENTICATED_HOME_PATH,
   getSafeAuthCallbackUrl,
 } from "@/app/lib/auth-routes";
+import { isPublicServiceRoute } from "@/app/lib/public-service-route";
 
 const PUBLIC_FILE = /\.(.*)$/;
 
@@ -41,7 +42,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (
-    pathname.startsWith("/api/auth") ||
+    isPublicServiceRoute(pathname) ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname === "/logo.png" ||
