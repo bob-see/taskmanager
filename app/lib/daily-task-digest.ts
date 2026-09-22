@@ -119,11 +119,7 @@ export function buildDailyTaskDigest(tasks: DigestTask[], today: string): DailyT
 }
 
 export function formatDailyTaskDigestBody(digest: DailyTaskDigest) {
-  return digest.groups.map((group) => {
-    const names = group.tasks.slice(0, 3).map((task) =>
-      `${task.title}${task.states.length > 1 ? ` (${task.states.join(" + ")})` : ""}`
-    ).join(", ");
-    const remainder = group.tasks.length - 3;
-    return `${group.label} (${group.tasks.length}): ${names}${remainder > 0 ? ` and ${remainder} more` : ""}`;
-  }).join("\n");
+  return digest.groups
+    .map((group) => `${group.label}: ${group.tasks.length} task${group.tasks.length === 1 ? "" : "s"}`)
+    .join("\n");
 }

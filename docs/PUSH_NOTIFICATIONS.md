@@ -51,15 +51,16 @@ preferences.
 
 ## Daily Task Digest
 
-The scheduled `/api/cron/daily-task-digest` route runs once a day at 8:30 am
-Brisbane time (10:30 pm UTC) via `vercel.json`. This is compatible with Vercel
-Hobby's one-daily-cron limit. The default schedule is Monday to Friday; the
-existing JSON settings retain `daysOfWeek`, so an optional weekend preference
-can be added later without another schema change.
+The scheduled `/api/cron/daily-task-digest` route runs once a day from 6:30 am
+Brisbane time (8:30 pm UTC) via `vercel.json`. Vercel Hobby uses a flexible
+one-hour execution window, so delivery is expected by about 7:30 am. The
+default schedule is Monday to Friday; the existing JSON settings retain
+`daysOfWeek`, so an optional weekend preference can be added later without
+another schema change.
 
 The digest includes incomplete tasks in profiles owned by that user, including
 workflow-generated tasks. It deliberately excludes every task with a delegated
-task record. Each digest groups starting-today, due-today and overdue work,
+task record. Each digest shows concise counts for starting-today, due-today and overdue work,
 while deduplicating a task that belongs to more than one state. A durable
 `DailyTaskDigest` row prevents duplicate sends for a user/date; failed provider
 deliveries can be retried after the claim lease expires.
