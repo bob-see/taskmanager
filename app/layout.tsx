@@ -6,6 +6,7 @@ import { prisma } from "@/app/lib/prisma";
 import { AppShell } from "@/app/components/app-shell";
 import { authOptions } from "@/app/lib/auth-options";
 import { canAccessLost } from "@/app/lost/access";
+import { getProfileTaskBadges } from "@/app/lib/profile-task-badges";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -81,6 +82,7 @@ export default async function RootLayout({
       select: {
         id: true,
         name: true,
+        taskBadgeLastSeenAt: true,
       },
     }),
     prisma.user.findUnique({
@@ -115,6 +117,10 @@ export default async function RootLayout({
         }),
       ])
     : [0, 0];
+  const profileTaskBadges = await getProfileTaskBadges(profiles);
+  const profileTaskBadgeByProfile = new Map(
+    profileTaskBadges.map((badge) => [badge.profileId, badge])
+  );
 
   return (
     <html lang="en">
@@ -122,7 +128,12 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AppShell
-          profiles={profiles}
+          profiles={profiles.map((profile) => ({
+            id: profile.id,
+            name: profile.name,
+            newTasks: profileTaskBadgeByProfile.get(profile.id)?.newTasks ?? 0,
+            overdueTasks: profileTaskBadgeByProfile.get(profile.id)?.overdueTasks ?? 0,
+          }))}
           currentUser={{
             name: currentUser?.name ?? session.user.name,
             email: currentUser?.email ?? email,

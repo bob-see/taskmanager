@@ -11,6 +11,14 @@ import { NotificationCenter } from "@/app/components/notification-center";
 type SidebarProfile = {
   id: string;
   name: string;
+  newTasks: number;
+  overdueTasks: number;
+};
+
+type ProfileTaskBadgeData = {
+  profileId: string;
+  newTasks: number;
+  overdueTasks: number;
 };
 
 type SidebarUser = {
@@ -52,6 +60,31 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
+function ProfileTaskBadges({ profile }: { profile: SidebarProfile }) {
+  if (profile.newTasks <= 0 && profile.overdueTasks <= 0) return null;
+
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-1" aria-label={`${profile.newTasks} new task${profile.newTasks === 1 ? "" : "s"}, ${profile.overdueTasks} overdue task${profile.overdueTasks === 1 ? "" : "s"}`}>
+      {profile.newTasks > 0 ? (
+        <span
+          title={`${profile.newTasks} new task${profile.newTasks === 1 ? "" : "s"}`}
+          className="inline-flex min-w-5 items-center justify-center rounded-full border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)]"
+        >
+          {profile.newTasks}
+        </span>
+      ) : null}
+      {profile.overdueTasks > 0 ? (
+        <span
+          title={`${profile.overdueTasks} overdue task${profile.overdueTasks === 1 ? "" : "s"}`}
+          className="inline-flex min-w-5 items-center justify-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700"
+        >
+          {profile.overdueTasks}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function AppSidebar({
   profiles,
   currentUser,
@@ -61,6 +94,7 @@ export function AppSidebar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [liveDelegatedCounts, setLiveDelegatedCounts] =
     useState<DelegatedCounts>(delegatedCounts);
+  const [liveProfiles, setLiveProfiles] = useState<SidebarProfile[]>(profiles);
   const showLostLink = canAccessLost(currentUser.email);
   const activeProfile = profiles.find((profile) => {
     const href = `/p/${profile.id}`;
@@ -70,6 +104,10 @@ export function AppSidebar({
   useEffect(() => {
     setLiveDelegatedCounts(delegatedCounts);
   }, [delegatedCounts]);
+
+  useEffect(() => {
+    setLiveProfiles(profiles);
+  }, [profiles]);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +139,64 @@ export function AppSidebar({
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshProfileTaskBadges() {
+      try {
+        const res = await fetch("/api/profile-task-badges", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+
+        if (!cancelled && res.ok && Array.isArray(data?.badges)) {
+          const badges = (data.badges as unknown[])
+              .filter(
+                (badge): badge is ProfileTaskBadgeData =>
+                  typeof badge === "object" &&
+                  badge !== null &&
+                  typeof (badge as { profileId?: unknown }).profileId === "string" &&
+                  typeof (badge as { newTasks?: unknown }).newTasks === "number" &&
+                  typeof (badge as { overdueTasks?: unknown }).overdueTasks === "number"
+              );
+          const badgesByProfile = new Map<string, ProfileTaskBadgeData>(
+            badges.map((badge) => [badge.profileId, badge])
+          );
+
+          setLiveProfiles((current) =>
+            current.map((profile) => {
+              const badge = badgesByProfile.get(profile.id);
+              return badge
+                ? { ...profile, newTasks: badge.newTasks, overdueTasks: badge.overdueTasks }
+                : profile;
+            })
+          );
+        }
+      } catch {
+        // Badge refresh is opportunistic; the next page load will try again.
+      }
+    }
+
+    function clearNewTaskBadge(event: Event) {
+      const profileId = (event as CustomEvent<{ profileId?: string }>).detail?.profileId;
+      if (!profileId) return;
+
+      setLiveProfiles((current) =>
+        current.map((profile) =>
+          profile.id === profileId ? { ...profile, newTasks: 0 } : profile
+        )
+      );
+    }
+
+    window.addEventListener("profile-task-badge-seen", clearNewTaskBadge);
+    const intervalId = window.setInterval(refreshProfileTaskBadges, 60_000);
+    void refreshProfileTaskBadges();
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("profile-task-badge-seen", clearNewTaskBadge);
       window.clearInterval(intervalId);
     };
   }, []);
@@ -165,7 +261,7 @@ export function AppSidebar({
               >
                 Overview
               </Link>
-              {profiles.map((profile) => {
+              {liveProfiles.map((profile) => {
                 const href = `/p/${profile.id}`;
                 const active =
                   pathname === href || pathname.startsWith(`${href}/`);
@@ -178,6 +274,7 @@ export function AppSidebar({
                     onClick={onNavigate}
                   >
                     <span className="truncate">{profile.name}</span>
+                    <ProfileTaskBadges profile={profile} />
                   </Link>
                 );
               })}

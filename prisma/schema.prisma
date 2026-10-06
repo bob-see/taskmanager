@@ -325,6 +325,7 @@ model Profile {
   defaultView           String?
   averageBasis          String?
   routineSupportEnabled Boolean         @default(false)
+  taskBadgeLastSeenAt  DateTime        @default(now())
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
   user                  User?           @relation(fields: [userId], references: [id], onDelete: Cascade)

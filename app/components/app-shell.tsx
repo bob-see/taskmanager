@@ -8,6 +8,8 @@ import { TimesheetTimerWidget } from "@/app/components/timesheet-timer-widget";
 type ShellProfile = {
   id: string;
   name: string;
+  newTasks: number;
+  overdueTasks: number;
 };
 
 type ShellUser = {
