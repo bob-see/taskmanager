@@ -1,5 +1,5 @@
 import { prisma } from "@/app/lib/prisma";
-import { getBrisbaneCalendarDate } from "@/app/lib/date-time";
+import { getBrisbaneCalendarDate, getBrisbaneDate } from "@/app/lib/date-time";
 
 export type ProfileTaskBadge = {
   profileId: string;
@@ -13,9 +13,9 @@ type ProfileBadgeSource = {
 };
 
 /**
- * Counts attention-worthy open tasks for each profile. A task remains new
- * until that profile has been opened; overdue tasks remain visible until done
- * or rescheduled.
+ * Counts attention-worthy open tasks for each profile. The green badge is for
+ * work that has started since the profile was last opened, not for tasks the
+ * user has just added. Overdue tasks remain visible until done or rescheduled.
  */
 export async function getProfileTaskBadges(
   profiles: ProfileBadgeSource[],
@@ -24,22 +24,18 @@ export async function getProfileTaskBadges(
   if (profiles.length === 0) return [];
 
   const profileIds = profiles.map((profile) => profile.id);
-  const seenAtByProfile = new Map(
-    profiles.map((profile) => [profile.id, profile.taskBadgeLastSeenAt])
-  );
-  const earliestSeenAt = new Date(
-    Math.min(...profiles.map((profile) => profile.taskBadgeLastSeenAt.getTime()))
-  );
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const today = getBrisbaneCalendarDate(now);
+  const todayDate = getBrisbaneDate(now);
 
-  const [recentOpenTasks, overdueCounts] = await Promise.all([
+  const [startedOpenTasks, overdueCounts] = await Promise.all([
     prisma.task.findMany({
       where: {
         profileId: { in: profileIds },
         completedOn: null,
-        createdAt: { gt: earliestSeenAt },
+        startDate: { lte: today },
       },
-      select: { profileId: true, createdAt: true },
+      select: { profileId: true, createdAt: true, startDate: true },
     }),
     prisma.task.groupBy({
       by: ["profileId"],
@@ -52,13 +48,21 @@ export async function getProfileTaskBadges(
     }),
   ]);
 
-  const newTasksByProfile = new Map<string, number>();
-  for (const task of recentOpenTasks) {
-    const seenAt = task.profileId ? seenAtByProfile.get(task.profileId) : undefined;
-    if (task.profileId && seenAt && task.createdAt > seenAt) {
-      newTasksByProfile.set(
+  const startingTasksByProfile = new Map<string, number>();
+  for (const task of startedOpenTasks) {
+    const profile = task.profileId ? profileById.get(task.profileId) : undefined;
+    const startDate = getBrisbaneDate(task.startDate);
+
+    if (
+      task.profileId &&
+      profile &&
+      startDate > getBrisbaneDate(profile.taskBadgeLastSeenAt) &&
+      startDate <= todayDate &&
+      getBrisbaneDate(task.createdAt) < startDate
+    ) {
+      startingTasksByProfile.set(
         task.profileId,
-        (newTasksByProfile.get(task.profileId) ?? 0) + 1
+        (startingTasksByProfile.get(task.profileId) ?? 0) + 1
       );
     }
   }
@@ -69,7 +73,7 @@ export async function getProfileTaskBadges(
 
   return profiles.map((profile) => ({
     profileId: profile.id,
-    newTasks: newTasksByProfile.get(profile.id) ?? 0,
+    newTasks: startingTasksByProfile.get(profile.id) ?? 0,
     overdueTasks: overdueTasksByProfile.get(profile.id) ?? 0,
   }));
 }

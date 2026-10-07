@@ -64,10 +64,10 @@ function ProfileTaskBadges({ profile }: { profile: SidebarProfile }) {
   if (profile.newTasks <= 0 && profile.overdueTasks <= 0) return null;
 
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-1" aria-label={`${profile.newTasks} new task${profile.newTasks === 1 ? "" : "s"}, ${profile.overdueTasks} overdue task${profile.overdueTasks === 1 ? "" : "s"}`}>
+    <span className="ml-auto flex shrink-0 items-center gap-1" aria-label={`${profile.newTasks} starting task${profile.newTasks === 1 ? "" : "s"}, ${profile.overdueTasks} overdue task${profile.overdueTasks === 1 ? "" : "s"}`}>
       {profile.newTasks > 0 ? (
         <span
-          title={`${profile.newTasks} new task${profile.newTasks === 1 ? "" : "s"}`}
+          title={`${profile.newTasks} starting task${profile.newTasks === 1 ? "" : "s"}`}
           className="inline-flex min-w-5 items-center justify-center rounded-full border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)]"
         >
           {profile.newTasks}
