@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { calculateWorkflowDates } from "@/app/lib/workflow-dates";
-import { getBrisbaneDate } from "@/app/lib/date-time";
+import { addDateOnlyDays, formatAustralianDate, getBrisbaneDate } from "@/app/lib/date-time";
 
 type WorkflowTask = {
   id: string;
@@ -28,6 +28,13 @@ type Profile = { id: string; name: string };
 type Override = { startDate: string; dueDate: string; notes: string; isPriority: boolean };
 
 const completedActionClassName = "inline-flex min-h-10 items-center justify-center rounded-[10px] border border-emerald-700/25 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(167,243,208,0.72))] px-4 py-2 text-sm font-semibold text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_3px_rgba(6,95,70,0.12)] transition hover:border-emerald-700/40 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 focus:ring-offset-[color:var(--tm-card)]";
+
+function formatLaunchedTaskDate(value: string, today: string) {
+  const date = getBrisbaneDate(value);
+  if (date === today) return "Today";
+  if (date === addDateOnlyDays(today, 1)) return "Tomorrow";
+  return formatAustralianDate(date, { day: "numeric", month: "short" });
+}
 
 function createOverrides(workflow: Workflow, date: string): Record<string, Override> {
   return Object.fromEntries(workflow.tasks.map((task) => {
@@ -56,6 +63,7 @@ export function WorkflowLaunchClient() {
   const selectedProfile = profiles.find((profile) => profile.id === profileId);
   const launchedFromProfile = requestedProfileId !== null;
   const profileHref = profileId ? `/p/${encodeURIComponent(profileId)}` : "/workflows";
+  const launchResultDate = getBrisbaneDate(new Date());
 
   useEffect(() => {
     void Promise.all([
@@ -148,7 +156,17 @@ export function WorkflowLaunchClient() {
       <h1 className="mt-2 text-3xl font-semibold text-[color:var(--tm-text)]">{result.launchName} {result.workflowNameSnapshot}</h1>
       <p className="mt-3 text-sm text-[color:var(--tm-muted)]">The tasks have been added to the selected Profile as ordinary TaskManager tasks.</p>
       <ol className="tm-card mt-6 space-y-2 rounded-2xl p-5">
-        {result.tasks.map((task) => <li key={`${task.title}-${task.startDate}`} className="flex justify-between gap-4 border-b border-[color:var(--tm-border)] py-2 text-sm last:border-0"><span>{task.title}</span><span className="text-[color:var(--tm-muted)]">{task.startDate}{task.dueAt ? ` → ${task.dueAt.slice(0, 10)}` : ""}</span></li>)}
+        {result.tasks.map((task) => {
+          return (
+            <li key={`${task.title}-${task.startDate}`} className="flex items-center justify-between gap-4 border-b border-[color:var(--tm-border)] py-2 text-sm last:border-0">
+              <span>{task.title}</span>
+              <span className="flex shrink-0 items-center gap-2 text-xs text-[color:var(--tm-muted)]">
+                <span>Starts {formatLaunchedTaskDate(task.startDate, launchResultDate)}</span>
+                {task.dueAt ? <span>Due {formatLaunchedTaskDate(task.dueAt, launchResultDate)}</span> : null}
+              </span>
+            </li>
+          );
+        })}
       </ol>
       <div className="mt-5 flex flex-wrap gap-2">
         {launchedFromProfile ? (
