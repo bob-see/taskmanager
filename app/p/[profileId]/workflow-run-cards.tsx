@@ -66,6 +66,8 @@ const workflowTaskGridColumns =
   "minmax(12rem,1.7fr) minmax(8rem,0.8fr) minmax(5rem,0.5fr) minmax(7rem,0.65fr) minmax(6rem,0.6fr) 4.25rem";
 const priorityChipClass =
   "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800";
+const overdueChipClass =
+  "rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700";
 const updatingChipClass =
   "inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100/90 px-2 py-0.5 text-[11px] font-semibold text-slate-800";
 
@@ -73,6 +75,7 @@ export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pen
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [pendingPriorityTaskIds, setPendingPriorityTaskIds] = useState<string[]>([]);
+  const currentDate = calendarDate(new Date().toISOString());
 
   useEffect(() => {
     let cancelled = false;
@@ -178,10 +181,15 @@ export function WorkflowRunCards({ profileId, selectedDay, showDone = false, pen
                   (() => {
                     const isPriority = priorityOverrides[task.id] ?? task.isPriority;
                     const isPending = pendingPriorityTaskIds.includes(task.id) || pendingTaskIds.includes(task.id);
+                    const effectiveDueDate = task.dueAt ?? task.startDate;
+                    const taskOverdue = !showDone && !task.completedAt && calendarDate(effectiveDueDate) < currentDate;
                     return <div key={task.id} className={`grid items-center gap-2 border-b border-[color:var(--tm-border)] bg-transparent px-2 py-2 text-sm text-[color:var(--tm-text)] transition-all last:border-0 md:[grid-template-columns:var(--workflow-task-grid-columns)] ${isPriority ? "shadow-[inset_4px_0_0_0_rgba(183,122,116,0.78)]" : ""} ${isPending ? "bg-slate-100/80 opacity-75 ring-2 ring-inset ring-slate-200" : ""}`} style={{ "--workflow-task-grid-columns": workflowTaskGridColumns } as CSSProperties}>
                     <div className="min-w-0"><div className="flex min-w-0 flex-wrap items-center gap-1.5"><button className="inline-flex max-w-full cursor-pointer truncate rounded border border-transparent px-1 py-0.5 text-left font-medium transition-colors hover:border-amber-700/20 hover:bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(245,226,190,0.36))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] focus:outline-none focus:ring-2 focus:ring-blue-500" type="button" onClick={() => onOpenEditTask(task.id)}><span className={task.completedAt ? "line-through opacity-60" : ""}>{task.title}</span></button>{isPending && <span className={updatingChipClass}><span className="h-1.5 w-1.5 rounded-full bg-current" />Updating...</span>}</div></div>
                     <span className="tm-muted min-w-0 text-center text-xs">{run.categorySnapshot || "None"}</span>
-                    <span className="tm-muted min-w-0 text-center text-xs">{dateOnly(task.dueAt ?? task.startDate)}</span>
+                    <span className={`flex min-w-0 items-center justify-center gap-1 text-center text-xs ${taskOverdue ? "font-medium text-red-700" : "tm-muted"}`}>
+                      {dateOnly(effectiveDueDate)}
+                      {taskOverdue ? <span className={overdueChipClass}>OD</span> : null}
+                    </span>
                     <span className="tm-muted min-w-0 text-center text-xs">—</span>
                     <span className="flex min-w-0 items-center justify-center text-center text-xs">
                       {task.notes || task.noteHistory.length > 0 ? (

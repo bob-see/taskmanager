@@ -536,6 +536,13 @@ function toDateOnly(value: string | null) {
   return value ? dateInputValue(new Date(value)) : "";
 }
 
+function formatTaskDate(value: string | null) {
+  const date = toDateOnly(value);
+  return date
+    ? formatAustralianDate(date, { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "—";
+}
+
 function dayDifference(left: string, right: string) {
   const millisecondsPerDay = 24 * 60 * 60 * 1000;
   return Math.floor(
@@ -2717,7 +2724,7 @@ function TaskRow({
             </button>
           )}
           <span className={`${smallChipClass} ${taskOverdue ? "text-red-700" : ""}`}>
-            Due {toDateOnly(task.dueAt) || "—"}
+            Due {formatTaskDate(task.dueAt)}
           </span>
           {taskOverdue && <span className={overdueChipClass}>OD</span>}
           {hasTaskNotes(task) && <TaskNotesButton notes={formatTaskNotesPreview(task)} />}
@@ -2878,7 +2885,7 @@ function TaskRow({
         {visibleColumns.due && (
           <div className={`${dayTaskCenterGroupClass} text-xs text-[color:var(--tm-muted)]`}>
             <span className={taskOverdue ? "font-medium text-red-700" : ""}>
-              {toDateOnly(task.dueAt) || "—"}
+              {formatTaskDate(task.dueAt)}
             </span>
             {taskOverdue && <span className={overdueChipClass}>OD</span>}
           </div>
@@ -6871,7 +6878,7 @@ export function TrackerClient({
                           <td className={matrixCellClass}>
                             <div className="flex items-center gap-1.5">
                               <span className={taskOverdue ? "font-medium text-red-700" : ""}>
-                                {toDateOnly(task.dueAt) || "—"}
+                                {formatTaskDate(task.dueAt)}
                               </span>
                               {taskOverdue && <span className={overdueChipClass}>OD</span>}
                             </div>

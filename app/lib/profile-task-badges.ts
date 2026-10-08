@@ -28,7 +28,7 @@ export async function getProfileTaskBadges(
   const today = getBrisbaneCalendarDate(now);
   const todayDate = getBrisbaneDate(now);
 
-  const [startedOpenTasks, overdueCounts] = await Promise.all([
+  const [startedOpenTasks, overdueTasks] = await Promise.all([
     prisma.task.findMany({
       where: {
         profileId: { in: profileIds },
@@ -37,14 +37,25 @@ export async function getProfileTaskBadges(
       },
       select: { profileId: true, createdAt: true, startDate: true },
     }),
-    prisma.task.groupBy({
-      by: ["profileId"],
+    prisma.task.findMany({
       where: {
         profileId: { in: profileIds },
         completedOn: null,
-        dueAt: { lt: today },
+        OR: [
+          { dueAt: { lt: today } },
+          {
+            workflowRunId: { not: null },
+            dueAt: null,
+            startDate: { lt: today },
+          },
+        ],
       },
-      _count: { _all: true },
+      select: {
+        profileId: true,
+        dueAt: true,
+        startDate: true,
+        workflowRunId: true,
+      },
     }),
   ]);
 
@@ -67,9 +78,16 @@ export async function getProfileTaskBadges(
     }
   }
 
-  const overdueTasksByProfile = new Map(
-    overdueCounts.map((row) => [row.profileId, row._count._all])
-  );
+  const overdueTasksByProfile = new Map<string, number>();
+  for (const task of overdueTasks) {
+    const effectiveDueDate = task.dueAt ?? (task.workflowRunId ? task.startDate : null);
+    if (task.profileId && effectiveDueDate && effectiveDueDate < today) {
+      overdueTasksByProfile.set(
+        task.profileId,
+        (overdueTasksByProfile.get(task.profileId) ?? 0) + 1
+      );
+    }
+  }
 
   return profiles.map((profile) => ({
     profileId: profile.id,
